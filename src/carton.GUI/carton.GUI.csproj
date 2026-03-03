@@ -8,9 +8,9 @@
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaTelemetry>false</AvaloniaTelemetry>
     <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64</RuntimeIdentifiers>
-    <Version>0.1.0-beta.2</Version>
-    <FileVersion>0.1.0.2</FileVersion>
-    <AssemblyVersion>0.1.0.2</AssemblyVersion>
+    <Version>0.1.0-beta.3</Version>
+    <FileVersion>0.1.0.3</FileVersion>
+    <AssemblyVersion>0.1.0.3</AssemblyVersion>
   </PropertyGroup>
 
   <ItemGroup>

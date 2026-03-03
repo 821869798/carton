@@ -95,9 +95,7 @@ public sealed class AppUpdateService : IAppUpdateService
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _token);
         }
 
-        var version = Assembly.GetEntryAssembly()?.GetName().Version ??
-                      Assembly.GetExecutingAssembly().GetName().Version;
-        CurrentVersion = version?.ToString() ?? "0.0.0";
+        CurrentVersion = ResolveCurrentVersion() ?? "0.0.0";
     }
 
     public string CurrentVersion { get; }
@@ -361,6 +359,29 @@ public sealed class AppUpdateService : IAppUpdateService
         }
 
         return !string.Equals(remoteVersion, CurrentVersion, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ResolveCurrentVersion()
+    {
+        var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
+        if (assembly == null)
+        {
+            return null;
+        }
+
+        var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(informational))
+        {
+            return StripBuildMetadata(informational);
+        }
+
+        return assembly.GetName().Version?.ToString();
+    }
+
+    private static string StripBuildMetadata(string version)
+    {
+        var plusIndex = version.IndexOf('+');
+        return plusIndex >= 0 ? version[..plusIndex] : version;
     }
 
     private static (string owner, string repo) ParseRepository(string repositoryUrl)
