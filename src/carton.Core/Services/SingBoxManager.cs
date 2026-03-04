@@ -210,18 +210,25 @@ public class SingBoxManager : ISingBoxManager, IDisposable
             _process.BeginOutputReadLine();
             _process.BeginErrorReadLine();
 
-            await Task.Delay(2000);
-
-            if (_process.HasExited)
+            var ready = await WaitForApiReadyAsync(null, TimeSpan.FromSeconds(15));
+            if (!ready)
             {
-                var exitCode = _process.ExitCode;
-                var errorMsg = $"sing-box process exited unexpectedly with code {exitCode}";
-                if (_errorOutput.Count > 0)
+                if (_process.HasExited)
                 {
-                    errorMsg += $"\n{string.Join("\n", _errorOutput)}";
+                    var exitCode = _process.ExitCode;
+                    var errorMsg = $"sing-box process exited unexpectedly with code {exitCode}";
+                    if (_errorOutput.Count > 0)
+                    {
+                        errorMsg += $"\n{string.Join("\n", _errorOutput)}";
+                    }
+                    LogReceived?.Invoke(this, $"[ERROR] {errorMsg}");
+                    SetError(errorMsg);
+                    return false;
                 }
-                LogReceived?.Invoke(this, $"[ERROR] {errorMsg}");
-                SetError(errorMsg);
+
+                var msg = "sing-box API did not become reachable in time";
+                LogReceived?.Invoke(this, $"[ERROR] {msg}");
+                SetError(msg);
                 return false;
             }
 
@@ -280,11 +287,6 @@ public class SingBoxManager : ISingBoxManager, IDisposable
             await StopElevatedLogTailAsync();
             _elevatedPid = null;
             _elevatedLogPath = null;
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                TryShutdownWindowsHelperWithoutThrow();
-            }
 
             _state.StartTime = null;
             UpdateStatus(ServiceStatus.Stopped);
@@ -922,7 +924,9 @@ public class SingBoxManager : ISingBoxManager, IDisposable
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            TryShutdownWindowsHelperWithoutThrow();
+            // Write signal file so helper knows to stop sing-box,
+            // then let helper self-terminate via parent death detection
+            WriteStopSignalFile();
         }
 
         _process?.Kill(true);
@@ -988,66 +992,35 @@ public class SingBoxManager : ISingBoxManager, IDisposable
                 return false;
             }
 
-            if (!result.Pid.HasValue || result.Pid.Value <= 0)
+            int? pid = result.Pid;
+            if (pid.HasValue && pid.Value > 0)
             {
-                var msg = "Failed to get elevated process PID";
+                _elevatedPid = pid.Value;
+                TryAttachProcessIdToWindowsJob(pid.Value);
+                LogReceived?.Invoke(this, $"[INFO] Elevated process PID: {pid.Value}");
+            }
+            else
+            {
+                LogReceived?.Invoke(this, "[INFO] No PID from helper response, will discover via API port");
+            }
+
+            _elevatedLogPath = elevatedLogPath;
+            StartElevatedLogTail(elevatedLogPath);
+
+            var ready = await WaitForApiReadyAsync(pid, TimeSpan.FromSeconds(30));
+            if (!ready)
+            {
+                var recentLog = await ReadRecentLogLinesAsync(elevatedLogPath, 20);
+                var msg = "sing-box API did not become reachable in time" +
+                          (string.IsNullOrWhiteSpace(recentLog) ? string.Empty : $": {recentLog}");
                 LogReceived?.Invoke(this, $"[ERROR] {msg}");
                 SetError(msg);
                 return false;
             }
 
-            var pid = result.Pid.Value;
-            _elevatedPid = pid;
-            TryAttachProcessIdToWindowsJob(pid);
-            _elevatedLogPath = elevatedLogPath;
-            StartElevatedLogTail(elevatedLogPath);
-
-            var ready = await WaitForElevatedStartupReadyAsync(pid, TimeSpan.FromSeconds(6));
-            if (!ready)
-            {
-                var fallbackPid = _elevatedPid;
-                if (!fallbackPid.HasValue || fallbackPid.Value <= 0)
-                {
-                    fallbackPid = await TryFindProcessPidByApiPortAsync();
-                }
-
-                var running = false;
-                if (fallbackPid.HasValue && fallbackPid.Value > 0)
-                {
-                    running = await IsProcessRunningAsync(fallbackPid.Value);
-                    if (running)
-                    {
-                        _elevatedPid = fallbackPid.Value;
-                    }
-                }
-
-                if (!running)
-                {
-                    running = await IsProcessRunningAsync(pid);
-                    if (running)
-                    {
-                        _elevatedPid = pid;
-                    }
-                }
-
-                if (running)
-                {
-                    LogReceived?.Invoke(this, "[WARN] sing-box process is running but API is not reachable yet; continuing as running");
-                }
-                else
-                {
-                    var recentLog = await ReadRecentLogLinesAsync(elevatedLogPath, 20);
-                    var msg = "sing-box elevated process exited unexpectedly" +
-                              (string.IsNullOrWhiteSpace(recentLog) ? string.Empty : $": {recentLog}");
-                    LogReceived?.Invoke(this, $"[ERROR] {msg}");
-                    SetError(msg);
-                    return false;
-                }
-            }
-
             _state.StartTime = DateTime.Now;
             UpdateStatus(ServiceStatus.Running);
-            LogReceived?.Invoke(this, $"[INFO] sing-box started successfully (elevated, pid={pid})");
+            LogReceived?.Invoke(this, $"[INFO] sing-box started successfully (elevated, pid={_elevatedPid})");
             EnsureTrafficMonitorRunning();
             return true;
         }
@@ -1060,54 +1033,68 @@ public class SingBoxManager : ISingBoxManager, IDisposable
         }
     }
 
-    private async Task<bool> WaitForElevatedStartupReadyAsync(int initialPid, TimeSpan timeout)
+    private async Task<bool> WaitForApiReadyAsync(int? elevatedPid, TimeSpan timeout)
     {
         var start = DateTime.UtcNow;
-        var runningHits = 0;
+        LogReceived?.Invoke(this, $"[INFO] Waiting for sing-box API to become ready (timeout={timeout.TotalSeconds}s)...");
+        var attempt = 0;
         while (DateTime.UtcNow - start < timeout)
         {
-            if (await IsApiReachableAsync())
+            attempt++;
+            try
             {
-                var discoveredPid = await TryFindProcessPidByApiPortAsync();
-                if (discoveredPid.HasValue && discoveredPid.Value > 0)
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                using var response = await client.GetAsync($"{_apiAddress}/version", cts.Token);
+                LogReceived?.Invoke(this, $"[INFO] API responded with status {(int)response.StatusCode}");
+
+                // API is reachable, discover PID if we don't have one
+                if (!_elevatedPid.HasValue || _elevatedPid.Value <= 0)
                 {
-                    _elevatedPid = discoveredPid.Value;
+                    var discoveredPid = await TryFindProcessPidByApiPortAsync();
+                    if (discoveredPid.HasValue && discoveredPid.Value > 0)
+                    {
+                        _elevatedPid = discoveredPid.Value;
+                    }
                 }
 
                 return true;
             }
-
-            var discoveredByPort = await TryFindProcessPidByApiPortAsync();
-            if (discoveredByPort.HasValue && discoveredByPort.Value > 0)
+            catch
             {
-                _elevatedPid = discoveredByPort.Value;
+                // API not ready yet
             }
 
-            var pidToCheck = _elevatedPid.HasValue && _elevatedPid.Value > 0
-                ? _elevatedPid.Value
-                : initialPid;
-
-            if (pidToCheck > 0 && await IsProcessRunningAsync(pidToCheck))
+            // For non-elevated mode, check if process crashed
+            if (_process != null && _process.HasExited)
             {
-                _elevatedPid = pidToCheck;
-                runningHits++;
-                if (runningHits >= 2)
+                LogReceived?.Invoke(this, "[WARN] Process exited while waiting for API");
+                return false;
+            }
+
+            // For elevated mode, check if process is still alive (only if we have a PID)
+            if (elevatedPid.HasValue && elevatedPid.Value > 0)
+            {
+                try
                 {
-                    return true;
+                    using var proc = Process.GetProcessById(elevatedPid.Value);
+                    if (proc.HasExited)
+                    {
+                        LogReceived?.Invoke(this, $"[WARN] Elevated process {elevatedPid.Value} exited while waiting for API");
+                        return false;
+                    }
+                }
+                catch
+                {
+                    LogReceived?.Invoke(this, $"[WARN] Elevated process {elevatedPid.Value} not found while waiting for API");
+                    return false;
                 }
             }
-            else
-            {
-                runningHits = 0;
-                if (_elevatedPid == initialPid)
-                {
-                    _elevatedPid = null;
-                }
-            }
 
-            await Task.Delay(200);
+            await Task.Delay(500);
         }
 
+        LogReceived?.Invoke(this, $"[WARN] API did not become ready within {timeout.TotalSeconds}s");
         return false;
     }
 
@@ -1117,31 +1104,87 @@ public class SingBoxManager : ISingBoxManager, IDisposable
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                await TryStopViaWindowsElevatedHelperAsync(force: false);
+                WriteStopSignalFile();
+                await Task.Delay(1500);
             }
 
             return true;
         }
 
         var pid = _elevatedPid.Value;
-        await RunElevatedStopCommandAsync(pid, force: false);
-        await Task.Delay(500);
 
-        if (await IsProcessRunningAsync(pid))
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            LogReceived?.Invoke(this, $"[WARN] sing-box process {pid} did not exit on TERM, trying force kill...");
+            // Use file-based signal to stop (bypasses TUN)
+            WriteStopSignalFile();
+        }
+        else
+        {
+            await RunElevatedStopCommandAsync(pid, force: false);
+        }
+
+        // Wait for process to exit
+        for (var i = 0; i < 20; i++)
+        {
+            await Task.Delay(500);
+            if (!IsProcessAlive(pid))
+            {
+                return true;
+            }
+        }
+
+        LogReceived?.Invoke(this, $"[WARN] sing-box process {pid} did not exit, trying force kill...");
+
+        // Fallback: try taskkill via UAC
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            var taskkillArgs = $"/PID {pid} /T /F";
+            await RunWindowsUacCommandAsync(
+                "$p = Start-Process -FilePath 'taskkill.exe' -ArgumentList " +
+                $"'{EscapeForPowerShellSingleQuoted(taskkillArgs)}' " +
+                "-Verb RunAs -WindowStyle Hidden -Wait -PassThru; " +
+                "if ($p) { $p.ExitCode }");
+            await Task.Delay(500);
+        }
+        else
+        {
             await RunElevatedStopCommandAsync(pid, force: true);
             await Task.Delay(500);
         }
 
-        var stillRunning = await IsProcessRunningAsync(pid);
-        if (stillRunning)
+        if (IsProcessAlive(pid))
         {
             LogReceived?.Invoke(this, $"[ERROR] sing-box process {pid} is still running after stop attempts");
             return false;
         }
 
         return true;
+    }
+
+    private void WriteStopSignalFile()
+    {
+        try
+        {
+            var signalPath = Path.Combine(
+                Path.GetDirectoryName(Environment.ProcessPath) ?? ".", ".carton-stop-signal");
+            File.WriteAllText(signalPath, "stop");
+        }
+        catch
+        {
+        }
+    }
+
+    private static bool IsProcessAlive(int pid)
+    {
+        try
+        {
+            using var proc = Process.GetProcessById(pid);
+            return !proc.HasExited;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private async Task<ElevatedStartResult> StartElevatedProcessForCurrentPlatformAsync(string configPath, string logPath)
@@ -1310,7 +1353,7 @@ public class SingBoxManager : ISingBoxManager, IDisposable
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            using var response = await _httpClient.GetAsync($"{_apiAddress}/traffic", cts.Token);
+            using var response = await _httpClient.GetAsync($"{_apiAddress}/version", cts.Token);
             if (response.IsSuccessStatusCode)
             {
                 return true;
@@ -1562,56 +1605,33 @@ public class SingBoxManager : ISingBoxManager, IDisposable
                 LogPath = logPath
             };
 
-            using var message = new HttpRequestMessage(HttpMethod.Post, GetWindowsHelperUri("start"))
-            {
-                Content = new StringContent(
-                    JsonSerializer.Serialize(
-                        request,
-                        CartonCoreJsonContext.Default.WindowsHelperStartRequest),
-                    Encoding.UTF8,
-                    "application/json")
-            };
-            message.Headers.Add(WindowsElevatedHelperTokenHeader, _windowsElevatedHelperToken!);
+            var json = JsonSerializer.Serialize(request, CartonCoreJsonContext.Default.WindowsHelperStartRequest);
 
-            using var response = await _httpClient.SendAsync(message);
-            var payload = (await response.Content.ReadAsStringAsync()).Trim();
-            if (!response.IsSuccessStatusCode)
-            {
-                return new ElevatedStartResult
-                {
-                    Success = false,
-                    ErrorMessage = string.IsNullOrWhiteSpace(payload)
-                        ? "Elevated helper start failed"
-                        : payload
-                };
-            }
-
-            WindowsHelperActionResponse? result = null;
+            int? pid = null;
             try
             {
-                result = JsonSerializer.Deserialize(
-                    payload,
-                    CartonCoreJsonContext.Default.WindowsHelperActionResponse);
-            }
-            catch
-            {
-            }
-
-            if (result is not { Success: true } || !result.Pid.HasValue || result.Pid.Value <= 0)
-            {
-                return new ElevatedStartResult
+                LogReceived?.Invoke(this, "[INFO] Sending start request to elevated helper...");
+                using var sendClient = new HttpClient();
+                using var message = new HttpRequestMessage(HttpMethod.Post, GetWindowsHelperUri("start"))
                 {
-                    Success = false,
-                    ErrorMessage = !string.IsNullOrWhiteSpace(result?.Error)
-                        ? result.Error
-                        : $"Invalid elevated helper response: {payload}"
+                    Content = new StringContent(json, Encoding.UTF8, "application/json")
                 };
+                message.Headers.Add(WindowsElevatedHelperTokenHeader, _windowsElevatedHelperToken!);
+
+                // Fire the request - don't wait for response (TUN will likely block it)
+                _ = sendClient.SendAsync(message);
+                // Brief delay to let the helper receive and process the request
+                await Task.Delay(1000);
+            }
+            catch (Exception ex)
+            {
+                LogReceived?.Invoke(this, $"[WARN] Failed to send start request: {ex.Message}");
             }
 
             return new ElevatedStartResult
             {
                 Success = true,
-                Pid = result.Pid.Value
+                Pid = pid
             };
         }
         catch (Exception ex)
@@ -1755,11 +1775,21 @@ public class SingBoxManager : ISingBoxManager, IDisposable
 
         try
         {
+            using var client = new HttpClient();
             using var message = new HttpRequestMessage(
                 HttpMethod.Post,
                 GetWindowsHelperUri(force ? "stop?force=1" : "stop"));
             message.Headers.Add(WindowsElevatedHelperTokenHeader, _windowsElevatedHelperToken);
-            using var response = await _httpClient.SendAsync(message);
+
+            var sendTask = client.SendAsync(message);
+            var completed = await Task.WhenAny(sendTask, Task.Delay(3000));
+
+            if (completed != sendTask || !sendTask.IsCompletedSuccessfully)
+            {
+                return false;
+            }
+
+            using var response = sendTask.Result;
             if (!response.IsSuccessStatusCode)
             {
                 return false;
@@ -1839,15 +1869,30 @@ public class SingBoxManager : ISingBoxManager, IDisposable
         }
     }
 
-    private void TryShutdownWindowsHelperWithoutThrow()
+    private void TryKillWindowsHelperProcess()
     {
         try
         {
-            TryShutdownWindowsElevatedHelperAsync().GetAwaiter().GetResult();
+            if (_windowsElevatedHelperPid.HasValue)
+            {
+                using var process = Process.GetProcessById(_windowsElevatedHelperPid.Value);
+                if (!process.HasExited)
+                {
+                    process.Kill(true);
+                }
+            }
         }
         catch
         {
         }
+
+        _windowsElevatedHelperToken = null;
+        _windowsElevatedHelperPid = null;
+    }
+
+    private void TryShutdownWindowsHelperWithoutThrow()
+    {
+        TryKillWindowsHelperProcess();
     }
 
     private static async Task RunAppleScriptAdminCommandAsync(string shellCommand, string? prompt = null)
@@ -1916,8 +1961,9 @@ public class SingBoxManager : ISingBoxManager, IDisposable
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                TryStopViaWindowsElevatedHelperAsync(force: true).GetAwaiter().GetResult();
-                TryShutdownWindowsHelperWithoutThrow();
+                // Write signal file, DON'T kill helper - let it detect
+                // the signal or parent death and clean up sing-box itself
+                WriteStopSignalFile();
             }
         }
         catch

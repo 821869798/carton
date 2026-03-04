@@ -557,7 +557,7 @@ public partial class DashboardViewModel : PageViewModelBase
                 var tunAddresses = new JsonArray("172.18.0.1/30");
                 if (Socket.OSSupportsIPv6)
                 {
-                    tunAddresses.Add("fdfe:dcba:9876::1/126");
+                    tunAddresses.Add((JsonNode)"fdfe:dcba:9876::1/126");
                 }
 
                 inbounds.Add(new JsonObject

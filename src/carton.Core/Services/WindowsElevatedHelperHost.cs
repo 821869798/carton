@@ -63,6 +63,12 @@ public static class WindowsElevatedHelperHost
 
     private static async Task RunAsync(int port, string token, int parentPid)
     {
+        // Stop signal file - shared path between carton and helper
+        var stopSignalPath = Path.Combine(
+            Path.GetDirectoryName(Environment.ProcessPath) ?? ".", ".carton-stop-signal");
+        // Clean up stale signal on startup
+        try { if (File.Exists(stopSignalPath)) File.Delete(stopSignalPath); } catch { }
+
         using var listener = new HttpListener();
         listener.Prefixes.Add($"http://127.0.0.1:{port}/");
         listener.Start();
@@ -97,20 +103,27 @@ public static class WindowsElevatedHelperHost
             {
                 while (!shouldStop)
                 {
+                    // Check stop signal file (file-based IPC, bypasses TUN)
+                    try
+                    {
+                        if (File.Exists(stopSignalPath))
+                        {
+                            File.Delete(stopSignalPath);
+                            _ = StopSingBox(force: true);
+                            // DON'T exit helper - keep it alive for next start
+                        }
+                    }
+                    catch { }
+
                     if (!IsParentAlive())
                     {
+                        _ = StopSingBox(force: true);
                         shouldStop = true;
-                        try
-                        {
-                            listener.Stop();
-                        }
-                        catch
-                        {
-                        }
+                        try { listener.Stop(); } catch { }
                         break;
                     }
 
-                    await Task.Delay(1000);
+                    await Task.Delay(500);
                 }
             })
             : null;
