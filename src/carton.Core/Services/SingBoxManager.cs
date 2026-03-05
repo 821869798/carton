@@ -44,9 +44,9 @@ public class SingBoxManager : ISingBoxManager, IDisposable
     private readonly string _workingDirectory;
     private Process? _process;
     private readonly ServiceState _state = new();
-    private readonly HttpClient _httpClient = HttpClientFactory.LocalApi;
-    private readonly string _apiAddress;
-    private readonly int _apiPort;
+    private HttpClient _httpClient => HttpClientFactory.LocalApi;
+    private string _apiAddress => HttpClientFactory.LocalApiAddress;
+    private int _apiPort => HttpClientFactory.LocalApiPort;
     private bool _disposed;
     private readonly List<string> _errorOutput = new();
     private int? _elevatedPid;
@@ -101,8 +101,6 @@ public class SingBoxManager : ISingBoxManager, IDisposable
     {
         _singBoxPath = singBoxPath;
         _workingDirectory = workingDirectory;
-        _apiPort = apiPort;
-        _apiAddress = $"http://127.0.0.1:{apiPort}";
 
 
         Directory.CreateDirectory(_workingDirectory);

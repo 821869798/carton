@@ -26,7 +26,7 @@ public partial class DashboardViewModel : PageViewModelBase
     private readonly IConfigManager? _configManager;
     private readonly Action<string>? _logWriter;
     private readonly ILocalizationService _localizationService;
-    private readonly HttpClient _clashHttpClient = HttpClientFactory.LocalApi;
+    private HttpClient _clashHttpClient => HttpClientFactory.LocalApi;
     private string? _currentClashMode;
     private ProfileRuntimeOptions _runtimeOptions = new();
     private bool _suppressRuntimeOptionUpdates;
@@ -84,8 +84,7 @@ public partial class DashboardViewModel : PageViewModelBase
     partial void OnEnableSystemProxyChanged(bool value) => UpdateRuntimeOptions(options => options.EnableSystemProxy = value);
     partial void OnEnableTunInboundChanged(bool value) => UpdateRuntimeOptions(options => options.EnableTunInbound = value);
 
-    private const string ClashApiHost = "127.0.0.1";
-    private const int ClashApiPort = 9090;
+    private const int DefaultClashApiPort = 9090;
 
     public bool ShowStartupSelector => !IsConnected;
     public bool ShowDashboardMetrics => IsConnected;
@@ -604,9 +603,37 @@ public partial class DashboardViewModel : PageViewModelBase
             root["experimental"] = experimental;
 
             var clashApi = experimental["clash_api"] as JsonObject ?? new JsonObject();
-            clashApi["external_controller"] = $"{ClashApiHost}:{ClashApiPort}";
+
+            var apiPort = DefaultClashApiPort;
+            var secret = string.Empty;
+            var hasExtController = false;
+
+            if (clashApi.TryGetPropertyValue("external_controller", out var extControllerNode) && extControllerNode?.GetValue<string>() is string extController && !string.IsNullOrWhiteSpace(extController))
+            {
+                hasExtController = true;
+                var portPos = extController.LastIndexOf(':');
+                if (portPos >= 0 && portPos < extController.Length - 1)
+                {
+                    if (int.TryParse(extController.Substring(portPos + 1), out var p))
+                    {
+                        apiPort = p;
+                    }
+                }
+            }
+
+            if (clashApi.TryGetPropertyValue("secret", out var secretNode) && secretNode?.GetValue<string>() is string sec && !string.IsNullOrWhiteSpace(sec))
+            {
+                secret = sec;
+            }
+
+            if (!hasExtController)
+            {
+                clashApi["external_controller"] = $"127.0.0.1:{apiPort}";
+            }
             clashApi["external_ui"] = "dashboard";
             experimental["clash_api"] = clashApi;
+
+            HttpClientFactory.UpdateLocalApi("127.0.0.1", apiPort, secret);
 
             var cacheFile = experimental["cache_file"] as JsonObject ?? new JsonObject();
             cacheFile["enabled"] = true;
