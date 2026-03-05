@@ -18,6 +18,7 @@ public interface IKernelManager
     Task<KernelInfo?> GetInstalledKernelInfoAsync();
     Task<string?> GetLatestVersionAsync();
     Task<bool> DownloadAndInstallAsync(string? version = null, DownloadMirror mirror = DownloadMirror.GitHub);
+    Task<bool> InstallCustomKernelAsync(string sourcePath);
     Task<bool> UninstallAsync();
     Task<bool> CheckKernelAsync();
 }
@@ -311,6 +312,60 @@ public class KernelManager : IKernelManager
             }
 
             Directory.Delete(tempDir, true);
+        }
+    }
+
+    public async Task<bool> InstallCustomKernelAsync(string sourcePath)
+    {
+        try
+        {
+            if (!File.Exists(sourcePath))
+            {
+                StatusChanged?.Invoke(this, "Selected file does not exist.");
+                return false;
+            }
+
+            StatusChanged?.Invoke(this, "Installing custom kernel...");
+
+            var platform = PlatformInfo.Current;
+            var targetExe = _kernelPath;
+
+            // Kill running processes if any
+            try
+            {
+                var processes = Process.GetProcessesByName("sing-box");
+                foreach (var p in processes)
+                {
+                    if (string.Equals(p.MainModule?.FileName, targetExe, StringComparison.OrdinalIgnoreCase))
+                    {
+                        p.Kill();
+                        await p.WaitForExitAsync();
+                    }
+                }
+
+                if (File.Exists(targetExe))
+                {
+                    File.Delete(targetExe);
+                }
+            }
+            catch { }
+
+            File.Copy(sourcePath, targetExe, true);
+
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                Process.Start("chmod", $"+x \"{targetExe}\"")?.WaitForExit();
+            }
+
+            await GetInstalledKernelInfoAsync();
+            StatusChanged?.Invoke(this, "Successfully installed custom kernel");
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            StatusChanged?.Invoke(this, $"Failed to install custom kernel: {ex.Message}");
+            return false;
         }
     }
 

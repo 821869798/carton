@@ -155,9 +155,8 @@
             </StackPanel>
           </Border>
 
-          <Border Grid.Column="2" Classes="card" Padding="20">
-            <StackPanel Spacing="8"
-                        HorizontalAlignment="Center">
+          <Border Grid.Column="2" Classes="card" Padding="12,20">
+            <StackPanel Spacing="12">
               <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
                 <Ellipse Width="16"
                          Height="16"
@@ -172,8 +171,55 @@
                              FontWeight="SemiBold"/>
                 </StackPanel>
               </StackPanel>
+              
               <Button Content="{DynamicResource Dashboard.Button.Stop}"
-                      Command="{Binding StopConnectionCommand}"/>
+                      Command="{Binding StopConnectionCommand}"
+                      HorizontalAlignment="Center"
+                      HorizontalContentAlignment="Center"
+                      MinWidth="100"
+                      Classes="danger"/>
+
+              <StackPanel Spacing="8" IsVisible="{Binding ShowTerminalProxyButtons}" HorizontalAlignment="Center">
+                <Separator Height="1" Margin="0,4" HorizontalAlignment="Stretch"/>
+                
+                <!-- Windows Buttons -->
+                <StackPanel Spacing="6" IsVisible="{Binding IsWindows}" HorizontalAlignment="Center">
+                  <Button Content="{DynamicResource Dashboard.Button.CopyCmdProxy}" 
+                          Command="{Binding CopyTerminalProxyCommandCommand}" 
+                          CommandParameter="cmd"
+                          HorizontalAlignment="Center"
+                          HorizontalContentAlignment="Center"
+                          MinWidth="100"
+                          FontSize="12"
+                          Padding="4,4"/>
+                  <Button Content="{DynamicResource Dashboard.Button.CopyPsProxy}" 
+                          Command="{Binding CopyTerminalProxyCommandCommand}" 
+                          CommandParameter="ps"
+                          HorizontalAlignment="Center"
+                          HorizontalContentAlignment="Center"
+                          MinWidth="100"
+                          FontSize="12"
+                          Padding="4,4"/>
+                </StackPanel>
+                
+                <!-- Linux Button -->
+                <Button Content="{DynamicResource Dashboard.Button.CopyLinuxProxy}" 
+                        Command="{Binding CopyTerminalProxyCommandCommand}" 
+                        CommandParameter="linux"
+                        IsVisible="{Binding IsLinux}"
+                        HorizontalAlignment="Center"
+                        HorizontalContentAlignment="Center"
+                        MinWidth="100"
+                        FontSize="12"
+                        Padding="4,4"/>
+                
+                <TextBlock Text="{Binding StartupStatus}"
+                           IsVisible="{Binding StartupStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                           FontSize="10"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+              </StackPanel>
             </StackPanel>
           </Border>
         </Grid>

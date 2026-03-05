@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using System;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Sockets;
@@ -61,6 +62,37 @@ public partial class DashboardViewModel : PageViewModelBase
 
     [ObservableProperty]
     private DashboardProfileItemViewModel? _selectedStartupProfile;
+
+    public bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+    public bool IsLinux => RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+    public bool ShowTerminalProxyButtons => IsConnected;
+
+    [RelayCommand]
+    public async Task CopyTerminalProxyCommand(string type)
+    {
+        if (!int.TryParse(InboundPortText, out var port)) port = 2028;
+        var host = "127.0.0.1";
+        var proxyUrl = $"http://{host}:{port}";
+
+        string command = type switch
+        {
+            "cmd" => $"set http_proxy={proxyUrl} & set https_proxy={proxyUrl}",
+            "ps" => $"$Env:http_proxy=\"{proxyUrl}\"; $Env:https_proxy=\"{proxyUrl}\"",
+            "linux" => $"export http_proxy={proxyUrl} https_proxy={proxyUrl}",
+            _ => string.Empty
+        };
+
+        if (!string.IsNullOrEmpty(command))
+        {
+            var desktop = Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+            if (desktop?.MainWindow?.Clipboard is { } clipboard)
+            {
+                await clipboard.SetTextAsync(command);
+                StartupStatus = GetString("Dashboard.Status.CommandCopied", "Command copied to clipboard");
+                _ = Task.Delay(2000).ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(() => StartupStatus = string.Empty));
+            }
+        }
+    }
 
     [ObservableProperty]
     private string _startupStatus = string.Empty;
@@ -147,6 +179,7 @@ public partial class DashboardViewModel : PageViewModelBase
                 ServiceStatus.Error => _localizationService["Status.Error"],
                 _ => _localizationService["Status.Disconnected"]
             };
+            OnPropertyChanged(nameof(ShowTerminalProxyButtons));
         });
 
         if (status == ServiceStatus.Running)

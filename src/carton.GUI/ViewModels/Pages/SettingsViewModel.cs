@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -321,6 +322,44 @@ public partial class SettingsViewModel : PageViewModelBase
         UpdateStatus = GetString("Settings.Kernel.StartingDownload", "Starting download...");
 
         var success = await _kernelManager.DownloadAndInstallAsync(null, SelectedKernelDownloadMirror);
+
+        IsUpdatingKernel = false;
+
+        if (success)
+        {
+            await RefreshKernelInfoAsync();
+        }
+    }
+
+    [RelayCommand]
+    private async Task InstallCustomKernel()
+    {
+        if (_kernelManager == null || IsUpdatingKernel) return;
+
+        var desktop = Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+        var window = desktop?.MainWindow;
+        if (window == null) return;
+
+        var files = await window.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+        {
+            Title = GetString("Settings.Kernel.SelectCustomExe", "Select Custom Kernel Executable"),
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new Avalonia.Platform.Storage.FilePickerFileType("Executable Files")
+                {
+                    Patterns = new[] { RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "*.exe" : "*" }
+                }
+            }
+        });
+
+        var file = files.FirstOrDefault();
+        if (file == null) return;
+
+        IsUpdatingKernel = true;
+        UpdateStatus = GetString("Settings.Kernel.InstallingCustom", "Installing custom kernel...");
+
+        var success = await _kernelManager.InstallCustomKernelAsync(file.Path.LocalPath);
 
         IsUpdatingKernel = false;
 

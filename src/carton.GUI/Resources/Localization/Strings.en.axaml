@@ -93,6 +93,10 @@
 	<x:String x:Key="Dashboard.StatusLabel">Status</x:String>
 	<x:String x:Key="Dashboard.Button.Stop">Stop</x:String>
 	<x:String x:Key="Dashboard.CurrentProfileLabel">Current Profile</x:String>
+	<x:String x:Key="Dashboard.Status.CommandCopied">Command copied to clipboard</x:String>
+	<x:String x:Key="Dashboard.Button.CopyCmdProxy">CMD Proxy</x:String>
+	<x:String x:Key="Dashboard.Button.CopyPsProxy">PS Proxy</x:String>
+	<x:String x:Key="Dashboard.Button.CopyLinuxProxy">Terminal Proxy</x:String>
 
 	<x:String x:Key="Status.Connected">Connected</x:String>
 	<x:String x:Key="Status.Starting">Starting...</x:String>
@@ -126,6 +130,10 @@
 	<x:String x:Key="Settings.Kernel.Uninstall">Uninstall</x:String>
 	<x:String x:Key="Settings.Kernel.NotInstalled">Not installed</x:String>
 	<x:String x:Key="Settings.Kernel.StartingDownload">Starting download...</x:String>
+	<x:String x:Key="Settings.Kernel.Mirror">Download Mirror</x:String>
+	<x:String x:Key="Settings.Kernel.InstallCustom">Custom Install</x:String>
+	<x:String x:Key="Settings.Kernel.SelectCustomExe">Select Custom Kernel</x:String>
+	<x:String x:Key="Settings.Kernel.InstallingCustom">Installing kernel...</x:String>
 
 	<x:String x:Key="Settings.Section.General">General</x:String>
 	<x:String x:Key="Settings.General.StartAtLogin">Start at Login</x:String>

@@ -92,6 +92,10 @@
 	<x:String x:Key="Dashboard.StatusLabel">状态</x:String>
 	<x:String x:Key="Dashboard.Button.Stop">停止</x:String>
 	<x:String x:Key="Dashboard.CurrentProfileLabel">当前配置</x:String>
+	<x:String x:Key="Dashboard.Status.CommandCopied">命令已复制到剪贴板</x:String>
+	<x:String x:Key="Dashboard.Button.CopyCmdProxy">CMD 代理</x:String>
+	<x:String x:Key="Dashboard.Button.CopyPsProxy">PS 代理</x:String>
+	<x:String x:Key="Dashboard.Button.CopyLinuxProxy">终端代理</x:String>
 
 	<x:String x:Key="Status.Connected">已连接</x:String>
 	<x:String x:Key="Status.Starting">正在启动...</x:String>
@@ -125,6 +129,10 @@
 	<x:String x:Key="Settings.Kernel.Uninstall">卸载</x:String>
 	<x:String x:Key="Settings.Kernel.NotInstalled">未安装</x:String>
 	<x:String x:Key="Settings.Kernel.StartingDownload">开始下载...</x:String>
+	<x:String x:Key="Settings.Kernel.Mirror">下载镜像</x:String>
+	<x:String x:Key="Settings.Kernel.InstallCustom">自定义安装</x:String>
+	<x:String x:Key="Settings.Kernel.SelectCustomExe">选择自定义内核</x:String>
+	<x:String x:Key="Settings.Kernel.InstallingCustom">正在安装内核...</x:String>
 
 	<x:String x:Key="Settings.Section.General">通用</x:String>
 	<x:String x:Key="Settings.General.StartAtLogin">开机启动</x:String>

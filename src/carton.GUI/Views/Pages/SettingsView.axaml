@@ -65,6 +65,8 @@
                     Classes="accent"
                     IsEnabled="{Binding !IsUpdatingKernel}"
                     IsVisible="{Binding !IsKernelInstalled}"/>
+            <Button Content="{DynamicResource Settings.Kernel.InstallCustom}" Command="{Binding InstallCustomKernelCommand}"
+                    IsEnabled="{Binding !IsUpdatingKernel}"/>
             <Button Content="{DynamicResource Settings.Kernel.Uninstall}" Command="{Binding UninstallKernelCommand}"
                     IsEnabled="{Binding !IsUpdatingKernel}"
                     IsVisible="{Binding IsKernelInstalled}"/>
