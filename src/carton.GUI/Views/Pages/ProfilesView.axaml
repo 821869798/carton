@@ -95,8 +95,7 @@
 												<StackPanel Spacing="4">
 													<TextBlock Text="{Binding DisplayName}"
 															   FontSize="18"
-															   FontWeight="SemiBold"
-															   Foreground="White"/>
+															   FontWeight="SemiBold"/>
 													<TextBlock FontSize="13"
 															   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}">
 														<Run Text="{DynamicResource Profiles.List.LastUpdatedLabel}"/>

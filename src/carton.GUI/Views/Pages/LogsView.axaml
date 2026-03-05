@@ -33,8 +33,7 @@
                  HorizontalAlignment="Stretch"/>
         <TextBlock Grid.Column="2"
                    Margin="10,0,0,0"
-                   VerticalAlignment="Center"
-                   Foreground="White">
+                   VerticalAlignment="Center">
           <Run Text="{DynamicResource Logs.Label.CountPrefix}"/>
           <Run Text="{Binding Logs.Count}"/>
         </TextBlock>
@@ -61,9 +60,9 @@
                     BorderThickness="0,0,0,1"
                     Padding="6,4">
               <Grid ColumnDefinitions="80,70,*" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="{Binding Time}" Foreground="White"/>
-                <TextBlock Grid.Column="1" Text="{Binding Level}" Foreground="White"/>
-                <TextBlock Grid.Column="2" Text="{Binding Message}" Foreground="White" TextWrapping="Wrap"/>
+                <TextBlock Grid.Column="0" Text="{Binding Time}"/>
+                <TextBlock Grid.Column="1" Text="{Binding Level}"/>
+                <TextBlock Grid.Column="2" Text="{Binding Message}" TextWrapping="Wrap"/>
               </Grid>
             </Border>
           </DataTemplate>
