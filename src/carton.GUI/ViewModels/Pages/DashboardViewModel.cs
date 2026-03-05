@@ -1,5 +1,6 @@
 using carton.Core.Models;
 using carton.Core.Services;
+using carton.Core.Utilities;
 using carton.GUI.Models;
 using carton.GUI.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -436,6 +437,7 @@ public partial class DashboardViewModel : PageViewModelBase
             {
                 Timeout = TimeSpan.FromSeconds(30)
             };
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", CartonApplicationInfo.UserAgent);
             var content = await client.GetStringAsync(profile.Url);
             if (string.IsNullOrWhiteSpace(content))
             {

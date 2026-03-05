@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using carton.Core.Services;
 using carton.Core.Models;
+using carton.Core.Utilities;
 using carton.GUI.Models;
 using carton.GUI.Services;
 using carton.Views;
@@ -359,6 +360,7 @@ public partial class MainViewModel : ViewModelBase
             {
                 Timeout = TimeSpan.FromSeconds(30)
             };
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", CartonApplicationInfo.UserAgent);
             var content = await client.GetStringAsync(profile.Url);
             if (string.IsNullOrWhiteSpace(content))
             {

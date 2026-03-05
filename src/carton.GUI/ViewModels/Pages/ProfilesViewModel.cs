@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using carton.Core.Services;
 using carton.Core.Models;
+using carton.Core.Utilities;
 using carton.GUI.Models;
 using carton.GUI.Services;
 
@@ -331,6 +332,7 @@ public partial class ProfilesViewModel : PageViewModelBase
                 
                 using var httpClient = new HttpClient();
                 httpClient.Timeout = TimeSpan.FromSeconds(30);
+                httpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", CartonApplicationInfo.UserAgent);
                 configContent = await httpClient.GetStringAsync(NewProfileUrl);
             }
 
@@ -599,6 +601,7 @@ public partial class ProfilesViewModel : PageViewModelBase
         {
             using var httpClient = new HttpClient();
             httpClient.Timeout = TimeSpan.FromSeconds(30);
+            httpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", CartonApplicationInfo.UserAgent);
             var content = await httpClient.GetStringAsync(target.Url);
 
             await _configManager.SaveConfigAsync(target.Id, content, ProfileType.Remote);
