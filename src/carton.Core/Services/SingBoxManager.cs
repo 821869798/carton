@@ -666,6 +666,11 @@ public class SingBoxManager : ISingBoxManager, IDisposable
                         webSocket?.Dispose();
                         webSocket = new ClientWebSocket();
                         webSocket.Options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+                        var wsSecret = HttpClientFactory.LocalApiSecret;
+                        if (!string.IsNullOrWhiteSpace(wsSecret))
+                        {
+                            webSocket.Options.SetRequestHeader("Authorization", $"Bearer {wsSecret}");
+                        }
                         using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                         await webSocket.ConnectAsync(wsUri, connectCts.Token);
                         stream.SetLength(0);

@@ -10,6 +10,7 @@ public static class HttpClientFactory
     private static HttpClient _localApi = null!;
     public static string LocalApiAddress { get; private set; } = string.Empty;
     public static int LocalApiPort { get; private set; }
+    public static string? LocalApiSecret { get; private set; }
 
     static HttpClientFactory()
     {
@@ -37,6 +38,7 @@ public static class HttpClientFactory
         _localApi = client;
         LocalApiAddress = $"http://{host}:{port}";
         LocalApiPort = port;
+        LocalApiSecret = string.IsNullOrWhiteSpace(secret) ? null : secret;
     }
 
     /// <summary>
