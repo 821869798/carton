@@ -11,6 +11,7 @@ using System.Text;
 using System.Text.Json;
 using carton.Core.Models;
 using carton.Core.Serialization;
+using carton.Core.Utilities;
 
 namespace carton.Core.Services;
 
@@ -33,6 +34,13 @@ public interface ISingBoxManager
     Task<List<ConnectionInfo>> GetConnectionsAsync();
     Task CloseConnectionAsync(string connectionId);
     Task CloseAllConnectionsAsync();
+
+    /// <summary>
+    /// Notifies the manager whether a system proxy was configured for the current
+    /// sing-box session. When <paramref name="enabled"/> is <see langword="true"/>
+    /// the system proxy will be cleared automatically on the next Stop.
+    /// </summary>
+    void NotifySystemProxyEnabled(bool enabled);
 }
 
 public class SingBoxManager : ISingBoxManager, IDisposable
@@ -60,6 +68,8 @@ public class SingBoxManager : ISingBoxManager, IDisposable
     private const string WindowsElevatedHelperTokenHeader = "X-Carton-Helper-Token";
     private string? _windowsElevatedHelperToken;
     private int? _windowsElevatedHelperPid;
+    /// <summary>Whether the current/last session had system-proxy enabled.</summary>
+    private bool _systemProxyEnabled;
 
     public event EventHandler<ServiceStatus>? StatusChanged;
     public event EventHandler<TrafficInfo>? TrafficUpdated;
@@ -286,6 +296,14 @@ public class SingBoxManager : ISingBoxManager, IDisposable
             _elevatedPid = null;
             _elevatedLogPath = null;
 
+            // Ensure the system proxy is cleared even if sing-box did not
+            // have a chance to clean it up itself (e.g. process was killed).
+            if (_systemProxyEnabled)
+            {
+                SystemProxyHelper.ClearSystemProxy();
+                _systemProxyEnabled = false;
+            }
+
             _state.StartTime = null;
             UpdateStatus(ServiceStatus.Stopped);
             LogReceived?.Invoke(this, "[INFO] sing-box stopped");
@@ -296,6 +314,12 @@ public class SingBoxManager : ISingBoxManager, IDisposable
             LogReceived?.Invoke(this, $"[ERROR] {error}");
             SetError(error);
         }
+    }
+
+    /// <inheritdoc />
+    public void NotifySystemProxyEnabled(bool enabled)
+    {
+        _systemProxyEnabled = enabled;
     }
 
     public async Task ReloadAsync()
@@ -1992,6 +2016,20 @@ public class SingBoxManager : ISingBoxManager, IDisposable
 
                 process.Start();
                 process.WaitForExit(3000);
+            }
+        }
+        catch
+        {
+        }
+
+        // Clear system proxy if it was enabled, so it is not left active
+        // after a forced/unexpected process exit.
+        try
+        {
+            if (_systemProxyEnabled)
+            {
+                SystemProxyHelper.ClearSystemProxy();
+                _systemProxyEnabled = false;
             }
         }
         catch

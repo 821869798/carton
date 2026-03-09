@@ -361,6 +361,11 @@ public partial class DashboardViewModel : PageViewModelBase
         StartupStatus = _localizationService["Status.Starting"];
         LogInfo($"Starting with profile: {target.Name} ({target.Id})");
         var success = await _singBoxManager.StartAsync(runtimeConfigPath);
+        if (success)
+        {
+            // Let the manager know whether to clear the system proxy on stop.
+            _singBoxManager.NotifySystemProxyEnabled(EnableSystemProxy);
+        }
         StartupStatus = success ? string.Empty : _localizationService["Status.FailedStart"];
         if (!success)
         {
