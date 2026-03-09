@@ -59,21 +59,45 @@ public partial class LogsViewModel : PageViewModelBase
             return;
         }
 
-        var level = "Info";
-        var msg = message;
+        // Strip ANSI escape sequences
+        var msg = System.Text.RegularExpressions.Regex.Replace(message, @"\e\[[0-9;]*[a-zA-Z]", "");
 
-        if (message.Contains("[ERROR]") || message.Contains("[error]"))
+        // Remove sing-box timestamp: "+0800 2026-03-09 10:46:36 " or "2024-03-15T12:00:00.000Z "
+        var tsRegex = new System.Text.RegularExpressions.Regex(@"^([+-]\d{4}\s+)?\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(\.\d+[Zz]?)?\s+");
+        msg = tsRegex.Replace(msg, "");
+
+        var level = "Info";
+
+        // Extract and remove level
+        var levelRegex = new System.Text.RegularExpressions.Regex(@"^\[?(DEBUG|INFO|WARN|WARNING|ERROR|FATAL|debug|info|warn|warning|error|fatal)\]?[\s:]+");
+        var levelMatch = levelRegex.Match(msg);
+        if (levelMatch.Success)
         {
-            level = "Error";
+            var l = levelMatch.Groups[1].Value;
+            if (l.Equals("WARNING", StringComparison.OrdinalIgnoreCase)) l = "Warn";
+            level = l.Length > 0 ? char.ToUpper(l[0]) + l.Substring(1).ToLower() : level;
+            msg = msg.Substring(levelMatch.Length);
         }
-        else if (message.Contains("[WARN]") || message.Contains("[warn]"))
+        else
         {
-            level = "Warn";
+            // Fallback content scan
+            if (msg.Contains("ERROR", StringComparison.OrdinalIgnoreCase) || msg.Contains("[error]", StringComparison.OrdinalIgnoreCase))
+            {
+                level = "Error";
+            }
+            else if (msg.Contains("WARN", StringComparison.OrdinalIgnoreCase) || msg.Contains("[warn]", StringComparison.OrdinalIgnoreCase))
+            {
+                level = "Warn";
+            }
+            else if (msg.Contains("DEBUG", StringComparison.OrdinalIgnoreCase) || msg.Contains("[debug]", StringComparison.OrdinalIgnoreCase))
+            {
+                level = "Debug";
+            }
         }
-        else if (message.Contains("[DEBUG]") || message.Contains("[debug]"))
-        {
-            level = "Debug";
-        }
+
+        // Extract and remove connection context ID, e.g., "[1651110515 5.0s] " or "[1234] "
+        var contextRegex = new System.Text.RegularExpressions.Regex(@"^\[\d+(?:\s+[^\]]+)?\]\s*");
+        msg = contextRegex.Replace(msg, "");
 
         var entry = new LogEntryViewModel
         {

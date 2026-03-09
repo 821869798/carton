@@ -14,7 +14,8 @@ public class AppPreferences
 public enum DownloadMirror
 {
     GitHub,
-    GhProxy
+    GhProxy,
+    Ref1nd
 }
 
 public enum AppTheme

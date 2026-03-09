@@ -48,6 +48,8 @@ public class KernelManager : IKernelManager
     private const string GitHubApiUrl = "https://api.github.com/repos/SagerNet/sing-box/releases/latest";
     private const string GitHubDownloadUrl = "https://github.com/SagerNet/sing-box/releases/download";
 
+    private const string Ref1ndBaseUrl = "https://github.com/DustinWin/proxy-tools/releases/download/sing-box";
+
     public KernelManager(string baseDirectory)
     {
         _binDirectory = Path.Combine(baseDirectory, "bin");
@@ -170,6 +172,9 @@ public class KernelManager : IKernelManager
     {
         try
         {
+            if (mirror == DownloadMirror.Ref1nd)
+                return await DownloadAndInstallFromRef1ndAsync();
+
             version ??= await GetLatestVersionAsync();
             if (string.IsNullOrEmpty(version))
             {
@@ -243,6 +248,132 @@ public class KernelManager : IKernelManager
             StatusChanged?.Invoke(this, $"Failed to install: {ex.Message}");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Downloads and installs sing-box from the ref1nd release channel (DustinWin/proxy-tools).
+    /// Files are published at a fixed tag (sing-box) and use a custom naming scheme:
+    ///   Windows amd64  → sing-box-ref1nd-stable-windows-amd64-v3.exe  (direct exe, no archive)
+    ///   Windows arm64  → sing-box-ref1nd-stable-windows-arm64.exe      (direct exe, no archive)
+    ///   Linux   amd64  → sing-box-ref1nd-stable-linux-amd64-v3.tar.gz
+    ///   Linux   arm64  → sing-box-ref1nd-stable-linux-arm64.tar.gz
+    /// </summary>
+    private async Task<bool> DownloadAndInstallFromRef1ndAsync()
+    {
+        try
+        {
+            var platform = PlatformInfo.Current;
+            var fileName = GetRef1ndFileName(platform);
+            if (fileName == null)
+            {
+                StatusChanged?.Invoke(this, $"ref1nd channel does not support platform: {platform.OS}-{platform.Arch}");
+                return false;
+            }
+
+            var downloadUrl = $"{Ref1ndBaseUrl}/{fileName}";
+            StatusChanged?.Invoke(this, $"Downloading ref1nd sing-box...");
+
+            var isWindowsDirect = platform.OS == "windows";
+            var tempExt = isWindowsDirect ? ".exe" : ".tar.gz";
+            var tempFile = Path.Combine(Path.GetTempPath(), $"sing-box-dustinwin{tempExt}");
+
+            using (var response = await _httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead))
+            {
+                response.EnsureSuccessStatusCode();
+
+                var totalBytes = response.Content.Headers.ContentLength ?? 0;
+                var buffer = new byte[8192];
+                var bytesRead = 0L;
+
+                await using var contentStream = await response.Content.ReadAsStreamAsync();
+                await using var fileStream = File.Create(tempFile);
+
+                int read;
+                while ((read = await contentStream.ReadAsync(buffer)) > 0)
+                {
+                    await fileStream.WriteAsync(buffer.AsMemory(0, read));
+                    bytesRead += read;
+
+                    DownloadProgressChanged?.Invoke(this, new DownloadProgress
+                    {
+                        BytesReceived = bytesRead,
+                        TotalBytes = totalBytes,
+                        Status = "Downloading..."
+                    });
+                }
+            }
+
+            if (isWindowsDirect)
+            {
+                // Windows builds are distributed as a standalone .exe — install directly.
+                StatusChanged?.Invoke(this, "Installing...");
+                await KillRunningKernelAsync();
+                var dest = Path.Combine(_binDirectory, "sing-box.exe");
+                File.Move(tempFile, dest, overwrite: true);
+            }
+            else
+            {
+                StatusChanged?.Invoke(this, "Extracting...");
+                await ExtractArchiveAsync(tempFile, _binDirectory);
+                File.Delete(tempFile);
+
+                var chmodPath = Path.Combine(_binDirectory, "sing-box");
+                if (File.Exists(chmodPath))
+                    Process.Start("chmod", $"+x \"{chmodPath}\"")?.WaitForExit();
+            }
+
+            await GetInstalledKernelInfoAsync();
+            StatusChanged?.Invoke(this, "Successfully installed sing-box (ref1nd)");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            StatusChanged?.Invoke(this, $"Failed to install: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Returns the ref1nd asset filename for the current platform, or null if unsupported.
+    /// </summary>
+    private static string? GetRef1ndFileName(PlatformInfo platform)
+    {
+        return (platform.OS, platform.Arch) switch
+        {
+            ("windows", "amd64") => "sing-box-ref1nd-stable-windows-amd64-v3.exe",
+            ("windows", "arm64") => "sing-box-ref1nd-stable-windows-arm64.exe",
+            ("linux", "amd64") => "sing-box-ref1nd-stable-linux-amd64-v3.tar.gz",
+            ("linux", "arm64") => "sing-box-ref1nd-stable-linux-arm64.tar.gz",
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Kills any running sing-box processes that match our managed binary path.
+    /// </summary>
+    private async Task KillRunningKernelAsync()
+    {
+        try
+        {
+            var targetExe = _kernelPath;
+            var processes = Process.GetProcessesByName("sing-box");
+            foreach (var p in processes)
+            {
+                try
+                {
+                    if (string.Equals(p.MainModule?.FileName, targetExe, StringComparison.OrdinalIgnoreCase))
+                    {
+                        p.Kill();
+                        await p.WaitForExitAsync();
+                    }
+                }
+                catch { }
+            }
+
+            if (File.Exists(targetExe))
+                File.Delete(targetExe);
+        }
+        catch { }
     }
 
     private async Task ExtractArchiveAsync(string archivePath, string destination)

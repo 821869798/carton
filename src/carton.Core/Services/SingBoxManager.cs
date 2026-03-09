@@ -1070,8 +1070,8 @@ public class SingBoxManager : ISingBoxManager, IDisposable
             attempt++;
             try
             {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
                 using var response = await client.GetAsync($"{_apiAddress}/version", cts.Token);
                 LogReceived?.Invoke(this, $"[INFO] API responded with status {(int)response.StatusCode}");
 
