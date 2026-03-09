@@ -678,9 +678,11 @@ public partial class DashboardViewModel : PageViewModelBase
             var runtimeConfigPath = Path.Combine(runtimeDirectory, $"profile_{profileId}.runtime.json");
 
 
-            var json = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-            // 去除转义
-            json = Regex.Unescape(json);
+            var json = root.ToJsonString(new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Encoder = carton.Core.Utilities.UnicodeJsonEncoder.Instance
+            });
             await File.WriteAllTextAsync(runtimeConfigPath, json);
             IsPortEditing = false;
             LogInfo($"Runtime inbounds prepared: port={port}, lan={AllowLanConnections}, systemProxy={EnableSystemProxy}, tun={EnableTunInbound}");

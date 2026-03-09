@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Threading;
 using carton.Core.Models;
 using carton.Core.Serialization;
@@ -240,14 +239,17 @@ public class ProfileManager : IProfileManager
     private async Task SaveDataUnlockedAsync(SingBoxData data)
     {
         var buffer = new ArrayBufferWriter<byte>();
-        await using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true }))
+        await using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions
+        {
+            Indented = true,
+            Encoder = Utilities.UnicodeJsonEncoder.Instance
+        }))
         {
             JsonSerializer.Serialize(writer, data, CartonCoreJsonContext.Default.SingBoxData);
             await writer.FlushAsync();
         }
 
         var json = Encoding.UTF8.GetString(buffer.WrittenSpan);
-        json = Regex.Unescape(json);
 
         var directory = Path.GetDirectoryName(_dataPath);
         if (!string.IsNullOrEmpty(directory))
