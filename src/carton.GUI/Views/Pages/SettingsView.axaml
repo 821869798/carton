@@ -180,6 +180,9 @@
 
       <Border Classes="card" Padding="16">
         <StackPanel Spacing="12">
+          <CheckBox Content="{DynamicResource Settings.Data.StoreInAppDir}" 
+                    IsChecked="{Binding IsDataInExeDirectory}"
+                    IsVisible="{Binding IsPortableApp}" />
           <Button Content="{DynamicResource Settings.Data.OpenFolder}" Command="{Binding OpenDataFolderCommand}"
                   HorizontalAlignment="Left"/>
           <Button Content="{DynamicResource Settings.Data.Backup.Export}" Command="{Binding ExportBackupCommand}"

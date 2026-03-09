@@ -53,20 +53,14 @@ public class KernelManager : IKernelManager
     public KernelManager(string baseDirectory)
     {
         _binDirectory = Path.Combine(baseDirectory, "bin");
-        _kernelPath = GetKernelExecutablePath();
-
+        var platform = PlatformInfo.Current;
+        var fileName = $"sing-box{platform.Suffix}";
+        _kernelPath = Path.Combine(_binDirectory, fileName);
 
         Directory.CreateDirectory(_binDirectory);
     }
 
-    private static string GetKernelExecutablePath()
-    {
-        var platform = PlatformInfo.Current;
-        var fileName = $"sing-box{platform.Suffix}";
-        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Carton", "bin", fileName)
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Carton", "bin", fileName);
-    }
+
 
     public async Task<KernelInfo?> GetInstalledKernelInfoAsync()
     {

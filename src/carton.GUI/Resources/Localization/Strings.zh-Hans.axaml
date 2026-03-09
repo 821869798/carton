@@ -169,6 +169,13 @@
 	<x:String x:Key="Settings.Appearance.Language">语言</x:String>
 
 	<x:String x:Key="Settings.Section.Data">数据</x:String>
+	<x:String x:Key="Settings.Data.StoreInAppDir">将数据存储在应用目录中 (.exe所在目录)</x:String>
+	<x:String x:Key="Settings.Data.StoreInAppDir.ConfirmTitle">确认更改数据位置</x:String>
+	<x:String x:Key="Settings.Data.StoreInAppDir.ConfirmMessageEnable">确认要将数据存储在应用目录吗？这需要重启应用，并且您现有的配置将被复制过去。</x:String>
+	<x:String x:Key="Settings.Data.StoreInAppDir.ConfirmMessageDisable">确认要停止在应用目录存储数据（恢复到 AppData）吗？这需要重启应用，并且配置将被复制回去。</x:String>
+	<x:String x:Key="Settings.Data.StoreInAppDir.ConfirmButton">确认</x:String>
+	<x:String x:Key="Settings.Data.StoreInAppDir.CancelButton">取消</x:String>
+	<x:String x:Key="Settings.Data.StoreInAppDir.Failed">更改数据目录失败</x:String>
 	<x:String x:Key="Settings.Data.OpenFolder">打开数据目录</x:String>
 	<x:String x:Key="Settings.Data.Backup.Export">导出备份</x:String>
 	<x:String x:Key="Settings.Data.Backup.Import">导入备份</x:String>

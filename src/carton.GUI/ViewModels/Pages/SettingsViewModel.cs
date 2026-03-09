@@ -111,6 +111,19 @@ public partial class SettingsViewModel : PageViewModelBase
     private bool _isDownloadingAppUpdate;
 
     [ObservableProperty]
+    private bool _isDataInExeDirectory;
+
+    [ObservableProperty]
+    private bool _isPortableApp;
+
+    partial void OnIsDataInExeDirectoryChanged(bool value)
+    {
+        if (_suppressPreferenceUpdates) return;
+
+        _ = HandleDataDirectoryToggleAsync(value);
+    }
+
+    [ObservableProperty]
     private bool _isAppUpdateAvailable;
 
     [ObservableProperty]
@@ -223,6 +236,7 @@ public partial class SettingsViewModel : PageViewModelBase
     {
         CurrentAppVersion = _appUpdateService?.CurrentVersion ?? GetString("Common.Unknown", "unknown");
         _requiresManualAppUpdate = _appUpdateService != null && !_appUpdateService.SupportsInAppUpdates;
+        IsPortableApp = _requiresManualAppUpdate;
         LatestAvailableVersion = string.Empty;
         AppUpdateStatus = string.Empty;
         SelectedUpdateChannel = UpdateChannelToString(_currentPreferences.UpdateChannel);
@@ -263,6 +277,7 @@ public partial class SettingsViewModel : PageViewModelBase
         SelectedUpdateChannel = UpdateChannelToString(_currentPreferences.UpdateChannel);
         AutoCheckAppUpdates = _currentPreferences.AutoCheckAppUpdates;
         SelectedKernelDownloadMirror = _currentPreferences.KernelDownloadMirror;
+        IsDataInExeDirectory = File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, carton.Core.Utilities.PathHelper.PortableMarkerFileName));
         _suppressPreferenceUpdates = false;
         _localizationService?.SetLanguage(_currentPreferences.Language);
         _startupService?.ApplyStartAtLoginPreference(StartAtLogin);
@@ -1026,6 +1041,103 @@ public partial class SettingsViewModel : PageViewModelBase
         }
 
         desktop.Shutdown();
+    }
+
+    private async Task HandleDataDirectoryToggleAsync(bool enablePortableMode)
+    {
+        var desktop = Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+        var window = desktop?.MainWindow;
+        if (window == null) return;
+
+        var message = enablePortableMode
+            ? GetString("Settings.Data.StoreInAppDir.ConfirmMessageEnable", "Are you sure you want to store data in the application directory? This requires a restart, and your existing config will be copied.")
+            : GetString("Settings.Data.StoreInAppDir.ConfirmMessageDisable", "Are you sure you want to stop storing data in the application directory (revert to AppData)? This requires a restart, and config will be copied.");
+
+        var dialog = new Window
+        {
+            Width = 420,
+            Height = 200,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Title = GetString("Settings.Data.StoreInAppDir.ConfirmTitle", "Confirm Data Location Change")
+        };
+
+        var textBlock = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Margin = new Avalonia.Thickness(0, 0, 0, 16) };
+        var okBtn = new Button { Content = GetString("Settings.Data.StoreInAppDir.ConfirmButton", "Confirm"), HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right, MinWidth = 110 };
+        okBtn.Click += (_, _) => dialog.Close(true);
+        var cancelBtn = new Button { Content = GetString("Settings.Data.StoreInAppDir.CancelButton", "Cancel"), HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right, MinWidth = 110 };
+        cancelBtn.Click += (_, _) => dialog.Close(false);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right };
+        buttons.Children.Add(cancelBtn);
+        buttons.Children.Add(okBtn);
+        dialog.Content = new StackPanel { Margin = new Avalonia.Thickness(20), Children = { textBlock, buttons } };
+
+        var confirm = await dialog.ShowDialog<bool>(window);
+        if (!confirm)
+        {
+            _suppressPreferenceUpdates = true;
+            IsDataInExeDirectory = !enablePortableMode;
+            _suppressPreferenceUpdates = false;
+            return;
+        }
+
+        var exeDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        var markerPath = Path.Combine(exeDirectory, carton.Core.Utilities.PathHelper.PortableMarkerFileName);
+        var oldAppDataPath = carton.Core.Utilities.PathHelper.GetAppDataPath();
+
+        try
+        {
+            if (enablePortableMode)
+            {
+                File.WriteAllText(markerPath, "true");
+            }
+            else
+            {
+                if (File.Exists(markerPath))
+                    File.Delete(markerPath);
+            }
+
+            var newAppDataPath = carton.Core.Utilities.PathHelper.GetAppDataPath();
+
+            if (!string.Equals(oldAppDataPath, newAppDataPath, StringComparison.OrdinalIgnoreCase))
+            {
+                CopyDirectory(oldAppDataPath, newAppDataPath);
+            }
+            await RestartApplicationAsync(window);
+        }
+        catch (Exception ex)
+        {
+            DataOperationStatus = $"{GetString("Settings.Data.StoreInAppDir.Failed", "Failed to change data directory")}: {ex.Message}";
+            _suppressPreferenceUpdates = true;
+            IsDataInExeDirectory = !enablePortableMode;
+            _suppressPreferenceUpdates = false;
+
+            if (!enablePortableMode && !File.Exists(markerPath))
+                File.WriteAllText(markerPath, "true");
+            else if (enablePortableMode && File.Exists(markerPath))
+                File.Delete(markerPath);
+        }
+    }
+
+    private static void CopyDirectory(string sourceDir, string destDir)
+    {
+        if (!Directory.Exists(sourceDir)) return;
+        Directory.CreateDirectory(destDir);
+
+        foreach (var file in Directory.GetFiles(sourceDir))
+        {
+            if (string.Equals(Path.GetFileName(file), carton.Core.Utilities.PathHelper.PortableMarkerFileName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var dest = Path.Combine(destDir, Path.GetFileName(file));
+            File.Copy(file, dest, true);
+        }
+
+        foreach (var dir in Directory.GetDirectories(sourceDir))
+        {
+            var dest = Path.Combine(destDir, Path.GetFileName(dir));
+            CopyDirectory(dir, dest);
+        }
     }
 
     private async Task ShowManualUpdatePromptAsync()

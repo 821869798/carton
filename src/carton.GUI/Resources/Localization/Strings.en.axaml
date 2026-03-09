@@ -170,6 +170,13 @@
 	<x:String x:Key="Settings.Appearance.Language">Language</x:String>
 
 	<x:String x:Key="Settings.Section.Data">Data</x:String>
+	<x:String x:Key="Settings.Data.StoreInAppDir">Store data in application directory</x:String>
+	<x:String x:Key="Settings.Data.StoreInAppDir.ConfirmTitle">Confirm Data Location Change</x:String>
+	<x:String x:Key="Settings.Data.StoreInAppDir.ConfirmMessageEnable">Are you sure you want to store data in the application directory? This requires a restart, and your existing config will be copied.</x:String>
+	<x:String x:Key="Settings.Data.StoreInAppDir.ConfirmMessageDisable">Are you sure you want to stop storing data in the application directory (revert to AppData)? This requires a restart, and config will be copied.</x:String>
+	<x:String x:Key="Settings.Data.StoreInAppDir.ConfirmButton">Confirm</x:String>
+	<x:String x:Key="Settings.Data.StoreInAppDir.CancelButton">Cancel</x:String>
+	<x:String x:Key="Settings.Data.StoreInAppDir.Failed">Failed to change data directory</x:String>
 	<x:String x:Key="Settings.Data.OpenFolder">Open Data Folder</x:String>
 	<x:String x:Key="Settings.Data.Backup.Export">Export Backup</x:String>
 	<x:String x:Key="Settings.Data.Backup.Import">Import Backup</x:String>

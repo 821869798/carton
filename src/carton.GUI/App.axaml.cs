@@ -108,9 +108,7 @@ public partial class App : Application
 
     private static string ResolveWorkingDirectory()
     {
-        var appDataPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Carton");
+        var appDataPath = carton.Core.Utilities.PathHelper.GetAppDataPath();
         var workingDirectory = Path.Combine(appDataPath, "data");
         Directory.CreateDirectory(workingDirectory);
         return workingDirectory;

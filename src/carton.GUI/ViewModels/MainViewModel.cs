@@ -99,9 +99,7 @@ public partial class MainViewModel : ViewModelBase
 
     public MainViewModel()
     {
-        var appDataPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Carton");
+        var appDataPath = Path.Combine(carton.Core.Utilities.PathHelper.GetAppDataPath());
 
         var workingDirectory = Path.Combine(appDataPath, "data");
         _configManager = new ConfigManager(workingDirectory);
