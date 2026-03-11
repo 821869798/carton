@@ -8,8 +8,10 @@ namespace carton.GUI.Helpers;
 
 public class EmojiTextHelper
 {
-    // Match Regional Indicator Symbols combinations (Emoji Flags)
-    private static readonly Regex FlagRegex = new Regex(@"(\uD83C[\uDDE6-\uDDFF]){2}", RegexOptions.Compiled);
+    // Match common emojis, symbols, and flag sequences
+    private static readonly Regex EmojiRegex = new Regex(
+        @"(\uD83C[\uDDE6-\uDDFF]){2}|[\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2600-\u27BF]\uFE0F?", 
+        RegexOptions.Compiled);
 
     public static readonly AttachedProperty<string> TextProperty =
         AvaloniaProperty.RegisterAttached<EmojiTextHelper, TextBlock, string>("Text");
@@ -40,6 +42,10 @@ public class EmojiTextHelper
         {
             textBlock.Inlines.Clear();
         }
+        else
+        {
+            textBlock.Inlines = new InlineCollection();
+        }
 
         if (string.IsNullOrEmpty(fullText))
         {
@@ -47,16 +53,14 @@ public class EmojiTextHelper
             return;
         }
 
-        var matches = FlagRegex.Matches(fullText);
+        var matches = EmojiRegex.Matches(fullText);
         if (matches.Count == 0)
         {
             textBlock.Text = fullText;
             return;
         }
 
-        if (textBlock.Inlines == null)
-            textBlock.Inlines = new InlineCollection();
-
+        // Use the bundled Twemoji font or system emoji font
         var emojiFont = new FontFamily("avares://carton/Assets/Fonts#Twemoji COLRv0");
 
         int lastIndex = 0;
@@ -67,6 +71,7 @@ public class EmojiTextHelper
                 textBlock.Inlines.Add(new Run { Text = fullText.Substring(lastIndex, match.Index - lastIndex) });
             }
 
+            // Force FontWeight.Normal for emojis to preserve color
             textBlock.Inlines.Add(new Run
             {
                 Text = match.Value,
