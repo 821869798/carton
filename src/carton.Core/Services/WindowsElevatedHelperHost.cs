@@ -198,7 +198,7 @@ public static class WindowsElevatedHelperHost
                         FileMode.Append,
                         FileAccess.Write,
                         FileShare.ReadWrite | FileShare.Delete);
-                    logWriter = new StreamWriter(stream) { AutoFlush = true };
+                    logWriter = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
 
                     var process = new Process
                     {
@@ -211,7 +211,9 @@ public static class WindowsElevatedHelperHost
                             RedirectStandardOutput = true,
                             RedirectStandardError = true,
                             RedirectStandardInput = true,
-                            CreateNoWindow = true
+                            CreateNoWindow = true,
+                            StandardOutputEncoding = Encoding.UTF8,
+                            StandardErrorEncoding = Encoding.UTF8
                         }
                     };
 

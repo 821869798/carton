@@ -174,7 +174,9 @@ public class SingBoxManager : ISingBoxManager, IDisposable
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     RedirectStandardInput = true,
-                    CreateNoWindow = true
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
                 }
             };
 
@@ -376,17 +378,31 @@ public class SingBoxManager : ISingBoxManager, IDisposable
                         Selected = ReadString(proxy, "now")
                     };
 
-                    if (proxy.TryGetProperty("all", out var allElement) &&
-                        allElement.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var item in allElement.EnumerateArray())
-                        {
-                            if (item.ValueKind == JsonValueKind.String)
-                            {
-                                group.Items.Add(new OutboundItem { Tag = item.GetString() ?? string.Empty });
-                            }
-                        }
-                    }
+                     if (proxy.TryGetProperty("all", out var allElement) &&
+                         allElement.ValueKind == JsonValueKind.Array)
+                     {
+                         foreach (var item in allElement.EnumerateArray())
+                         {
+                             if (item.ValueKind == JsonValueKind.String)
+                             {
+                                var itemTag = item.GetString() ?? string.Empty;
+                                var itemType = string.Empty;
+
+                                if (!string.IsNullOrWhiteSpace(itemTag) &&
+                                    proxiesElement.TryGetProperty(itemTag, out var itemProxy) &&
+                                    itemProxy.ValueKind == JsonValueKind.Object)
+                                {
+                                    itemType = ReadString(itemProxy, "type");
+                                }
+
+                                group.Items.Add(new OutboundItem
+                                {
+                                    Tag = itemTag,
+                                    Type = itemType
+                                });
+                             }
+                         }
+                     }
 
                     groups.Add(group);
                 }
@@ -1307,7 +1323,7 @@ public class SingBoxManager : ISingBoxManager, IDisposable
         try
         {
             using var stream = new FileStream(logPath, FileMode.OpenOrCreate, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var reader = new StreamReader(stream);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
             while (!cancellationToken.IsCancellationRequested)
             {
                 var line = await reader.ReadLineAsync(cancellationToken);

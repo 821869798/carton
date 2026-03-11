@@ -13,6 +13,7 @@
     <local:ConnectionStatusConverter x:Key="ConnectionStatusConverter"/>
     <local:NavigationIconConverter x:Key="NavigationIconConverter"/>
     <local:NavigationTitleConverter x:Key="NavigationTitleConverter"/>
+    <local:ResponsiveItemWidthConverter x:Key="ResponsiveItemWidthConverter"/>
 
     <DataTemplate x:Key="PageTemplate" DataType="vm:PageViewModelBase">
       <ContentControl Content="{Binding}"/>

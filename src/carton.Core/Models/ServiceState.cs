@@ -63,5 +63,6 @@ public class OutboundGroup
 public class OutboundItem
 {
     public string Tag { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty;
     public int UrlTestDelay { get; set; }
 }

@@ -1,17 +1,16 @@
-using System;
-using System.IO;
-using System.Threading.Tasks;
-using System.Collections.ObjectModel;
-using System.Net.Http;
 using Avalonia.Controls.ApplicationLifetimes;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
-using carton.Core.Services;
 using carton.Core.Models;
+using carton.Core.Services;
 using carton.Core.Utilities;
 using carton.GUI.Models;
 using carton.GUI.Services;
 using carton.Views;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using System;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Threading.Tasks;
 
 namespace carton.ViewModels;
 

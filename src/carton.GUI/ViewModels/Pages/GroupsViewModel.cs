@@ -7,8 +7,8 @@ using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using carton.Core.Services;
 using carton.Core.Models;
+using carton.Core.Services;
 using carton.GUI.Models;
 using carton.GUI.Services;
 
@@ -72,9 +72,13 @@ public partial class GroupsViewModel : PageViewModelBase
             StatusMessage = LocalizationService.Instance[WaitingForSingBoxResourceKey];
         }
     }
+
     private async Task LoadGroupsAsync()
     {
-        if (_singBoxManager == null) return;
+        if (_singBoxManager == null)
+        {
+            return;
+        }
 
         await _loadSemaphore.WaitAsync();
         try
@@ -85,7 +89,7 @@ public partial class GroupsViewModel : PageViewModelBase
                 StatusMessage = "Loading groups...";
             });
 
-            if (_singBoxManager.IsRunning == false)
+            if (!_singBoxManager.IsRunning)
             {
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
@@ -108,10 +112,11 @@ public partial class GroupsViewModel : PageViewModelBase
                 foreach (var group in groups)
                 {
                     var outboundItems = group.Items
-                        .Select(i => new OutboundItemViewModel
+                        .Select(item => new OutboundItemViewModel
                         {
-                            Tag = i.Tag,
-                            Delay = i.UrlTestDelay
+                            Tag = item.Tag,
+                            Type = item.Type,
+                            Delay = item.UrlTestDelay
                         })
                         .ToList();
 
@@ -127,15 +132,19 @@ public partial class GroupsViewModel : PageViewModelBase
                         SelectedOutbound = group.Selected,
                         Items = new ObservableCollection<OutboundItemViewModel>(outboundItems)
                     };
+
                     groupVm.SelectOutboundCommand = new AsyncRelayCommand<string>(
                         outboundTag => SelectOutboundAsync(group.Tag, outboundTag),
-                        _ => _singBoxManager?.IsRunning == true
-                    );
+                        _ => _singBoxManager?.IsRunning == true);
 
                     foreach (var item in groupVm.Items)
                     {
                         item.SelectOutboundCommand = groupVm.SelectOutboundCommand;
+                        item.TestDelayCommand = new AsyncRelayCommand(
+                            () => TestOutboundAsync(item),
+                            () => _singBoxManager?.IsRunning == true && !item.IsTesting);
                     }
+
                     groupVm.UpdateItemSelection();
 
                     if (groupVm.Name == previousSelection)
@@ -153,6 +162,7 @@ public partial class GroupsViewModel : PageViewModelBase
             });
 
             Dispatcher.UIThread.Post(UpdateSelectOutboundCommandStates);
+            Dispatcher.UIThread.Post(UpdateTestDelayCommandStates);
             Dispatcher.UIThread.Post(() => TestCurrentGroupCommand.NotifyCanExecuteChanged());
         }
         catch (Exception ex)
@@ -172,6 +182,7 @@ public partial class GroupsViewModel : PageViewModelBase
     private void OnServiceStatusChanged(object? sender, ServiceStatus status)
     {
         Dispatcher.UIThread.Post(UpdateSelectOutboundCommandStates);
+        Dispatcher.UIThread.Post(UpdateTestDelayCommandStates);
         Dispatcher.UIThread.Post(() => TestCurrentGroupCommand.NotifyCanExecuteChanged());
 
         if (status == ServiceStatus.Running)
@@ -215,9 +226,26 @@ public partial class GroupsViewModel : PageViewModelBase
         }
     }
 
+    private void UpdateTestDelayCommandStates()
+    {
+        foreach (var group in Groups)
+        {
+            foreach (var item in group.Items)
+            {
+                if (item.TestDelayCommand is AsyncRelayCommand asyncCommand)
+                {
+                    asyncCommand.NotifyCanExecuteChanged();
+                }
+            }
+        }
+    }
+
     private async Task SelectOutboundAsync(string groupTag, string? outboundTag)
     {
-        if (_singBoxManager == null || string.IsNullOrEmpty(outboundTag)) return;
+        if (_singBoxManager == null || string.IsNullOrEmpty(outboundTag))
+        {
+            return;
+        }
 
         try
         {
@@ -225,7 +253,7 @@ public partial class GroupsViewModel : PageViewModelBase
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                var group = Groups.FirstOrDefault(g => g.Name == groupTag);
+                var group = Groups.FirstOrDefault(candidate => candidate.Name == groupTag);
                 if (group != null)
                 {
                     group.SelectedOutbound = outboundTag;
@@ -240,6 +268,44 @@ public partial class GroupsViewModel : PageViewModelBase
             {
                 StatusMessage = $"Failed to select outbound: {ex.Message}";
             });
+        }
+    }
+
+    private async Task TestOutboundAsync(OutboundItemViewModel item)
+    {
+        if (_singBoxManager == null || string.IsNullOrWhiteSpace(item.Tag))
+        {
+            return;
+        }
+
+        item.IsTesting = true;
+        if (item.TestDelayCommand is AsyncRelayCommand asyncCommand)
+        {
+            asyncCommand.NotifyCanExecuteChanged();
+        }
+
+        StatusMessage = $"Testing {item.Tag}...";
+
+        try
+        {
+            var delays = await _singBoxManager.RunOutboundDelayTestsAsync(new[] { item.Tag });
+            item.Delay = delays.TryGetValue(item.Tag, out var value) && value >= 0 ? value : 0;
+            StatusMessage = item.Delay > 0
+                ? $"{item.Tag}: {item.Delay}ms"
+                : $"{item.Tag}: timeout";
+        }
+        catch (Exception ex)
+        {
+            item.Delay = 0;
+            StatusMessage = $"Failed to test {item.Tag}: {ex.Message}";
+        }
+        finally
+        {
+            item.IsTesting = false;
+            if (item.TestDelayCommand is AsyncRelayCommand updatedCommand)
+            {
+                updatedCommand.NotifyCanExecuteChanged();
+            }
         }
     }
 
@@ -267,39 +333,32 @@ public partial class GroupsViewModel : PageViewModelBase
         }
 
         var targets = SelectedGroup.Items
-            .Select(i => i.Tag)
+            .Select(item => item.Tag)
             .Where(tag => !string.IsNullOrWhiteSpace(tag))
             .ToList();
 
         if (targets.Count == 0)
         {
-            StatusMessage = "当前分组没有可测速的节点";
+            StatusMessage = "No testable proxies in the current group";
             return;
         }
 
         IsTestingGroup = true;
-        StatusMessage = $"正在测速 {SelectedGroup.Name}...";
+        StatusMessage = $"Testing {SelectedGroup.Name}...";
 
         try
         {
             var delays = await _singBoxManager.RunOutboundDelayTestsAsync(targets);
             foreach (var item in SelectedGroup.Items)
             {
-                if (delays.TryGetValue(item.Tag, out var value) && value >= 0)
-                {
-                    item.Delay = value;
-                }
-                else
-                {
-                    item.Delay = 0;
-                }
+                item.Delay = delays.TryGetValue(item.Tag, out var value) && value >= 0 ? value : 0;
             }
 
-            StatusMessage = $"测速完成 - {SelectedGroup.Name}";
+            StatusMessage = $"Test completed: {SelectedGroup.Name}";
         }
         catch (Exception ex)
         {
-            StatusMessage = $"测速失败: {ex.Message}";
+            StatusMessage = $"Test failed: {ex.Message}";
         }
         finally
         {
@@ -354,10 +413,30 @@ public partial class OutboundItemViewModel : ObservableObject
     private string _tag = string.Empty;
 
     [ObservableProperty]
+    private string _type = string.Empty;
+
+    [ObservableProperty]
     private int _delay;
 
     public IAsyncRelayCommand<string>? SelectOutboundCommand { get; set; }
 
+    public IAsyncRelayCommand? TestDelayCommand { get; set; }
+
     [ObservableProperty]
     private bool _isSelected;
+
+    [ObservableProperty]
+    private bool _isTesting;
+
+    public string DelayDisplay => IsTesting ? "..." : Delay > 0 ? $"{Delay}ms" : string.Empty;
+
+    partial void OnDelayChanged(int value)
+    {
+        OnPropertyChanged(nameof(DelayDisplay));
+    }
+
+    partial void OnIsTestingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(DelayDisplay));
+    }
 }

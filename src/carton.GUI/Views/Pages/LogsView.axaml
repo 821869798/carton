@@ -62,7 +62,10 @@
               <Grid ColumnDefinitions="80,70,*" ColumnSpacing="8">
                 <TextBlock Grid.Column="0" Text="{Binding Time}"/>
                 <TextBlock Grid.Column="1" Text="{Binding Level}"/>
-                <TextBlock Grid.Column="2" Text="{Binding Message}" TextWrapping="Wrap"/>
+                <TextBlock Grid.Column="2"
+                           Text="{Binding Message}"
+                           TextWrapping="Wrap"
+                           FontFamily="Segoe UI, Microsoft YaHei UI, Segoe UI Emoji, Segoe UI Symbol"/>
               </Grid>
             </Border>
           </DataTemplate>

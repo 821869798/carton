@@ -11,6 +11,7 @@ using carton.GUI.Services;
 using carton.ViewModels;
 using carton.Views;
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -170,6 +171,32 @@ public class NavigationTitleConverter : Avalonia.Data.Converters.IValueConverter
     }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}
+
+public class ResponsiveItemWidthConverter : Avalonia.Data.Converters.IValueConverter
+{
+    private const double MinCardWidth = 200;
+    private const double CardGap = 8;
+    private const int MinColumns = 2;
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not double availableWidth || double.IsNaN(availableWidth) || availableWidth <= 0)
+        {
+            return 220d;
+        }
+
+        var columns = Math.Max(
+            MinColumns,
+            (int)Math.Floor((availableWidth + CardGap) / (MinCardWidth + CardGap)));
+
+        return Math.Floor((availableWidth - (columns - 1) * CardGap) / columns);
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         throw new NotImplementedException();
     }

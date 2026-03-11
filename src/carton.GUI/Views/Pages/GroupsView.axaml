@@ -4,7 +4,9 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:carton.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
+             mc:Ignorable="d"
+             d:DesignWidth="800"
+             d:DesignHeight="600"
              x:Class="carton.Views.Pages.GroupsView"
              x:DataType="vm:GroupsViewModel">
 
@@ -63,7 +65,7 @@
               <StackPanel>
                 <TextBlock Text="{Binding Name}"
                            FontWeight="SemiBold"/>
-                <TextBlock Text="{Binding SelectedOutbound, StringFormat='当前：{0}'}"
+                <TextBlock Text="{Binding SelectedOutbound, StringFormat='当前: {0}'}"
                            FontSize="11"
                            Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
               </StackPanel>
@@ -95,62 +97,101 @@
           <ContentControl.ContentTemplate>
             <DataTemplate DataType="vm:GroupItemViewModel">
               <Grid RowDefinitions="Auto,*" RowSpacing="12">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <TextBlock Text="{Binding Name}"
-                             FontSize="18"
-                             FontWeight="SemiBold"/>
-                  <TextBlock Text="{Binding Type}"
-                             FontSize="12"
-                             Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
-                  <TextBlock Text="{Binding SelectedOutbound, StringFormat='当前：{0}'}"
-                             FontSize="12"
-                             Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
-                  <Button Content="测速"
+                <Grid ColumnDefinitions="*,Auto"
+                      ColumnSpacing="12">
+                  <StackPanel Grid.Column="0"
+                              Orientation="Horizontal"
+                              Spacing="8">
+                    <TextBlock Text="{Binding Name}"
+                               FontSize="18"
+                               FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding Type}"
+                               FontSize="12"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                    <TextBlock Text="{Binding SelectedOutbound, StringFormat='当前: {0}'}"
+                               FontSize="12"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                  </StackPanel>
+
+                  <Button Grid.Column="1"
+                          Content="⚡"
                           Command="{Binding DataContext.TestCurrentGroupCommand, ElementName=GroupsViewRoot}"
-                          Margin="12,0,0,0"
-                          Padding="12,4"/>
-                </StackPanel>
-                <ScrollViewer Grid.Row="1">
+                          Padding="8,4"
+                          MinWidth="0"/>
+                </Grid>
+                <ScrollViewer x:Name="ProxiesScrollViewer"
+                              Grid.Row="1"
+                              Padding="0">
                   <ItemsControl ItemsSource="{Binding Items}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate DataType="vm:OutboundItemViewModel">
-                        <Button Command="{Binding SelectOutboundCommand}"
-                                CommandParameter="{Binding Tag}"
-                                Margin="0,4,8,4"
-                                Padding="10,6"
-                                CornerRadius="6"
-                                Tag="{Binding IsSelected}">
-                          <Button.Styles>
-                            <Style Selector="Button">
+                        <Border Margin="4,0,4,8"
+                                Padding="12"
+                                CornerRadius="10"
+                                BorderThickness="1"
+                                HorizontalAlignment="Stretch"
+                                Classes.selected="{Binding IsSelected}">
+                          <Border.Styles>
+                            <Style Selector="Border">
                               <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundAltHighBrush}"/>
                               <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"/>
-                              <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
                             </Style>
-                            <Style Selector="Button:pointerover">
+                            <Style Selector="Border:pointerover">
                               <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeHighBrush}"/>
                             </Style>
-                            <Style Selector="Button[Tag=True]">
+                            <Style Selector="Border.selected">
                               <Setter Property="Background" Value="{DynamicResource SystemAccentColor}"/>
                               <Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColor}"/>
-                              <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
                             </Style>
-                            <Style Selector="Button[Tag=True]:pointerover">
-                              <Setter Property="Background" Value="{DynamicResource SystemAccentColorLight1}"/>
-                              <Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColorLight1}"/>
-                            </Style>
-                          </Button.Styles>
-                          <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="{Binding Tag}"/>
-                            <TextBlock Text="{Binding Delay, StringFormat='{}{0}ms'}"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
-                          </StackPanel>
-                        </Button>
+                          </Border.Styles>
+                          <Button Command="{Binding SelectOutboundCommand}"
+                                  CommandParameter="{Binding Tag}"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch"
+                                  Background="Transparent"
+                                  BorderThickness="0"
+                                  Padding="0">
+                            <Grid RowDefinitions="Auto,Auto" RowSpacing="8">
+                              <TextBlock Text="{Binding Tag}"
+                                         FontSize="14"
+                                         FontWeight="SemiBold"
+                                         MaxLines="1"
+                                         TextTrimming="CharacterEllipsis"
+                                         ToolTip.Tip="{Binding Tag}"/>
+
+                              <Grid Grid.Row="1"
+                                    ColumnDefinitions="*,Auto"
+                                    ColumnSpacing="16">
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding Type}"
+                                           VerticalAlignment="Center"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+
+                                <StackPanel Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            Spacing="8"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Center">
+                                  <TextBlock Text="{Binding DelayDisplay}"
+                                             VerticalAlignment="Center"
+                                             FontSize="12"
+                                             FontWeight="SemiBold"/>
+                                  <Button Content="⚡"
+                                          Command="{Binding TestDelayCommand}"
+                                          Padding="8,4"
+                                          MinWidth="0"/>
+                                </StackPanel>
+                              </Grid>
+                            </Grid>
+                          </Button>
+                        </Border>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                     <ItemsControl.ItemsPanel>
                       <ItemsPanelTemplate>
-                        <WrapPanel/>
+                        <WrapPanel Orientation="Horizontal"
+                                   ItemWidth="{Binding ElementName=ProxiesScrollViewer, Path=Bounds.Width, Converter={StaticResource ResponsiveItemWidthConverter}}"/>
                       </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                   </ItemsControl>
