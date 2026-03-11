@@ -193,6 +193,8 @@
                   HorizontalAlignment="Left"/>
           <Button Content="{DynamicResource Settings.Data.ClearLogs}" Command="{Binding ClearLogsCommand}"
                   HorizontalAlignment="Left"/>
+          <Button Content="{DynamicResource Settings.Data.ClearCache}" Command="{Binding ClearCacheCommand}"
+                  HorizontalAlignment="Left"/>
           <Button Content="{DynamicResource Settings.Data.Reset}" Command="{Binding ResetSettingsCommand}"
                   HorizontalAlignment="Left"/>
           <TextBlock Text="{Binding DataOperationStatus}"

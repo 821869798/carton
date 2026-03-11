@@ -195,6 +195,10 @@
 	<x:String x:Key="Settings.Data.Backup.Import.Restart.Button">立即重启</x:String>
 	<x:String x:Key="Settings.Data.Operation.WindowUnavailable">主窗口不可用</x:String>
 	<x:String x:Key="Settings.Data.ClearLogs">清空日志</x:String>
+	<x:String x:Key="Settings.Data.ClearCache">清空缓存数据库</x:String>
+	<x:String x:Key="Settings.Data.ClearCache.Success">缓存数据库已清空</x:String>
+	<x:String x:Key="Settings.Data.ClearCache.NotFound">未找到缓存数据库文件</x:String>
+	<x:String x:Key="Settings.Data.ClearCache.Failed">清空缓存数据库失败</x:String>
 	<x:String x:Key="Settings.Data.Reset">重置设置</x:String>
 
 	<x:String x:Key="Settings.Section.About">关于</x:String>

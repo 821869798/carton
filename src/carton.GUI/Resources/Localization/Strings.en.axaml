@@ -196,6 +196,10 @@
 	<x:String x:Key="Settings.Data.Backup.Import.Restart.Button">Restart Now</x:String>
 	<x:String x:Key="Settings.Data.Operation.WindowUnavailable">Main window unavailable</x:String>
 	<x:String x:Key="Settings.Data.ClearLogs">Clear Logs</x:String>
+	<x:String x:Key="Settings.Data.ClearCache">Clear Cache Database</x:String>
+	<x:String x:Key="Settings.Data.ClearCache.Success">Cache database cleared successfully</x:String>
+	<x:String x:Key="Settings.Data.ClearCache.NotFound">Cache database file not found</x:String>
+	<x:String x:Key="Settings.Data.ClearCache.Failed">Failed to clear cache database</x:String>
 	<x:String x:Key="Settings.Data.Reset">Reset Settings</x:String>
 
 	<x:String x:Key="Settings.Section.About">About</x:String>

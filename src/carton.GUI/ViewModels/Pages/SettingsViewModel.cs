@@ -525,6 +525,31 @@ public partial class SettingsViewModel : PageViewModelBase
     }
 
     [RelayCommand]
+    private void ClearCache()
+    {
+        if (_configManager == null) return;
+
+        try
+        {
+            var baseDirectory = ResolveBaseDirectory(_configManager);
+            var cacheDbPath = Path.Combine(baseDirectory, "cache.db");
+            if (File.Exists(cacheDbPath))
+            {
+                File.Delete(cacheDbPath);
+                DataOperationStatus = GetString("Settings.Data.ClearCache.Success", "Cache database cleared successfully");
+            }
+            else
+            {
+                DataOperationStatus = GetString("Settings.Data.ClearCache.NotFound", "Cache database not found");
+            }
+        }
+        catch (Exception ex)
+        {
+            DataOperationStatus = $"{GetString("Settings.Data.ClearCache.Failed", "Failed to clear cache.db")}: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
     private Task ResetSettings()
     {
         _currentPreferences = new AppPreferences();
