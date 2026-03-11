@@ -7,7 +7,9 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Linq;
@@ -98,6 +100,25 @@ public partial class DashboardViewModel : PageViewModelBase
                 StartupStatus = GetString("Dashboard.Status.CommandCopied", "Command copied to clipboard");
                 _ = Task.Delay(2000).ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(() => StartupStatus = string.Empty));
             }
+        }
+    }
+
+    [RelayCommand]
+    private void OpenWebUi()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = BuildWebUiUrl(),
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            var message = GetString("Dashboard.Status.OpenWebUiFailed", "Failed to open WebUI");
+            StartupStatus = $"{message}: {ex.Message}";
+            LogError($"Failed to open WebUI: {ex.Message}");
         }
     }
 
@@ -865,6 +886,23 @@ public partial class DashboardViewModel : PageViewModelBase
     }
 
     private static string FormatBytes(long bytes) => FormatHelper.FormatBytes(bytes);
+
+    private static string BuildWebUiUrl()
+    {
+        var port = HttpClientFactory.LocalApiPort > 0 ? HttpClientFactory.LocalApiPort : DefaultClashApiPort;
+        var queryParts = new List<string>
+        {
+            "hostname=127.0.0.1",
+            $"port={port}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(HttpClientFactory.LocalApiSecret))
+        {
+            queryParts.Add($"secret={Uri.EscapeDataString(HttpClientFactory.LocalApiSecret)}");
+        }
+
+        return $"http://127.0.0.1:{port}/ui/?{string.Join("&", queryParts)}";
+    }
 
     private bool TryGetValidatedPort(out int port, out string error)
     {

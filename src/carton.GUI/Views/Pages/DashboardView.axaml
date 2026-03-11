@@ -130,6 +130,9 @@
                       CommandParameter="linux"
                       Padding="12,4"
                       IsVisible="{Binding IsLinux}"/>
+              <Button Content="{DynamicResource Dashboard.Button.OpenWebUi}"
+                      Command="{Binding OpenWebUiCommand}"
+                      Padding="12,4"/>
             </StackPanel>
 
             <TextBlock Grid.Column="1"

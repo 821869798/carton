@@ -72,7 +72,7 @@
   <x:String x:Key="Profiles.Form.DefaultNamePrefix">新配置</x:String>
 
   <x:String x:Key="Dashboard.Section.Configuration">配置</x:String>
-	<x:String x:Key="Dashboard.Field.Port">端口</x:String>
+	<x:String x:Key="Dashboard.Field.Port">Mixed 端口</x:String>
 	<x:String x:Key="Dashboard.Option.AllowLan">允许局域网连接</x:String>
 	<x:String x:Key="Dashboard.Option.SystemProxy">系统代理</x:String>
 	<x:String x:Key="Dashboard.Option.Tun">虚拟网卡 (TUN)</x:String>
@@ -96,6 +96,8 @@
 	<x:String x:Key="Dashboard.Button.CopyCmdProxy">CMD 代理</x:String>
 	<x:String x:Key="Dashboard.Button.CopyPsProxy">PS 代理</x:String>
 	<x:String x:Key="Dashboard.Button.CopyLinuxProxy">终端代理</x:String>
+	<x:String x:Key="Dashboard.Button.OpenWebUi">访问 WebUI</x:String>
+	<x:String x:Key="Dashboard.Status.OpenWebUiFailed">打开 WebUI 失败</x:String>
 
 	<x:String x:Key="Status.Connected">已连接</x:String>
 	<x:String x:Key="Status.Starting">正在启动...</x:String>

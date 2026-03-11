@@ -342,6 +342,7 @@ public partial class SettingsViewModel : PageViewModelBase
 
         if (success)
         {
+            ClearKernelCacheFile();
             await RefreshKernelInfoAsync();
         }
     }
@@ -380,6 +381,7 @@ public partial class SettingsViewModel : PageViewModelBase
 
         if (success)
         {
+            ClearKernelCacheFile();
             await RefreshKernelInfoAsync();
         }
     }
@@ -923,6 +925,28 @@ public partial class SettingsViewModel : PageViewModelBase
         }
 
         return parent;
+    }
+
+    private void ClearKernelCacheFile()
+    {
+        if (_configManager == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var baseDirectory = ResolveBaseDirectory(_configManager);
+            var cacheDbPath = Path.Combine(baseDirectory, "cache.db");
+            if (File.Exists(cacheDbPath))
+            {
+                File.Delete(cacheDbPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus = $"Failed to clear cache.db: {ex.Message}";
+        }
     }
 
     private static void AddFileIfExists(ZipArchive archive, string sourcePath, string entryName)
