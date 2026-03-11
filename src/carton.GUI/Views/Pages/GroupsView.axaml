@@ -133,6 +133,7 @@
                                 HorizontalAlignment="Stretch"
                                 Classes.selected="{Binding IsSelected}"
                                 Classes.hovered="{Binding IsHovered}"
+                                ToolTip.Tip="{Binding Tag}"
                                 PointerEntered="OnProxyPointerEntered"
                                 PointerExited="OnProxyPointerExited">
                           <Border.Styles>
@@ -163,8 +164,7 @@
                                          FontSize="14"
                                          FontWeight="SemiBold"
                                          MaxLines="1"
-                                         TextTrimming="CharacterEllipsis"
-                                         ToolTip.Tip="{Binding Tag}"/>
+                                         TextTrimming="CharacterEllipsis"/>
 
                               <TextBlock Grid.Row="1"
                                          Text="{Binding Type}"
