@@ -15,6 +15,10 @@ namespace carton.ViewModels;
 
 public partial class LogsViewModel : PageViewModelBase
 {
+    private bool _isOnPage;
+    private bool _isWindowVisible = true;
+    private bool _hasPendingVisibleRefresh;
+
     public override NavigationPage PageType => NavigationPage.Logs;
 
     [ObservableProperty]
@@ -39,6 +43,35 @@ public partial class LogsViewModel : PageViewModelBase
     {
         Title = "Logs";
         Icon = "Logs";
+    }
+
+    public void OnNavigatedTo()
+    {
+        _isOnPage = true;
+        RefreshVisibleLogsIfNeeded();
+    }
+
+    public void SetWindowVisible(bool isVisible)
+    {
+        _isWindowVisible = isVisible;
+        if (isVisible)
+        {
+            RefreshVisibleLogsIfNeeded();
+        }
+    }
+
+    public void OnNavigatedFrom()
+    {
+        _isOnPage = false;
+    }
+
+    private void RefreshVisibleLogsIfNeeded()
+    {
+        if (_isOnPage && _isWindowVisible && _hasPendingVisibleRefresh)
+        {
+            _hasPendingVisibleRefresh = false;
+            ApplyFilters();
+        }
     }
 
     partial void OnSearchTextChanged(string value)
@@ -107,16 +140,27 @@ public partial class LogsViewModel : PageViewModelBase
         };
 
         _allLogs.Add(entry);
-        if (MatchesFilter(entry))
+        if (_isOnPage && _isWindowVisible && MatchesFilter(entry))
         {
             Logs.Add(entry);
+        }
+        else if (!_isOnPage || !_isWindowVisible)
+        {
+            _hasPendingVisibleRefresh = true;
         }
 
         while (_allLogs.Count > MaxLogEntries)
         {
             var removed = _allLogs[0];
             _allLogs.RemoveAt(0);
-            Logs.Remove(removed);
+            if (_isOnPage && _isWindowVisible)
+            {
+                Logs.Remove(removed);
+            }
+            else
+            {
+                _hasPendingVisibleRefresh = true;
+            }
         }
     }
 

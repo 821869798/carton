@@ -29,6 +29,7 @@ public partial class ConnectionsViewModel : PageViewModelBase
     private readonly DispatcherTimer? _refreshTimer;
     private bool _isRefreshing;
     private bool _isOnPage;
+    private bool _isWindowVisible = true;
 
     public ConnectionsViewModel()
     {
@@ -53,11 +54,25 @@ public partial class ConnectionsViewModel : PageViewModelBase
     public void OnNavigatedTo()
     {
         _isOnPage = true;
-        if (_singBoxManager is { IsRunning: true })
+        UpdateRefreshState();
+    }
+
+    public void SetWindowVisible(bool isVisible)
+    {
+        _isWindowVisible = isVisible;
+        UpdateRefreshState();
+    }
+
+    private void UpdateRefreshState()
+    {
+        if (_singBoxManager is { IsRunning: true } && _isOnPage && _isWindowVisible)
         {
             _refreshTimer?.Start();
             _ = RefreshAsync();
+            return;
         }
+
+        _refreshTimer?.Stop();
     }
 
     /// <summary>
@@ -66,7 +81,7 @@ public partial class ConnectionsViewModel : PageViewModelBase
     public void OnNavigatedFrom()
     {
         _isOnPage = false;
-        _refreshTimer?.Stop();
+        UpdateRefreshState();
     }
 
     /// <summary>
@@ -74,10 +89,9 @@ public partial class ConnectionsViewModel : PageViewModelBase
     /// </summary>
     public void OnServiceStatusChanged(bool isRunning)
     {
-        if (isRunning && _isOnPage)
+        if (isRunning)
         {
-            _refreshTimer?.Start();
-            _ = RefreshAsync();
+            UpdateRefreshState();
         }
         else
         {
@@ -113,32 +127,44 @@ public partial class ConnectionsViewModel : PageViewModelBase
 
     private async Task RefreshAsync()
     {
-        if (_singBoxManager == null || _isRefreshing) return;
+        if (_singBoxManager == null || _isRefreshing || !_isOnPage || !_isWindowVisible) return;
         _isRefreshing = true;
 
-        var connections = await _singBoxManager.GetConnectionsAsync();
-
-        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        try
         {
-            Connections.Clear();
-            foreach (var conn in connections)
-            {
-                Connections.Add(new ConnectionItemViewModel
-                {
-                    Id = conn.Id,
-                    Process = FormatText(conn.Process, conn.Inbound),
-                    Source = FormatText(conn.Source, conn.Ip),
-                    Destination = FormatText(conn.Destination, conn.Domain),
-                    Protocol = FormatText(conn.Protocol),
-                    Outbound = FormatText(conn.Outbound),
-                    Upload = FormatBytes(conn.Upload),
-                    Download = FormatBytes(conn.Download)
-                });
-            }
-            ConnectionCount = connections.Count;
-        });
+            var connections = await _singBoxManager.GetConnectionsAsync();
 
-        _isRefreshing = false;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!_isOnPage || !_isWindowVisible)
+                {
+                    _isRefreshing = false;
+                    return;
+                }
+
+                Connections.Clear();
+                foreach (var conn in connections)
+                {
+                    Connections.Add(new ConnectionItemViewModel
+                    {
+                        Id = conn.Id,
+                        Process = FormatText(conn.Process, conn.Inbound),
+                        Source = FormatText(conn.Source, conn.Ip),
+                        Destination = FormatText(conn.Destination, conn.Domain),
+                        Protocol = FormatText(conn.Protocol),
+                        Outbound = FormatText(conn.Outbound),
+                        Upload = FormatBytes(conn.Upload),
+                        Download = FormatBytes(conn.Download)
+                    });
+                }
+                ConnectionCount = connections.Count;
+                _isRefreshing = false;
+            });
+        }
+        catch
+        {
+            _isRefreshing = false;
+        }
     }
 
     private static string FormatBytes(long bytes) => FormatHelper.FormatBytes(bytes);

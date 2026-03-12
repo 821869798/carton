@@ -25,6 +25,7 @@ public partial class MainViewModel : ViewModelBase
     private readonly IThemeService _themeService;
     private bool _isShuttingDown;
     private bool _autoStartOnLaunch;
+    private bool _isWindowVisible = true;
 
     [ObservableProperty]
     private PageViewModelBase _currentPage;
@@ -244,6 +245,11 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnSelectedPageChanged(NavigationPage value)
     {
+        if (CurrentPage == LogsViewModel)
+        {
+            LogsViewModel.OnNavigatedFrom();
+        }
+
         CurrentPage = value switch
         {
             NavigationPage.Dashboard => DashboardViewModel,
@@ -274,6 +280,11 @@ public partial class MainViewModel : ViewModelBase
             _ = DashboardViewModel.LoadProfilesAsync();
         }
 
+        if (value == NavigationPage.Logs)
+        {
+            LogsViewModel.OnNavigatedTo();
+        }
+
         OnPropertyChanged(nameof(ShowGlobalStartStop));
         OnPropertyChanged(nameof(ShowStartButton));
         OnPropertyChanged(nameof(ShowStopButton));
@@ -283,6 +294,18 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsConnectionsPage));
         OnPropertyChanged(nameof(IsLogsPage));
         OnPropertyChanged(nameof(IsSettingsPage));
+    }
+
+    public void SetWindowVisible(bool isVisible)
+    {
+        if (_isWindowVisible == isVisible)
+        {
+            return;
+        }
+
+        _isWindowVisible = isVisible;
+        ConnectionsViewModel.SetWindowVisible(isVisible);
+        LogsViewModel.SetWindowVisible(isVisible);
     }
 
     [RelayCommand]

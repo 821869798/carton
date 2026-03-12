@@ -1,4 +1,6 @@
+using Avalonia;
 using Avalonia.Controls;
+using carton.ViewModels;
 namespace carton.Views;
 
 public partial class MainWindow : Window
@@ -9,6 +11,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         Closing += OnClosing;
+        Opened += OnOpened;
+        PropertyChanged += OnWindowPropertyChanged;
     }
 
     public void AllowClose()
@@ -23,7 +27,29 @@ public partial class MainWindow : Window
             return;
         }
 
+        NotifyWindowVisible(false);
         e.Cancel = true;
         Hide();
+    }
+
+    private void OnOpened(object? sender, System.EventArgs e)
+    {
+        NotifyWindowVisible(IsVisible && WindowState != WindowState.Minimized);
+    }
+
+    private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == IsVisibleProperty || e.Property == WindowStateProperty)
+        {
+            NotifyWindowVisible(IsVisible && WindowState != WindowState.Minimized);
+        }
+    }
+
+    private void NotifyWindowVisible(bool isVisible)
+    {
+        if (DataContext is MainViewModel viewModel)
+        {
+            viewModel.SetWindowVisible(isVisible);
+        }
     }
 }
