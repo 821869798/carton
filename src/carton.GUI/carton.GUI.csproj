@@ -8,9 +8,9 @@
 		<BuiltInComInteropSupport>true</BuiltInComInteropSupport>
 		<AvaloniaTelemetry>false</AvaloniaTelemetry>
 		<RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64</RuntimeIdentifiers>
-		<Version>0.1.0-beta.17</Version>
-		<FileVersion>0.1.0.17</FileVersion>
-		<AssemblyVersion>0.1.0.17</AssemblyVersion>
+		<Version>0.1.0-beta.18</Version>
+		<FileVersion>0.1.0.18</FileVersion>
+		<AssemblyVersion>0.1.0.8</AssemblyVersion>
 		<AssemblyName>carton</AssemblyName>
 		<RootNamespace>carton</RootNamespace>
 		<ApplicationIcon>Assets\carton_icon.ico</ApplicationIcon>
