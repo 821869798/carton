@@ -137,6 +137,19 @@ public class SingBoxManager : ISingBoxManager, IDisposable
             return true;
         }
 
+        if (HasCleanupCandidate())
+        {
+            LogReceived?.Invoke(this, "[WARN] Cleaning up leftover sing-box process before starting a new session");
+            await StopAsync();
+            if (await HasLeftoverSingBoxProcessAsync())
+            {
+                const string error = "Failed to clean up previous sing-box process before start";
+                LogReceived?.Invoke(this, $"[ERROR] {error}");
+                SetError(error);
+                return false;
+            }
+        }
+
         if (!File.Exists(configPath))
         {
             var error = $"Configuration file not found: {configPath}";
@@ -236,12 +249,14 @@ public class SingBoxManager : ISingBoxManager, IDisposable
                         errorMsg += $"\n{string.Join("\n", _errorOutput)}";
                     }
                     LogReceived?.Invoke(this, $"[ERROR] {errorMsg}");
+                    await CleanupFailedStartAttemptAsync();
                     SetError(errorMsg);
                     return false;
                 }
 
                 var msg = "sing-box API did not become reachable in time";
                 LogReceived?.Invoke(this, $"[ERROR] {msg}");
+                await CleanupFailedStartAttemptAsync();
                 SetError(msg);
                 return false;
             }
@@ -258,6 +273,7 @@ public class SingBoxManager : ISingBoxManager, IDisposable
         {
             var error = $"Failed to start sing-box: {ex.Message}";
             LogReceived?.Invoke(this, $"[ERROR] {error}");
+            await CleanupFailedStartAttemptAsync();
             SetError(error);
             return false;
         }
@@ -265,11 +281,13 @@ public class SingBoxManager : ISingBoxManager, IDisposable
 
     public async Task StopAsync()
     {
-        var hasTargetProcess = true;
-        if (_process == null && !_elevatedPid.HasValue)
+        var canUseElevatedStop = CanUseElevatedStop();
+        var hasTargetProcess = _process != null || canUseElevatedStop;
+        if (_process == null && !canUseElevatedStop)
         {
             _elevatedPid = await TryFindProcessPidByApiPortAsync();
-            hasTargetProcess = _elevatedPid.HasValue;
+            canUseElevatedStop = CanUseElevatedStop();
+            hasTargetProcess = canUseElevatedStop;
         }
 
         try
@@ -285,7 +303,7 @@ public class SingBoxManager : ISingBoxManager, IDisposable
                 _process.Dispose();
                 _process = null;
             }
-            else if (hasTargetProcess && _elevatedPid.HasValue)
+            else if (canUseElevatedStop)
             {
                 stopped = await StopElevatedAsync();
             }
@@ -1125,6 +1143,57 @@ public class SingBoxManager : ISingBoxManager, IDisposable
         StatusChanged?.Invoke(this, ServiceStatus.Error);
     }
 
+    private bool HasCleanupCandidate()
+    {
+        return _process != null || CanUseElevatedStop();
+    }
+
+    private async Task<bool> HasLeftoverSingBoxProcessAsync()
+    {
+        if (_process != null)
+        {
+            return true;
+        }
+
+        if (_elevatedPid.HasValue && IsProcessAlive(_elevatedPid.Value))
+        {
+            return true;
+        }
+
+        var discoveredPid = await TryFindProcessPidByApiPortAsync();
+        if (discoveredPid.HasValue && discoveredPid.Value > 0)
+        {
+            _elevatedPid = discoveredPid.Value;
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool CanUseElevatedStop()
+    {
+        return _elevatedPid.HasValue ||
+               (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
+                !string.IsNullOrWhiteSpace(_windowsElevatedHelperToken));
+    }
+
+    private async Task CleanupFailedStartAttemptAsync()
+    {
+        if (!HasCleanupCandidate())
+        {
+            return;
+        }
+
+        try
+        {
+            await StopAsync();
+        }
+        catch (Exception ex)
+        {
+            LogReceived?.Invoke(this, $"[WARN] Failed to clean up sing-box after a start failure: {ex.Message}");
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -1190,9 +1259,11 @@ public class SingBoxManager : ISingBoxManager, IDisposable
     {
         try
         {
-            var elevatedLogPath = Path.Combine(_workingDirectory, "logs", "sing-box.elevated.log");
+            await StopElevatedLogTailAsync();
+
+            var logFileName = $"sing-box.elevated.{DateTime.Now:yyyyMMdd-HHmmss-fff}.log";
+            var elevatedLogPath = Path.Combine(_workingDirectory, "logs", logFileName);
             Directory.CreateDirectory(Path.GetDirectoryName(elevatedLogPath)!);
-            await File.WriteAllTextAsync(elevatedLogPath, string.Empty);
 
             var result = await StartElevatedProcessForCurrentPlatformAsync(configPath, elevatedLogPath);
             if (!result.Success)
@@ -1225,6 +1296,7 @@ public class SingBoxManager : ISingBoxManager, IDisposable
                 var msg = "sing-box API did not become reachable in time" +
                           (string.IsNullOrWhiteSpace(recentLog) ? string.Empty : $": {recentLog}");
                 LogReceived?.Invoke(this, $"[ERROR] {msg}");
+                await CleanupFailedStartAttemptAsync();
                 SetError(msg);
                 return false;
             }
@@ -1239,6 +1311,7 @@ public class SingBoxManager : ISingBoxManager, IDisposable
         {
             var error = $"Failed to start sing-box with administrator privileges: {ex.Message}";
             LogReceived?.Invoke(this, $"[ERROR] {error}");
+            await CleanupFailedStartAttemptAsync();
             SetError(error);
             return false;
         }
@@ -1311,14 +1384,21 @@ public class SingBoxManager : ISingBoxManager, IDisposable
 
     private async Task<bool> StopElevatedAsync()
     {
-        if (!_elevatedPid.HasValue)
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !_elevatedPid.HasValue)
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (await TryStopViaWindowsElevatedHelperAsync(force: false))
             {
-                WriteStopSignalFile();
-                await Task.Delay(1500);
+                await Task.Delay(500);
+                return true;
             }
 
+            WriteStopSignalFile();
+            await Task.Delay(1500);
+            return true;
+        }
+
+        if (!_elevatedPid.HasValue)
+        {
             return true;
         }
 
