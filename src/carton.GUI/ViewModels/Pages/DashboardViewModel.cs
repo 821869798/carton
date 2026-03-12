@@ -2,6 +2,7 @@ using carton.Core.Models;
 using carton.Core.Services;
 using carton.Core.Utilities;
 using carton.GUI.Models;
+using carton.GUI.Serialization;
 using carton.GUI.Services;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -813,7 +814,7 @@ public partial class DashboardViewModel : PageViewModelBase
         SessionStartTimeText = startTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "--";
     }
 
-    private async Task<ClashConfigResponse?> GetClashConfigFromApiAsync()
+    private async Task<ClashConfigSnapshot?> GetClashConfigFromApiAsync()
     {
         try
         {
@@ -825,15 +826,9 @@ public partial class DashboardViewModel : PageViewModelBase
             }
 
             var payload = await response.Content.ReadAsStringAsync();
-            var config = JsonSerializer.Deserialize<ClashConfigSnapshot>(payload);
+            var config = JsonSerializer.Deserialize(payload, CartonGuiJsonContext.Default.ClashConfigSnapshot);
             _clashConfigCache.Update(config);
-            return config == null
-                ? null
-                : new ClashConfigResponse
-                {
-                    Mode = config.Mode,
-                    ModeList = config.ModeList
-                };
+            return config;
         }
         catch (Exception ex)
         {
@@ -965,11 +960,4 @@ public partial class DashboardClashModeOptionViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isSelected;
-}
-
-public sealed class ClashConfigResponse
-{
-    public string? Mode { get; set; }
-
-    public List<string>? ModeList { get; set; }
 }
