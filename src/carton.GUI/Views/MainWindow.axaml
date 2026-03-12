@@ -1,11 +1,13 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:carton.ViewModels"
+        xmlns:views="using:carton.Views.Pages"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:models="using:carton.GUI.Models"
         mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
         x:Class="carton.Views.MainWindow"
+        x:Name="MainWindowRoot"
         x:DataType="vm:MainViewModel"
         Icon="/Assets/carton_icon.png"
         Title="{DynamicResource App.Name}"
@@ -78,8 +80,20 @@
         </Border>
       </SplitView.Pane>
 
-      <ContentControl Content="{Binding CurrentPage}"
-                      ContentTemplate="{StaticResource PageTemplate}"/>
+      <Grid>
+        <views:DashboardView DataContext="{Binding DashboardViewModel}"
+                             IsVisible="{Binding #MainWindowRoot.DataContext.IsDashboardPage}"/>
+        <views:ProfilesView DataContext="{Binding ProfilesViewModel}"
+                            IsVisible="{Binding #MainWindowRoot.DataContext.IsProfilesPage}"/>
+        <views:GroupsView DataContext="{Binding GroupsViewModel}"
+                          IsVisible="{Binding #MainWindowRoot.DataContext.IsGroupsPage}"/>
+        <views:ConnectionsView DataContext="{Binding ConnectionsViewModel}"
+                               IsVisible="{Binding #MainWindowRoot.DataContext.IsConnectionsPage}"/>
+        <views:LogsView DataContext="{Binding LogsViewModel}"
+                        IsVisible="{Binding #MainWindowRoot.DataContext.IsLogsPage}"/>
+        <views:SettingsView DataContext="{Binding SettingsViewModel}"
+                            IsVisible="{Binding #MainWindowRoot.DataContext.IsSettingsPage}"/>
+      </Grid>
     </SplitView>
 
     <OverlayLayer Grid.Row="0" Grid.RowSpan="2">

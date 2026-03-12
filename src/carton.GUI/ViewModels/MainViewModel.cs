@@ -95,6 +95,12 @@ public partial class MainViewModel : ViewModelBase
     public bool ShowGlobalStartStop => false;
     public bool ShowStartButton => false;
     public bool ShowStopButton => false;
+    public bool IsDashboardPage => SelectedPage == NavigationPage.Dashboard;
+    public bool IsProfilesPage => SelectedPage == NavigationPage.Profiles;
+    public bool IsGroupsPage => SelectedPage == NavigationPage.Groups;
+    public bool IsConnectionsPage => SelectedPage == NavigationPage.Connections;
+    public bool IsLogsPage => SelectedPage == NavigationPage.Logs;
+    public bool IsSettingsPage => SelectedPage == NavigationPage.Settings;
 
     public MainViewModel()
     {
@@ -271,6 +277,12 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowGlobalStartStop));
         OnPropertyChanged(nameof(ShowStartButton));
         OnPropertyChanged(nameof(ShowStopButton));
+        OnPropertyChanged(nameof(IsDashboardPage));
+        OnPropertyChanged(nameof(IsProfilesPage));
+        OnPropertyChanged(nameof(IsGroupsPage));
+        OnPropertyChanged(nameof(IsConnectionsPage));
+        OnPropertyChanged(nameof(IsLogsPage));
+        OnPropertyChanged(nameof(IsSettingsPage));
     }
 
     [RelayCommand]
