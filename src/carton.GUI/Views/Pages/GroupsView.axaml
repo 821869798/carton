@@ -41,16 +41,17 @@
           Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
           RowDefinitions="Auto,*"
           RowSpacing="12">
-      <ListBox Grid.Row="0"
-               Margin="16,8,16,0"
-               ItemsSource="{Binding Groups}"
-               SelectedItem="{Binding SelectedGroup}"
-               BorderThickness="0"
-               Background="Transparent"
-               Padding="0,0,0,12"
-               IsVisible="{Binding ShowGroupTabs}"
-               ScrollViewer.HorizontalScrollBarVisibility="Auto"
-               ScrollViewer.VerticalScrollBarVisibility="Disabled">
+      <ListBox x:Name="GroupTabsListBox"
+               Grid.Row="0"
+                Margin="16,8,16,0"
+                ItemsSource="{Binding Groups}"
+                SelectedItem="{Binding SelectedGroup}"
+                BorderThickness="0"
+                Background="Transparent"
+                Padding="0,0,0,12"
+                IsVisible="{Binding ShowGroupTabs}"
+                ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                ScrollViewer.VerticalScrollBarVisibility="Disabled">
         <ListBox.ItemsPanel>
           <ItemsPanelTemplate>
             <StackPanel Orientation="Horizontal" Spacing="8"/>
