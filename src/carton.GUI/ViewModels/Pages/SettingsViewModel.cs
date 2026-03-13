@@ -1150,7 +1150,7 @@ public partial class SettingsViewModel : PageViewModelBase
 
             if (!string.Equals(oldAppDataPath, newAppDataPath, StringComparison.OrdinalIgnoreCase))
             {
-                CopyDirectory(oldAppDataPath, newAppDataPath);
+                CopyPortableData(oldAppDataPath, newAppDataPath);
             }
             await RestartApplicationAsync(window);
         }
@@ -1166,6 +1166,15 @@ public partial class SettingsViewModel : PageViewModelBase
             else if (enablePortableMode && File.Exists(markerPath))
                 File.Delete(markerPath);
         }
+    }
+
+    private static void CopyPortableData(string sourceRoot, string destRoot)
+    {
+        if (!Directory.Exists(sourceRoot)) return;
+        Directory.CreateDirectory(destRoot);
+
+        CopyDirectory(Path.Combine(sourceRoot, "bin"), Path.Combine(destRoot, "bin"));
+        CopyDirectory(Path.Combine(sourceRoot, "data"), Path.Combine(destRoot, "data"));
     }
 
     private static void CopyDirectory(string sourceDir, string destDir)
