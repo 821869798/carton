@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Avalonia.Threading;
 using carton.GUI.Models;
 
@@ -13,6 +14,7 @@ public sealed class LogStore
     private static readonly Regex AnsiEscapeRegex = new(@"\e\[[0-9;]*[a-zA-Z]");
     private readonly LogRingBuffer _entries = new(MaxEntries);
     private readonly object _syncRoot = new();
+    private int _pendingEntriesChanged;
 
     public event EventHandler? EntriesChanged;
 
@@ -53,11 +55,12 @@ public sealed class LogStore
 
     private static LogEntryRecord CreateEntry(string message, LogSource source)
     {
+        var now = DateTime.Now.ToString("HH:mm:ss");
         var (time, level, parsedMessage) = source switch
         {
-            LogSource.Carton => ParseCartonLog(message),
-            LogSource.SingBox => ParseSingBoxLog(message),
-            _ => (DateTime.Now.ToString("HH:mm:ss"), "Info", message)
+            LogSource.Carton => ParseCartonLog(message, now),
+            LogSource.SingBox => ParseSingBoxLog(message, now),
+            _ => (now, "Info", message)
         };
 
         if (parsedMessage.Length > MaxMessageLength)
@@ -70,25 +73,39 @@ public sealed class LogStore
 
     private void RaiseEntriesChanged()
     {
+        if (EntriesChanged == null)
+        {
+            return;
+        }
+
         if (Dispatcher.UIThread.CheckAccess())
         {
             EntriesChanged?.Invoke(this, EventArgs.Empty);
             return;
         }
 
-        Dispatcher.UIThread.Post(() => EntriesChanged?.Invoke(this, EventArgs.Empty));
+        if (Interlocked.Exchange(ref _pendingEntriesChanged, 1) == 1)
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            Interlocked.Exchange(ref _pendingEntriesChanged, 0);
+            EntriesChanged?.Invoke(this, EventArgs.Empty);
+        });
     }
 
-    private static (string Time, string Level, string Message) ParseCartonLog(string message)
+    private static (string Time, string Level, string Message) ParseCartonLog(string message, string currentTime)
     {
         if (string.IsNullOrEmpty(message))
         {
-            return (DateTime.Now.ToString("HH:mm:ss"), "Info", string.Empty);
+            return (currentTime, "Info", string.Empty);
         }
 
         if (message.StartsWith("[ERROR] ", StringComparison.OrdinalIgnoreCase))
         {
-            return (DateTime.Now.ToString("HH:mm:ss"), "Error", message["[ERROR] ".Length..]);
+            return (currentTime, "Error", message["[ERROR] ".Length..]);
         }
 
         if (message.StartsWith("[WARN] ", StringComparison.OrdinalIgnoreCase) ||
@@ -97,63 +114,131 @@ public sealed class LogStore
             var prefixLength = message.StartsWith("[WARNING] ", StringComparison.OrdinalIgnoreCase)
                 ? "[WARNING] ".Length
                 : "[WARN] ".Length;
-            return (DateTime.Now.ToString("HH:mm:ss"), "Warn", message[prefixLength..]);
+            return (currentTime, "Warn", message[prefixLength..]);
         }
 
         if (message.StartsWith("[DEBUG] ", StringComparison.OrdinalIgnoreCase))
         {
-            return (DateTime.Now.ToString("HH:mm:ss"), "Debug", message["[DEBUG] ".Length..]);
+            return (currentTime, "Debug", message["[DEBUG] ".Length..]);
         }
 
         if (message.StartsWith("[INFO] ", StringComparison.OrdinalIgnoreCase))
         {
-            return (DateTime.Now.ToString("HH:mm:ss"), "Info", message["[INFO] ".Length..]);
+            return (currentTime, "Info", message["[INFO] ".Length..]);
         }
 
-        return (DateTime.Now.ToString("HH:mm:ss"), "Info", message);
+        return (currentTime, "Info", message);
     }
 
-    private static (string Time, string Level, string Message) ParseSingBoxLog(string message)
+    private static (string Time, string Level, string Message) ParseSingBoxLog(string message, string currentTime)
     {
-        var msg = AnsiEscapeRegex.Replace(message, "");
-        var parts = msg.Split(' ', 4, StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length < 4)
+        var msg = message.IndexOf('\u001b') >= 0
+            ? AnsiEscapeRegex.Replace(message, "")
+            : message;
+
+        var span = msg.AsSpan();
+        var tokenIndex = 0;
+        var position = 0;
+        var timeTokenStart = -1;
+        var timeTokenLength = 0;
+        var payloadStart = -1;
+
+        while (position < span.Length)
         {
-            return (DateTime.Now.ToString("HH:mm:ss"), "Info", msg);
+            while (position < span.Length && span[position] == ' ')
+            {
+                position++;
+            }
+
+            if (position >= span.Length)
+            {
+                break;
+            }
+
+            var start = position;
+            while (position < span.Length && span[position] != ' ')
+            {
+                position++;
+            }
+
+            var length = position - start;
+            if (tokenIndex == 2)
+            {
+                timeTokenStart = start;
+                timeTokenLength = length;
+            }
+            else if (tokenIndex == 3)
+            {
+                payloadStart = start;
+                break;
+            }
+
+            tokenIndex++;
         }
 
-        var time = parts[2].Length >= 8 ? parts[2][..8] : DateTime.Now.ToString("HH:mm:ss");
-        var remainder = parts[3];
-        var levelSplit = remainder.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-        if (levelSplit.Length == 0)
+        if (payloadStart < 0)
+        {
+            return (currentTime, "Info", msg);
+        }
+
+        var time = timeTokenLength >= 8
+            ? new string(span.Slice(timeTokenStart, 8))
+            : currentTime;
+
+        var payload = span[payloadStart..].TrimStart();
+        if (payload.Length == 0)
         {
             return (time, "Info", string.Empty);
         }
 
-        var level = NormalizeSingBoxLevel(levelSplit[0]);
-        msg = levelSplit.Length > 1 ? levelSplit[1] : string.Empty;
-
-        if (msg.Length > 0 && msg[0] == '[')
+        var separatorIndex = payload.IndexOf(' ');
+        ReadOnlySpan<char> levelToken;
+        ReadOnlySpan<char> messagePart;
+        if (separatorIndex < 0)
         {
-            var endIndex = msg.IndexOf(']');
+            levelToken = payload;
+            messagePart = ReadOnlySpan<char>.Empty;
+        }
+        else
+        {
+            levelToken = payload[..separatorIndex];
+            messagePart = payload[(separatorIndex + 1)..].TrimStart();
+        }
+
+        var level = NormalizeSingBoxLevel(levelToken);
+
+        if (messagePart.Length > 0 && messagePart[0] == '[')
+        {
+            var endIndex = messagePart.IndexOf(']');
             if (endIndex > 0)
             {
-                msg = msg[(endIndex + 1)..].TrimStart();
+                messagePart = messagePart[(endIndex + 1)..].TrimStart();
             }
         }
 
-        return (time, level, msg);
+        return (time, level, messagePart.ToString());
     }
 
-    private static string NormalizeSingBoxLevel(string value)
+    private static string NormalizeSingBoxLevel(ReadOnlySpan<char> value)
     {
-        return value.ToUpperInvariant() switch
+        if (value.Equals("DEBUG", StringComparison.OrdinalIgnoreCase))
         {
-            "DEBUG" => "Debug",
-            "WARN" or "WARNING" => "Warn",
-            "ERROR" or "FATAL" => "Error",
-            _ => "Info"
-        };
+            return "Debug";
+        }
+
+        if (value.Equals("WARN", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("WARNING", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Warn";
+        }
+
+        if (value.Equals("ERROR", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("FATAL", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Error";
+        }
+
+        return "Info";
     }
 }
 
