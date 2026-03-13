@@ -16,6 +16,7 @@ namespace carton.Views.Pages;
 public partial class LogsView : UserControl
 {
     private const double BottomThreshold = 4;
+    private static readonly TimeSpan LogRefreshInterval = TimeSpan.FromMilliseconds(500);
 
     private ListBox? _logsListBox;
     private ScrollViewer? _scrollViewer;
@@ -23,13 +24,18 @@ public partial class LogsView : UserControl
     private bool _autoScrollToBottom = true;
     private bool _pendingScrollToBottom;
     private bool _suppressScrollTracking;
+    private readonly DispatcherTimer _logRefreshTimer;
+    private bool _hasPendingLogRefresh;
+    private bool _isViewActive;
 
     public LogsView()
     {
+        _logRefreshTimer = new DispatcherTimer(LogRefreshInterval, DispatcherPriority.Background, OnLogRefreshTimerTick);
         InitializeComponent();
         AttachedToVisualTree += OnAttachedToVisualTree;
         DetachedFromVisualTree += OnDetachedFromVisualTree;
         DataContextChanged += OnDataContextChanged;
+        PropertyChanged += OnControlPropertyChanged;
         LayoutUpdated += OnLayoutUpdated;
         AddHandler(InputElement.PointerWheelChangedEvent, OnPointerWheelChanged, RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(InputElement.PointerPressedEvent, OnPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
@@ -39,12 +45,12 @@ public partial class LogsView : UserControl
     {
         _logsListBox ??= this.FindControl<ListBox>("LogsListBox");
         EnsureScrollViewerHooked();
-        AttachViewModel(DataContext as LogsViewModel);
-        RequestScrollToBottom();
+        UpdateActiveState();
     }
 
     private void OnDetachedFromVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
     {
+        _isViewActive = false;
         DetachViewModel();
         if (_scrollViewer != null)
         {
@@ -53,11 +59,47 @@ public partial class LogsView : UserControl
 
         _scrollViewer = null;
         _pendingScrollToBottom = false;
+        _hasPendingLogRefresh = false;
+        _logRefreshTimer.Stop();
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        AttachViewModel(DataContext as LogsViewModel);
+        if (_isViewActive)
+        {
+            AttachViewModel(DataContext as LogsViewModel);
+        }
+    }
+
+    private void OnControlPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == IsVisibleProperty)
+        {
+            UpdateActiveState();
+        }
+    }
+
+    private void UpdateActiveState()
+    {
+        var isActive = this.GetVisualRoot() != null && IsVisible;
+        if (_isViewActive == isActive)
+        {
+            return;
+        }
+
+        _isViewActive = isActive;
+        if (_isViewActive)
+        {
+            AttachViewModel(DataContext as LogsViewModel);
+            _logRefreshTimer.Start();
+            RequestScrollToBottom();
+            return;
+        }
+
+        DetachViewModel();
+        _hasPendingLogRefresh = false;
+        _pendingScrollToBottom = false;
+        _logRefreshTimer.Stop();
     }
 
     private void AttachViewModel(LogsViewModel? viewModel)
@@ -91,6 +133,20 @@ public partial class LogsView : UserControl
     {
         if (_autoScrollToBottom)
         {
+            _hasPendingLogRefresh = true;
+        }
+    }
+
+    private void OnLogRefreshTimerTick(object? sender, EventArgs e)
+    {
+        if (!_hasPendingLogRefresh)
+        {
+            return;
+        }
+
+        _hasPendingLogRefresh = false;
+        if (_autoScrollToBottom)
+        {
             RequestScrollToBottom();
         }
     }
@@ -117,12 +173,24 @@ public partial class LogsView : UserControl
         }
 
         EnsureScrollViewerHooked();
-        if (_scrollViewer == null || !_autoScrollToBottom)
+        if (_scrollViewer == null)
         {
             return;
         }
 
+        if (!_autoScrollToBottom)
+        {
+            _pendingScrollToBottom = false;
+            return;
+        }
+
         var maxOffsetY = Math.Max(0, _scrollViewer.Extent.Height - _scrollViewer.Viewport.Height);
+        if (Math.Abs(maxOffsetY - _scrollViewer.Offset.Y) <= BottomThreshold)
+        {
+            _pendingScrollToBottom = false;
+            return;
+        }
+
         _suppressScrollTracking = true;
         _scrollViewer.Offset = new Vector(_scrollViewer.Offset.X, maxOffsetY);
         _suppressScrollTracking = false;
@@ -138,7 +206,13 @@ public partial class LogsView : UserControl
             return;
         }
 
-        _autoScrollToBottom = IsAtBottom(scrollViewer);
+        var isAtBottom = IsAtBottom(scrollViewer);
+        if (_autoScrollToBottom == isAtBottom)
+        {
+            return;
+        }
+
+        _autoScrollToBottom = isAtBottom;
     }
 
     private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
@@ -148,8 +222,7 @@ public partial class LogsView : UserControl
             return;
         }
 
-        if (e.Source is Visual sourceVisual &&
-            sourceVisual.GetSelfAndVisualAncestors().Contains(_scrollViewer))
+        if (e.Source is Visual sourceVisual && IsDescendantOf(sourceVisual, _scrollViewer))
         {
             _viewModel.IsAutoScrollToLatest = false;
         }
@@ -162,8 +235,7 @@ public partial class LogsView : UserControl
             return;
         }
 
-        if (e.Source is Visual sourceVisual &&
-            sourceVisual.GetSelfAndVisualAncestors().Any(visual => visual is ScrollBar or Thumb or Track))
+        if (e.Source is Visual sourceVisual && HasScrollInteractionAncestor(sourceVisual))
         {
             _viewModel.IsAutoScrollToLatest = false;
         }
@@ -171,8 +243,39 @@ public partial class LogsView : UserControl
 
     private void RequestScrollToBottom()
     {
+        if (_pendingScrollToBottom)
+        {
+            return;
+        }
+
         _pendingScrollToBottom = true;
         Dispatcher.UIThread.Post(() => { }, DispatcherPriority.Background);
+    }
+
+    private static bool IsDescendantOf(Visual sourceVisual, Visual ancestor)
+    {
+        for (Visual? current = sourceVisual; current != null; current = current.GetVisualParent() as Visual)
+        {
+            if (ReferenceEquals(current, ancestor))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasScrollInteractionAncestor(Visual sourceVisual)
+    {
+        for (Visual? current = sourceVisual; current != null; current = current.GetVisualParent() as Visual)
+        {
+            if (current is ScrollBar or Thumb or Track)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsAtBottom(ScrollViewer scrollViewer)
