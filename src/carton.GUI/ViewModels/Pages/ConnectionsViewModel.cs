@@ -11,7 +11,7 @@ using carton.GUI.Models;
 
 namespace carton.ViewModels;
 
-public partial class ConnectionsViewModel : PageViewModelBase
+public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
 {
     private readonly ISingBoxManager? _singBoxManager;
 
@@ -44,7 +44,7 @@ public partial class ConnectionsViewModel : PageViewModelBase
         {
             Interval = TimeSpan.FromSeconds(2)
         };
-        _refreshTimer.Tick += async (_, _) => await RefreshAsync();
+        _refreshTimer.Tick += OnRefreshTimerTick;
         // Timer is NOT started here — it starts when user navigates to this page
     }
 
@@ -55,6 +55,11 @@ public partial class ConnectionsViewModel : PageViewModelBase
     {
         _isOnPage = true;
         UpdateRefreshState();
+    }
+
+    private async void OnRefreshTimerTick(object? sender, EventArgs e)
+    {
+        await RefreshAsync();
     }
 
     public void SetWindowVisible(bool isVisible)
@@ -180,6 +185,18 @@ public partial class ConnectionsViewModel : PageViewModelBase
         }
 
         return "-";
+    }
+
+    public void Dispose()
+    {
+        if (_refreshTimer == null)
+        {
+            return;
+        }
+
+        _refreshTimer.Stop();
+        _refreshTimer.Tick -= OnRefreshTimerTick;
+        Connections.Clear();
     }
 }
 

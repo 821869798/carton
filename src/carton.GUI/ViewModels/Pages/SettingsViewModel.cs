@@ -19,7 +19,7 @@ using carton.GUI.Services;
 
 namespace carton.ViewModels;
 
-public partial class SettingsViewModel : PageViewModelBase
+public partial class SettingsViewModel : PageViewModelBase, IDisposable
 {
     private readonly IConfigManager? _configManager;
     private readonly IProfileManager? _profileManager;
@@ -179,7 +179,7 @@ public partial class SettingsViewModel : PageViewModelBase
         UpdateLocalizedTexts();
         if (_localizationService != null)
         {
-            _localizationService.LanguageChanged += (_, _) => UpdateLocalizedTexts();
+            _localizationService.LanguageChanged += OnLanguageChanged;
         }
 
         _ = InitializeAsync();
@@ -257,6 +257,25 @@ public partial class SettingsViewModel : PageViewModelBase
         }
 
         RefreshUpdateChannelDisplayNames();
+    }
+
+    private void OnLanguageChanged(object? sender, AppLanguage language)
+    {
+        UpdateLocalizedTexts();
+    }
+
+    public void Dispose()
+    {
+        if (_kernelManager != null)
+        {
+            _kernelManager.DownloadProgressChanged -= OnDownloadProgress;
+            _kernelManager.StatusChanged -= OnKernelStatusChanged;
+        }
+
+        if (_localizationService != null)
+        {
+            _localizationService.LanguageChanged -= OnLanguageChanged;
+        }
     }
 
     private void LoadPreferences()

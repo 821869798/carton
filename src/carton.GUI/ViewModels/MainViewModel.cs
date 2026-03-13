@@ -11,11 +11,13 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 
 namespace carton.ViewModels;
 
 public partial class MainViewModel : ViewModelBase
 {
+    private static readonly TimeSpan TransientPageUnloadDelay = TimeSpan.FromMinutes(1);
     private readonly ISingBoxManager _singBoxManager;
     private readonly IProfileManager _profileManager;
     private readonly IConfigManager _configManager;
@@ -23,6 +25,9 @@ public partial class MainViewModel : ViewModelBase
     private readonly IPreferencesService _preferencesService;
     private readonly ILocalizationService _localizationService;
     private readonly IThemeService _themeService;
+    private readonly IAppUpdateService _appUpdateService;
+    private readonly LogStore _logStore;
+    private readonly DispatcherTimer _transientPageUnloadTimer;
     private bool _isShuttingDown;
     private bool _autoStartOnLaunch;
     private bool _isWindowVisible = true;
@@ -83,18 +88,19 @@ public partial class MainViewModel : ViewModelBase
     };
 
     public DashboardViewModel DashboardViewModel { get; }
-    public LogsViewModel LogsViewModel { get; }
 
-    private readonly Lazy<ProfilesViewModel> _lazyProfilesViewModel;
     private readonly Lazy<GroupsViewModel> _lazyGroupsViewModel;
-    private readonly Lazy<ConnectionsViewModel> _lazyConnectionsViewModel;
-    private readonly Lazy<SettingsViewModel> _lazySettingsViewModel;
+    private ProfilesViewModel? _profilesViewModel;
+    private ConnectionsViewModel? _connectionsViewModel;
+    private LogsViewModel? _logsViewModel;
+    private SettingsViewModel? _settingsViewModel;
     private GroupsViewModel? _activeGroupsViewModel;
+    private DateTime? _profilesInactiveAtUtc;
+    private DateTime? _connectionsInactiveAtUtc;
+    private DateTime? _logsInactiveAtUtc;
+    private DateTime? _settingsInactiveAtUtc;
 
-    public ProfilesViewModel ProfilesViewModel => _lazyProfilesViewModel.Value;
     public GroupsViewModel? ActiveGroupsViewModel => _activeGroupsViewModel;
-    public ConnectionsViewModel ConnectionsViewModel => _lazyConnectionsViewModel.Value;
-    public SettingsViewModel SettingsViewModel => _lazySettingsViewModel.Value;
     public ILocalizationService Localization => _localizationService;
 
     public bool ShowGlobalStartStop => false;
@@ -128,22 +134,25 @@ public partial class MainViewModel : ViewModelBase
         var singBoxPath = _kernelManager.KernelPath;
         _singBoxManager = new SingBoxManager(singBoxPath, workingDirectory);
 
-        LogsViewModel = new LogsViewModel();
+        _logStore = new LogStore();
 
         _singBoxManager.StatusChanged += OnStatusChanged;
         _singBoxManager.TrafficUpdated += OnTrafficUpdated;
         _singBoxManager.ManagerLogReceived += OnManagerLogReceived;
         _singBoxManager.LogReceived += OnLogReceived;
 
-        DashboardViewModel = new DashboardViewModel(_singBoxManager, _kernelManager, _profileManager, _configManager, LogsViewModel.AddLog);
-        _lazyProfilesViewModel = new Lazy<ProfilesViewModel>(() => new ProfilesViewModel(_profileManager, _configManager, _singBoxManager));
+        DashboardViewModel = new DashboardViewModel(_singBoxManager, _kernelManager, _profileManager, _configManager, _logStore.AddLog);
         _lazyGroupsViewModel = new Lazy<GroupsViewModel>(() => new GroupsViewModel(_singBoxManager));
-        _lazyConnectionsViewModel = new Lazy<ConnectionsViewModel>(() => new ConnectionsViewModel(_singBoxManager));
-        var appUpdateService = new AppUpdateService("https://github.com/821869798/carton", null, LogsViewModel.AddLog);
-        _lazySettingsViewModel = new Lazy<SettingsViewModel>(() => new SettingsViewModel(_configManager, _profileManager, _kernelManager, _preferencesService, _localizationService, _themeService, new StartupService(), appUpdateService));
+        _appUpdateService = new AppUpdateService("https://github.com/821869798/carton", null, _logStore.AddLog);
+        _transientPageUnloadTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(30)
+        };
+        _transientPageUnloadTimer.Tick += OnTransientPageUnloadTimerTick;
+        _transientPageUnloadTimer.Start();
 
         _currentPage = DashboardViewModel;
-        LogsViewModel.AddLog("[INFO] Log pipeline initialized");
+        _logStore.AddLog("[INFO] Log pipeline initialized");
         ConnectionStatus = _localizationService["Status.Disconnected"];
 
         _ = InitializeAsync();
@@ -232,9 +241,9 @@ public partial class MainViewModel : ViewModelBase
             };
             OnPropertyChanged(nameof(ShowStartButton));
             OnPropertyChanged(nameof(ShowStopButton));
-            if (_lazyConnectionsViewModel.IsValueCreated)
+            if (_connectionsViewModel != null)
             {
-                _lazyConnectionsViewModel.Value.OnServiceStatusChanged(status == ServiceStatus.Running);
+                _connectionsViewModel.OnServiceStatusChanged(status == ServiceStatus.Running);
             }
         });
     }
@@ -250,31 +259,41 @@ public partial class MainViewModel : ViewModelBase
 
     private void OnLogReceived(object? sender, string log)
     {
-        LogsViewModel.AddLog(log, LogSource.SingBox);
+        _logStore.AddLog(log, LogSource.SingBox);
     }
 
     private void OnManagerLogReceived(object? sender, string log)
     {
-        LogsViewModel.AddLog(log, LogSource.Carton);
+        _logStore.AddLog(log, LogSource.Carton);
     }
 
     partial void OnSelectedPageChanged(NavigationPage value)
     {
-        if (CurrentPage == LogsViewModel)
+        var previousPage = CurrentPage;
+
+        if (previousPage == _logsViewModel)
         {
-            LogsViewModel.OnNavigatedFrom();
+            _logsViewModel?.OnNavigatedFrom();
         }
+        else if (previousPage == _connectionsViewModel)
+        {
+            _connectionsViewModel?.OnNavigatedFrom();
+        }
+
+        MarkTransientPageInactive(previousPage?.PageType);
 
         CurrentPage = value switch
         {
             NavigationPage.Dashboard => DashboardViewModel,
-            NavigationPage.Profiles => ProfilesViewModel,
+            NavigationPage.Profiles => EnsureProfilesViewModel(),
             NavigationPage.Groups => EnsureGroupsViewModel(),
-            NavigationPage.Connections => ConnectionsViewModel,
-            NavigationPage.Logs => LogsViewModel,
-            NavigationPage.Settings => SettingsViewModel,
+            NavigationPage.Connections => EnsureConnectionsViewModel(),
+            NavigationPage.Logs => EnsureLogsViewModel(),
+            NavigationPage.Settings => EnsureSettingsViewModel(),
             _ => DashboardViewModel
         };
+
+        MarkTransientPageActive(value);
 
         if (value == NavigationPage.Groups)
         {
@@ -283,11 +302,7 @@ public partial class MainViewModel : ViewModelBase
 
         if (value == NavigationPage.Connections)
         {
-            ConnectionsViewModel.OnNavigatedTo();
-        }
-        else if (_lazyConnectionsViewModel.IsValueCreated)
-        {
-            _lazyConnectionsViewModel.Value.OnNavigatedFrom();
+            _connectionsViewModel?.OnNavigatedTo();
         }
 
         if (value == NavigationPage.Dashboard)
@@ -297,7 +312,7 @@ public partial class MainViewModel : ViewModelBase
 
         if (value == NavigationPage.Logs)
         {
-            LogsViewModel.OnNavigatedTo();
+            _logsViewModel?.OnNavigatedTo();
         }
 
         OnPropertyChanged(nameof(ShowGlobalStartStop));
@@ -321,12 +336,12 @@ public partial class MainViewModel : ViewModelBase
         }
 
         _isWindowVisible = isVisible;
-        if (_lazyConnectionsViewModel.IsValueCreated)
+        if (_connectionsViewModel != null)
         {
-            _lazyConnectionsViewModel.Value.SetWindowVisible(isVisible);
+            _connectionsViewModel.SetWindowVisible(isVisible);
         }
 
-        LogsViewModel.SetWindowVisible(isVisible);
+        _logsViewModel?.SetWindowVisible(isVisible);
     }
 
     public bool IsGroupsViewModelCreated => _lazyGroupsViewModel.IsValueCreated;
@@ -341,6 +356,117 @@ public partial class MainViewModel : ViewModelBase
         }
 
         return groupsViewModel;
+    }
+
+    public ProfilesViewModel EnsureProfilesViewModel()
+    {
+        _profilesInactiveAtUtc = null;
+        _profilesViewModel ??= new ProfilesViewModel(_profileManager, _configManager, _singBoxManager);
+        return _profilesViewModel;
+    }
+
+    public ConnectionsViewModel EnsureConnectionsViewModel()
+    {
+        _connectionsInactiveAtUtc = null;
+        _connectionsViewModel ??= new ConnectionsViewModel(_singBoxManager);
+        _connectionsViewModel.SetWindowVisible(_isWindowVisible);
+        return _connectionsViewModel;
+    }
+
+    public LogsViewModel EnsureLogsViewModel()
+    {
+        _logsInactiveAtUtc = null;
+        _logsViewModel ??= new LogsViewModel(_logStore);
+        _logsViewModel.SetWindowVisible(_isWindowVisible);
+        return _logsViewModel;
+    }
+
+    public SettingsViewModel EnsureSettingsViewModel()
+    {
+        _settingsInactiveAtUtc = null;
+        _settingsViewModel ??= new SettingsViewModel(
+            _configManager,
+            _profileManager,
+            _kernelManager,
+            _preferencesService,
+            _localizationService,
+            _themeService,
+            new StartupService(),
+            _appUpdateService);
+        return _settingsViewModel;
+    }
+
+    private void OnTransientPageUnloadTimerTick(object? sender, EventArgs e)
+    {
+        TryUnloadInactiveTransientPages();
+    }
+
+    private void TryUnloadInactiveTransientPages()
+    {
+        var now = DateTime.UtcNow;
+        TryUnloadTransientPage(NavigationPage.Profiles, _profilesInactiveAtUtc, _profilesViewModel, disposable => _profilesViewModel = null, now);
+        TryUnloadTransientPage(NavigationPage.Connections, _connectionsInactiveAtUtc, _connectionsViewModel, disposable => _connectionsViewModel = null, now);
+        TryUnloadTransientPage(NavigationPage.Logs, _logsInactiveAtUtc, _logsViewModel, disposable => _logsViewModel = null, now);
+        TryUnloadTransientPage(NavigationPage.Settings, _settingsInactiveAtUtc, _settingsViewModel, disposable => _settingsViewModel = null, now);
+    }
+
+    private void TryUnloadTransientPage(NavigationPage page, DateTime? inactiveAtUtc, IDisposable? viewModel, Action<IDisposable> clearReference, DateTime now)
+    {
+        if (SelectedPage == page || inactiveAtUtc == null || viewModel == null)
+        {
+            return;
+        }
+
+        if (now - inactiveAtUtc.Value < TransientPageUnloadDelay)
+        {
+            return;
+        }
+
+        clearReference(viewModel);
+        viewModel.Dispose();
+        if (CurrentPage.PageType == page)
+        {
+            OnPropertyChanged(nameof(ActiveTransientPage));
+        }
+    }
+
+    private void MarkTransientPageInactive(NavigationPage? page)
+    {
+        var inactiveAt = DateTime.UtcNow;
+        switch (page)
+        {
+            case NavigationPage.Profiles:
+                _profilesInactiveAtUtc = inactiveAt;
+                break;
+            case NavigationPage.Connections:
+                _connectionsInactiveAtUtc = inactiveAt;
+                break;
+            case NavigationPage.Logs:
+                _logsInactiveAtUtc = inactiveAt;
+                break;
+            case NavigationPage.Settings:
+                _settingsInactiveAtUtc = inactiveAt;
+                break;
+        }
+    }
+
+    private void MarkTransientPageActive(NavigationPage page)
+    {
+        switch (page)
+        {
+            case NavigationPage.Profiles:
+                _profilesInactiveAtUtc = null;
+                break;
+            case NavigationPage.Connections:
+                _connectionsInactiveAtUtc = null;
+                break;
+            case NavigationPage.Logs:
+                _logsInactiveAtUtc = null;
+                break;
+            case NavigationPage.Settings:
+                _settingsInactiveAtUtc = null;
+                break;
+        }
     }
 
     [RelayCommand]
@@ -374,7 +500,7 @@ public partial class MainViewModel : ViewModelBase
                 var profile = await _profileManager.GetAsync(selectedId);
                 if (profile == null)
                 {
-                    LogsViewModel.AddLog("[ERROR] Selected profile not found");
+                    _logStore.AddLog("[ERROR] Selected profile not found");
                     ConnectionStatus = _localizationService["Status.ConfigMissing"];
                     return;
                 }
@@ -390,14 +516,14 @@ public partial class MainViewModel : ViewModelBase
 
                 if (!File.Exists(configPath))
                 {
-                    LogsViewModel.AddLog("[ERROR] Selected profile config file not found");
+                    _logStore.AddLog("[ERROR] Selected profile config file not found");
                     ConnectionStatus = _localizationService["Status.ConfigMissing"];
                     return;
                 }
             }
             else
             {
-                LogsViewModel.AddLog("[INFO] No profile selected, please select a profile first");
+                _logStore.AddLog("[INFO] No profile selected, please select a profile first");
                 SelectedPage = NavigationPage.Profiles;
                 return;
             }
@@ -426,14 +552,14 @@ public partial class MainViewModel : ViewModelBase
         if (string.IsNullOrWhiteSpace(profile.Url))
         {
             var message = GetString("Status.RemoteProfileUrlEmpty", "Remote profile URL is empty");
-            LogsViewModel.AddLog($"[ERROR] {message}: {profile.Name} ({profile.Id})");
+            _logStore.AddLog($"[ERROR] {message}: {profile.Name} ({profile.Id})");
             ConnectionStatus = message;
             return null;
         }
 
         var downloadingMessage = GetString("Status.RemoteConfigDownloading", "Remote config missing, downloading...");
         ConnectionStatus = downloadingMessage;
-        LogsViewModel.AddLog($"[INFO] {downloadingMessage}: {profile.Name} ({profile.Id})");
+        _logStore.AddLog($"[INFO] {downloadingMessage}: {profile.Name} ({profile.Id})");
         try
         {
             var client = HttpClientFactory.External;
@@ -441,7 +567,7 @@ public partial class MainViewModel : ViewModelBase
             if (string.IsNullOrWhiteSpace(content))
             {
                 var message = GetString("Status.RemoteConfigEmpty", "Downloaded remote config is empty");
-                LogsViewModel.AddLog($"[ERROR] {message}: {profile.Name} ({profile.Id})");
+                _logStore.AddLog($"[ERROR] {message}: {profile.Name} ({profile.Id})");
                 ConnectionStatus = message;
                 return null;
             }
@@ -451,20 +577,20 @@ public partial class MainViewModel : ViewModelBase
             if (string.IsNullOrWhiteSpace(downloadedPath) || !File.Exists(downloadedPath))
             {
                 var message = GetString("Status.RemoteConfigFileMissing", "Remote config download succeeded but file missing");
-                LogsViewModel.AddLog($"[ERROR] {message}: {profile.Name} ({profile.Id})");
+                _logStore.AddLog($"[ERROR] {message}: {profile.Name} ({profile.Id})");
                 ConnectionStatus = message;
                 return null;
             }
 
             var downloadedMessage = GetString("Status.RemoteConfigDownloaded", "Remote config downloaded");
-            LogsViewModel.AddLog($"[INFO] {downloadedMessage}: {profile.Name} ({profile.Id})");
+            _logStore.AddLog($"[INFO] {downloadedMessage}: {profile.Name} ({profile.Id})");
             ConnectionStatus = downloadedMessage;
             return downloadedPath;
         }
         catch (Exception ex)
         {
             var message = GetString("Status.RemoteConfigDownloadFailed", "Failed to download remote config");
-            LogsViewModel.AddLog($"[ERROR] {message}: {profile.Name} ({profile.Id}) - {ex.Message}");
+            _logStore.AddLog($"[ERROR] {message}: {profile.Name} ({profile.Id}) - {ex.Message}");
             ConnectionStatus = $"{message}: {ex.Message}";
             return null;
         }
@@ -523,6 +649,8 @@ public partial class MainViewModel : ViewModelBase
         }
 
         _isShuttingDown = true;
+        _transientPageUnloadTimer.Stop();
+        _transientPageUnloadTimer.Tick -= OnTransientPageUnloadTimerTick;
         try
         {
             await _singBoxManager.StopAsync();
@@ -533,6 +661,15 @@ public partial class MainViewModel : ViewModelBase
         }
         finally
         {
+            _logsViewModel?.Dispose();
+            _logsViewModel = null;
+            _profilesViewModel?.Dispose();
+            _profilesViewModel = null;
+            _connectionsViewModel?.Dispose();
+            _connectionsViewModel = null;
+            _settingsViewModel?.Dispose();
+            _settingsViewModel = null;
+
             if (_singBoxManager is IDisposable disposable)
             {
                 try
@@ -566,7 +703,7 @@ public partial class MainViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            LogsViewModel.AddLog($"[ERROR] Failed to auto start: {ex.Message}");
+            _logStore.AddLog($"[ERROR] Failed to auto start: {ex.Message}");
         }
     }
 }

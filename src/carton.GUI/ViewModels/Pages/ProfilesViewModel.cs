@@ -15,7 +15,7 @@ using carton.GUI.Services;
 
 namespace carton.ViewModels;
 
-public partial class ProfilesViewModel : PageViewModelBase
+public partial class ProfilesViewModel : PageViewModelBase, IDisposable
 {
     private const string DefaultUpdateIntervalMinutes = "1440";
 
@@ -694,6 +694,11 @@ public partial class ProfilesViewModel : PageViewModelBase
     private void OnLanguageChanged(object? sender, AppLanguage e)
     {
         Avalonia.Threading.Dispatcher.UIThread.Post(UpdateLocalizedTexts);
+    }
+
+    public void Dispose()
+    {
+        _localizationService.LanguageChanged -= OnLanguageChanged;
     }
 
     private void UpdateLocalizedTexts()
