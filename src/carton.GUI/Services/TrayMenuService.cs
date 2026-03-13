@@ -324,6 +324,7 @@ public sealed class TrayMenuService : IDisposable
 
             foreach (var group in groupsViewModel.Groups)
             {
+                var isSelectableGroup = !string.Equals(group.Type, "URLTest", StringComparison.OrdinalIgnoreCase);
                 var groupMenu = new NativeMenu();
                 foreach (var outbound in group.Items)
                 {
@@ -335,7 +336,8 @@ public sealed class TrayMenuService : IDisposable
                     {
                         Header = outboundHeader + delaySuffix,
                         IsChecked = outbound.IsSelected,
-                        ToggleType = NativeMenuItemToggleType.CheckBox
+                        ToggleType = NativeMenuItemToggleType.CheckBox,
+                        IsEnabled = isSelectableGroup
                     };
                     outboundItem.Click += (_, _) => SelectOutbound(group, outbound.Tag);
                     groupMenu.Items.Add(outboundItem);
@@ -380,13 +382,14 @@ public sealed class TrayMenuService : IDisposable
 
     private void SelectOutbound(GroupItemViewModel group, string? outboundTag)
     {
-        if (string.IsNullOrWhiteSpace(outboundTag))
+        if (string.IsNullOrWhiteSpace(outboundTag) ||
+            string.Equals(group.Type, "URLTest", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
         var command = group.SelectOutboundCommand;
-        if (command == null)
+        if (command == null || !command.CanExecute(outboundTag))
         {
             return;
         }

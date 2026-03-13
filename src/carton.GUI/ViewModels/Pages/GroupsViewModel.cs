@@ -162,6 +162,7 @@ public partial class GroupsViewModel : PageViewModelBase
 
                 foreach (var group in filteredGroups)
                 {
+                    var isSelectableGroup = !string.Equals(group.Type, "URLTest", StringComparison.OrdinalIgnoreCase);
                     var outboundItems = group.Items
                         .Select(item => new OutboundItemViewModel
                         {
@@ -186,7 +187,7 @@ public partial class GroupsViewModel : PageViewModelBase
 
                     groupVm.SelectOutboundCommand = new AsyncRelayCommand<string>(
                         outboundTag => SelectOutboundAsync(group.Tag, outboundTag),
-                        _ => _singBoxManager?.IsRunning == true);
+                        _ => isSelectableGroup && _singBoxManager?.IsRunning == true);
 
                     foreach (var item in groupVm.Items)
                     {
@@ -329,13 +330,19 @@ public partial class GroupsViewModel : PageViewModelBase
             return;
         }
 
+        var group = await Dispatcher.UIThread.InvokeAsync(() => Groups.FirstOrDefault(candidate =>
+            string.Equals(candidate.Name, groupTag, StringComparison.OrdinalIgnoreCase)));
+        if (group != null && string.Equals(group.Type, "URLTest", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         try
         {
             await _singBoxManager.SelectOutboundAsync(groupTag, outboundTag);
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                var group = Groups.FirstOrDefault(candidate => candidate.Name == groupTag);
                 if (group != null)
                 {
                     group.SelectedOutbound = outboundTag;

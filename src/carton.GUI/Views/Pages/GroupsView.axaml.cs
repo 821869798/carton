@@ -119,6 +119,12 @@ public partial class GroupsView : UserControl
             return;
         }
 
+        if (!item.SelectOutboundCommand.CanExecute(item.Tag))
+        {
+            e.Handled = true;
+            return;
+        }
+
         _ = item.SelectOutboundCommand.ExecuteAsync(item.Tag);
         e.Handled = true;
     }
