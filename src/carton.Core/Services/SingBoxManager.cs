@@ -458,51 +458,68 @@ public class SingBoxManager : ISingBoxManager, IDisposable
 
     public async Task<Dictionary<string, int>> RunOutboundDelayTestsAsync(IEnumerable<string> outboundTags, string? testUrl = null, int timeoutMs = 5000)
     {
-        var result = new Dictionary<string, int>();
+        var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         if (outboundTags == null)
         {
             return result;
         }
 
-        var urlParam = Uri.EscapeDataString(string.IsNullOrWhiteSpace(testUrl) ? DefaultDelayTestUrl : testUrl);
+        var targets = outboundTags
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        foreach (var tag in outboundTags)
+        if (targets.Count == 0)
         {
-            if (string.IsNullOrWhiteSpace(tag))
-            {
-                continue;
-            }
+            return result;
+        }
 
-            try
-            {
-                var endpoint = $"{_apiAddress}/proxies/{Uri.EscapeDataString(tag)}/delay?timeout={timeoutMs}&url={urlParam}";
-                using var response = await _httpClient.GetAsync(endpoint);
-                if (!response.IsSuccessStatusCode)
-                {
-                    result[tag] = -1;
-                    continue;
-                }
+        var tasks = targets.Select(async tag =>
+        {
+            var delay = await RunOutboundDelayTestAsync(tag, testUrl, timeoutMs);
+            return (tag, delay);
+        });
 
-                var payload = await response.Content.ReadAsStringAsync();
-                using var document = JsonDocument.Parse(payload);
-                if (document.RootElement.TryGetProperty("delay", out var delayElement) &&
-                    delayElement.ValueKind == JsonValueKind.Number &&
-                    delayElement.TryGetInt32(out var delay))
-                {
-                    result[tag] = delay;
-                }
-                else
-                {
-                    result[tag] = -1;
-                }
-            }
-            catch
-            {
-                result[tag] = -1;
-            }
+        foreach (var (tag, delay) in await Task.WhenAll(tasks))
+        {
+            result[tag] = delay;
         }
 
         return result;
+    }
+
+    private async Task<int> RunOutboundDelayTestAsync(string tag, string? testUrl = null, int timeoutMs = 5000)
+    {
+        if (string.IsNullOrWhiteSpace(tag))
+        {
+            return -1;
+        }
+
+        var urlParam = Uri.EscapeDataString(string.IsNullOrWhiteSpace(testUrl) ? DefaultDelayTestUrl : testUrl);
+
+        try
+        {
+            var endpoint = $"{_apiAddress}/proxies/{Uri.EscapeDataString(tag)}/delay?timeout={timeoutMs}&url={urlParam}";
+            using var response = await _httpClient.GetAsync(endpoint);
+            if (!response.IsSuccessStatusCode)
+            {
+                return -1;
+            }
+
+            var payload = await response.Content.ReadAsStringAsync();
+            using var document = JsonDocument.Parse(payload);
+            if (document.RootElement.TryGetProperty("delay", out var delayElement) &&
+                delayElement.ValueKind == JsonValueKind.Number &&
+                delayElement.TryGetInt32(out var delay))
+            {
+                return delay;
+            }
+        }
+        catch
+        {
+        }
+
+        return -1;
     }
 
     public long? GetRunningProcessMemoryBytes()

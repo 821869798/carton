@@ -368,9 +368,9 @@ public partial class GroupsViewModel : PageViewModelBase
             return;
         }
 
-        var targets = SelectedGroup.Items
-            .Select(item => item.Tag)
-            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+        var group = SelectedGroup;
+        var targets = group.Items
+            .Where(item => !string.IsNullOrWhiteSpace(item.Tag))
             .ToList();
 
         if (targets.Count == 0)
@@ -380,17 +380,44 @@ public partial class GroupsViewModel : PageViewModelBase
         }
 
         IsTestingGroup = true;
-        StatusMessage = $"Testing {SelectedGroup.Name}...";
+        StatusMessage = $"Testing {group.Name}...";
+
+        foreach (var item in targets)
+        {
+            item.IsTesting = true;
+            if (item.TestDelayCommand is AsyncRelayCommand asyncCommand)
+            {
+                asyncCommand.NotifyCanExecuteChanged();
+            }
+        }
 
         try
         {
-            var delays = await _singBoxManager.RunOutboundDelayTestsAsync(targets);
-            foreach (var item in SelectedGroup.Items)
+            var completedCount = 0;
+            var totalCount = targets.Count;
+            var testTasks = targets.Select(async item =>
             {
-                item.Delay = delays.TryGetValue(item.Tag, out var value) && value >= 0 ? value : 0;
-            }
+                var delays = await _singBoxManager.RunOutboundDelayTestsAsync(new[] { item.Tag });
+                var delay = delays.TryGetValue(item.Tag, out var value) && value >= 0 ? value : 0;
 
-            StatusMessage = $"Test completed: {SelectedGroup.Name}";
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    item.Delay = delay;
+                    item.IsTesting = false;
+                    if (item.TestDelayCommand is AsyncRelayCommand asyncCommand)
+                    {
+                        asyncCommand.NotifyCanExecuteChanged();
+                    }
+
+                    completedCount++;
+                    StatusMessage = delay > 0
+                        ? $"{group.Name}: {item.Tag} {delay}ms ({completedCount}/{totalCount})"
+                        : $"{group.Name}: {item.Tag} timeout ({completedCount}/{totalCount})";
+                });
+            });
+
+            await Task.WhenAll(testTasks);
+            StatusMessage = $"Test completed: {group.Name}";
         }
         catch (Exception ex)
         {
@@ -398,6 +425,15 @@ public partial class GroupsViewModel : PageViewModelBase
         }
         finally
         {
+            foreach (var item in targets)
+            {
+                item.IsTesting = false;
+                if (item.TestDelayCommand is AsyncRelayCommand asyncCommand)
+                {
+                    asyncCommand.NotifyCanExecuteChanged();
+                }
+            }
+
             IsTestingGroup = false;
         }
     }
