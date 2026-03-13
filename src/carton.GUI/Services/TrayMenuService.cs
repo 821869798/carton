@@ -10,6 +10,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace carton.GUI.Services;
@@ -29,6 +30,8 @@ public sealed class TrayMenuService : IDisposable
     private NativeMenuItem? _profilesMenuItem;
     private NativeMenuItem? _groupsMenuItem;
     private readonly Dictionary<GroupItemViewModel, NotifyCollectionChangedEventHandler> _groupItemsHandlers = new();
+    private int _profilesRefreshPending;
+    private int _groupsRefreshPending;
     private bool _isInitialized;
 
     public TrayMenuService()
@@ -252,8 +255,14 @@ public sealed class TrayMenuService : IDisposable
             return;
         }
 
+        if (Interlocked.Exchange(ref _profilesRefreshPending, 1) == 1)
+        {
+            return;
+        }
+
         void Update()
         {
+            Interlocked.Exchange(ref _profilesRefreshPending, 0);
             var menu = new NativeMenu();
             if (_dashboardViewModel.AvailableProfiles.Count == 0)
             {
@@ -291,8 +300,14 @@ public sealed class TrayMenuService : IDisposable
             return;
         }
 
+        if (Interlocked.Exchange(ref _groupsRefreshPending, 1) == 1)
+        {
+            return;
+        }
+
         if (!EnsureGroupsViewModelSubscribed())
         {
+            Interlocked.Exchange(ref _groupsRefreshPending, 0);
             ReleaseGroupsMenuState();
             return;
         }
@@ -300,11 +315,13 @@ public sealed class TrayMenuService : IDisposable
         var groupsViewModel = _groupsViewModel;
         if (groupsViewModel == null)
         {
+            Interlocked.Exchange(ref _groupsRefreshPending, 0);
             return;
         }
 
         void Update()
         {
+            Interlocked.Exchange(ref _groupsRefreshPending, 0);
             var menu = new NativeMenu();
             var hasGroups = groupsViewModel.Groups.Count > 0 && _mainViewModel?.IsConnected == true;
 

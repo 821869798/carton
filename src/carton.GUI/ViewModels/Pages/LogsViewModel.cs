@@ -10,6 +10,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace carton.ViewModels;
@@ -19,6 +20,7 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
     private bool _isOnPage;
     private bool _isWindowVisible = true;
     private bool _hasPendingVisibleRefresh;
+    private int _pendingFilterRefresh;
     private readonly ILocalizationService _localizationService;
     private readonly LogStore _logStore;
 
@@ -91,17 +93,17 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
 
     partial void OnSearchTextChanged(string value)
     {
-        ApplyFilters();
+        RequestApplyFilters();
     }
 
     partial void OnSelectedLevelChanged(string value)
     {
-        ApplyFilters();
+        RequestApplyFilters();
     }
 
     partial void OnSelectedSourceFilterChanged(LogSourceFilterOptionViewModel? value)
     {
-        ApplyFilters();
+        RequestApplyFilters();
     }
 
     [RelayCommand]
@@ -142,7 +144,7 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
     {
         if (_isOnPage && _isWindowVisible)
         {
-            ApplyFilters();
+            RequestApplyFilters();
         }
         else
         {
@@ -155,7 +157,7 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
         if (_isOnPage && _isWindowVisible && _hasPendingVisibleRefresh)
         {
             _hasPendingVisibleRefresh = false;
-            ApplyFilters();
+            RequestApplyFilters();
         }
     }
 
@@ -165,15 +167,48 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
         SelectedLog = null;
     }
 
+    private void RequestApplyFilters()
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(RequestApplyFilters);
+            return;
+        }
+
+        if (Interlocked.Exchange(ref _pendingFilterRefresh, 1) == 1)
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            Interlocked.Exchange(ref _pendingFilterRefresh, 0);
+            ApplyFilters();
+        }, DispatcherPriority.Background);
+    }
+
     private void ApplyFilters()
     {
         if (!Dispatcher.UIThread.CheckAccess())
         {
-            Dispatcher.UIThread.Post(ApplyFilters);
             return;
         }
 
         var snapshot = _logStore.GetSnapshot();
+        var reusableLogs = new Dictionary<(string Time, LogSource Source, string Level, string Message), Queue<LogEntryViewModel>>(Logs.Count);
+        for (var i = 0; i < Logs.Count; i++)
+        {
+            var existing = Logs[i];
+            var key = (existing.Time, existing.Source, existing.Level, existing.Message);
+            if (!reusableLogs.TryGetValue(key, out var queue))
+            {
+                queue = new Queue<LogEntryViewModel>();
+                reusableLogs[key] = queue;
+            }
+
+            queue.Enqueue(existing);
+        }
+
         var filtered = new List<LogEntryViewModel>(snapshot.Count);
         var selectedLog = SelectedLog;
         var selectedExists = selectedLog == null;
@@ -186,14 +221,29 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
                 continue;
             }
 
-            var log = new LogEntryViewModel
+            var key = (entry.Time, entry.Source, entry.Level, entry.Message);
+            LogEntryViewModel log;
+            if (reusableLogs.TryGetValue(key, out var queue) && queue.Count > 0)
             {
-                Time = entry.Time,
-                Source = entry.Source,
-                SourceDisplayName = GetSourceDisplayName(entry.Source),
-                Level = entry.Level,
-                Message = entry.Message
-            };
+                log = queue.Dequeue();
+                var sourceDisplayName = GetSourceDisplayName(entry.Source);
+                if (!string.Equals(log.SourceDisplayName, sourceDisplayName, StringComparison.Ordinal))
+                {
+                    log.SourceDisplayName = sourceDisplayName;
+                }
+            }
+            else
+            {
+                log = new LogEntryViewModel
+                {
+                    Time = entry.Time,
+                    Source = entry.Source,
+                    SourceDisplayName = GetSourceDisplayName(entry.Source),
+                    Level = entry.Level,
+                    Message = entry.Message
+                };
+            }
+
             filtered.Add(log);
 
             if (!selectedExists &&
@@ -206,10 +256,23 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
             }
         }
 
-        Logs.Clear();
-        foreach (var log in filtered)
+        var commonCount = Math.Min(Logs.Count, filtered.Count);
+        for (var i = 0; i < commonCount; i++)
         {
-            Logs.Add(log);
+            if (!ReferenceEquals(Logs[i], filtered[i]))
+            {
+                Logs[i] = filtered[i];
+            }
+        }
+
+        for (var i = Logs.Count - 1; i >= filtered.Count; i--)
+        {
+            Logs.RemoveAt(i);
+        }
+
+        for (var i = Logs.Count; i < filtered.Count; i++)
+        {
+            Logs.Add(filtered[i]);
         }
 
         if (!selectedExists)
@@ -265,7 +328,7 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
     private void OnLanguageChanged(object? sender, AppLanguage e)
     {
         UpdateSourceFilterDisplayNames();
-        ApplyFilters();
+        RequestApplyFilters();
     }
 
     private void UpdateSourceFilterDisplayNames()
