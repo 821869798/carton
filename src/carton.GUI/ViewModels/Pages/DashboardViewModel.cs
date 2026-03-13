@@ -751,6 +751,7 @@ public partial class DashboardViewModel : PageViewModelBase
 
             var cacheFile = experimental["cache_file"] as JsonObject ?? new JsonObject();
             cacheFile["enabled"] = true;
+            cacheFile["path"] = "cache.db";
             cacheFile["store_fakeip"] = true;
             experimental["cache_file"] = cacheFile;
 
