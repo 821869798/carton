@@ -757,8 +757,6 @@ public class SingBoxManager : ISingBoxManager, IDisposable
         var stream = new MemoryStream();
         ClientWebSocket? webSocket = null;
         var wsUri = BuildWebSocketUri("traffic");
-        var connectionsCts = new CancellationTokenSource();
-        var connectionTask = MonitorConnectionsAsync(connectionsCts.Token);
 
         try
         {
@@ -843,23 +841,6 @@ public class SingBoxManager : ISingBoxManager, IDisposable
         }
         finally
         {
-            connectionsCts.Cancel();
-            try
-            {
-                await connectionTask;
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (Exception e)
-            {
-                LogManager($"[WARN] Connection monitor error: {e.Message}");
-            }
-            finally
-            {
-                connectionsCts.Dispose();
-            }
-
             if (webSocket != null)
             {
                 await CloseSocketSilentlyAsync(webSocket, "Carton traffic monitor stopped");
@@ -869,30 +850,6 @@ public class SingBoxManager : ISingBoxManager, IDisposable
             stream.Dispose();
             ArrayPool<byte>.Shared.Return(buffer);
             _trafficMonitorTask = null;
-        }
-
-        async Task MonitorConnectionsAsync(CancellationToken token)
-        {
-            while (!token.IsCancellationRequested && _state.Status == ServiceStatus.Running)
-            {
-                try
-                {
-                    var connections = await GetConnectionsAsync();
-                    _state.ConnectionCount = connections.Count;
-                }
-                catch
-                {
-                }
-
-                try
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(1), token);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-            }
         }
     }
 
