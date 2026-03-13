@@ -17,6 +17,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="2" />
 		<Folder Include="Models\" />
 		<AvaloniaResource Include="Assets\**" />
 		<AvaloniaResource Include="Resources\**"

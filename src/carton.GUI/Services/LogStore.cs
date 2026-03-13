@@ -14,6 +14,8 @@ public sealed class LogStore
     private static readonly Regex AnsiEscapeRegex = new(@"\e\[[0-9;]*[a-zA-Z]");
     private readonly LogRingBuffer _entries = new(MaxEntries);
     private readonly object _syncRoot = new();
+    private LogEntryRecord[] _snapshotCache = Array.Empty<LogEntryRecord>();
+    private bool _snapshotDirty = true;
     private int _pendingEntriesChanged;
 
     public event EventHandler? EntriesChanged;
@@ -30,6 +32,7 @@ public sealed class LogStore
         lock (_syncRoot)
         {
             _entries.Add(entry);
+            _snapshotDirty = true;
         }
 
         RaiseEntriesChanged();
@@ -39,7 +42,13 @@ public sealed class LogStore
     {
         lock (_syncRoot)
         {
-            return _entries.ToArray();
+            if (_snapshotDirty)
+            {
+                _snapshotCache = _entries.ToArray();
+                _snapshotDirty = false;
+            }
+
+            return _snapshotCache;
         }
     }
 
@@ -48,6 +57,8 @@ public sealed class LogStore
         lock (_syncRoot)
         {
             _entries.Clear();
+            _snapshotDirty = true;
+            _snapshotCache = Array.Empty<LogEntryRecord>();
         }
 
         RaiseEntriesChanged();
