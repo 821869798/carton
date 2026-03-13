@@ -79,7 +79,15 @@ public partial class DashboardViewModel : PageViewModelBase
     private string _memoryUsage = "0 B";
 
     [RelayCommand]
-    public async Task CopyTerminalProxyCommand(string type)
+    private Task CopyCmdTerminalProxy() => CopyTerminalProxyAsync("cmd");
+
+    [RelayCommand]
+    private Task CopyPsTerminalProxy() => CopyTerminalProxyAsync("ps");
+
+    [RelayCommand]
+    private Task CopyLinuxTerminalProxy() => CopyTerminalProxyAsync("linux");
+
+    private async Task CopyTerminalProxyAsync(string type)
     {
         if (!int.TryParse(InboundPortText, out var port)) port = 2028;
         var host = "127.0.0.1";
@@ -653,7 +661,7 @@ public partial class DashboardViewModel : PageViewModelBase
             if (mixedInbound == null)
             {
                 mixedInbound = new JsonObject { ["type"] = "mixed", ["tag"] = "mixed-in" };
-                inbounds.Add(mixedInbound);
+                inbounds.Add((JsonNode)mixedInbound);
             }
             mixedInbound["listen"] = AllowLanConnections ? "0.0.0.0" : "127.0.0.1";
             mixedInbound["listen_port"] = port;
@@ -680,7 +688,7 @@ public partial class DashboardViewModel : PageViewModelBase
                 if (tunInbound == null)
                 {
                     tunInbound = new JsonObject { ["type"] = "tun", ["tag"] = "tun-in" };
-                    inbounds.Add(tunInbound);
+                    inbounds.Add((JsonNode)tunInbound);
                 }
                 tunInbound["address"] = tunAddresses;
                 tunInbound["auto_route"] = true;

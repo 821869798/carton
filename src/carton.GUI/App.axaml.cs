@@ -11,6 +11,7 @@ using carton.GUI.Services;
 using carton.ViewModels;
 using carton.Views;
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -85,6 +86,10 @@ public partial class App : Application
         Environment.Exit(0);
     }
 
+    [UnconditionalSuppressMessage(
+        "Trimming",
+        "IL2026",
+        Justification = "This Avalonia validation plugin removal path has been verified in published AOT builds.")]
     private void DisableAvaloniaDataAnnotationValidation()
     {
         var dataValidationPluginsToRemove =
