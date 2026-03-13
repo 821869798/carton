@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -20,6 +21,7 @@ public partial class LogsViewModel : PageViewModelBase
     private bool _isWindowVisible = true;
     private bool _hasPendingVisibleRefresh;
     private readonly ILocalizationService _localizationService;
+    private static readonly Regex AnsiEscapeRegex = new(@"\e\[[0-9;]*[a-zA-Z]");
 
     public override NavigationPage PageType => NavigationPage.Logs;
 
@@ -40,10 +42,12 @@ public partial class LogsViewModel : PageViewModelBase
 
     public ObservableCollection<string> LogLevels { get; } = new() { "All", "Debug", "Info", "Warn", "Error" };
     public ObservableCollection<LogSourceFilterOptionViewModel> LogSourceFilters { get; } = new();
-    private readonly List<LogEntryViewModel> _allLogs = new();
+    private readonly FixedLogBuffer _allLogs = new(MaxVisibleLogEntries);
 
-    // Keep a large rolling window for troubleshooting while preventing unbounded growth.
-    private const int MaxLogEntries = 2000;
+    // Keep a smaller rolling window when hidden so background log bursts do not keep growing carton memory.
+    private const int MaxVisibleLogEntries = 800;
+    private const int MaxHiddenLogEntries = 300;
+    private const int MaxMessageLength = 2048;
 
     public LogsViewModel()
     {
@@ -57,6 +61,7 @@ public partial class LogsViewModel : PageViewModelBase
     public void OnNavigatedTo()
     {
         _isOnPage = true;
+        _hasPendingVisibleRefresh = true;
         RefreshVisibleLogsIfNeeded();
     }
 
@@ -67,11 +72,16 @@ public partial class LogsViewModel : PageViewModelBase
         {
             RefreshVisibleLogsIfNeeded();
         }
+        else
+        {
+            ReleaseVisibleLogs();
+        }
     }
 
     public void OnNavigatedFrom()
     {
         _isOnPage = false;
+        ReleaseVisibleLogs();
     }
 
     private void RefreshVisibleLogsIfNeeded()
@@ -81,6 +91,12 @@ public partial class LogsViewModel : PageViewModelBase
             _hasPendingVisibleRefresh = false;
             ApplyFilters();
         }
+    }
+
+    private void ReleaseVisibleLogs()
+    {
+        Logs.Clear();
+        SelectedLog = null;
     }
 
     partial void OnSearchTextChanged(string value)
@@ -111,56 +127,40 @@ public partial class LogsViewModel : PageViewModelBase
             return;
         }
 
-        // Strip ANSI escape sequences
-        var msg = System.Text.RegularExpressions.Regex.Replace(message, @"\e\[[0-9;]*[a-zA-Z]", "");
-
-        // Remove sing-box timestamp: "+0800 2026-03-09 10:46:36 " or "2024-03-15T12:00:00.000Z "
-        var tsRegex = new System.Text.RegularExpressions.Regex(@"^([+-]\d{4}\s+)?\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(\.\d+[Zz]?)?\s+");
-        msg = tsRegex.Replace(msg, "");
-
-        var level = "Info";
-
-        // Extract and remove level
-        var levelRegex = new System.Text.RegularExpressions.Regex(@"^\[?(DEBUG|INFO|WARN|WARNING|ERROR|FATAL|debug|info|warn|warning|error|fatal)\]?[\s:]+");
-        var levelMatch = levelRegex.Match(msg);
-        if (levelMatch.Success)
+        var (time, level, msg) = source switch
         {
-            var l = levelMatch.Groups[1].Value;
-            if (l.Equals("WARNING", StringComparison.OrdinalIgnoreCase)) l = "Warn";
-            level = l.Length > 0 ? char.ToUpper(l[0]) + l.Substring(1).ToLower() : level;
-            msg = msg.Substring(levelMatch.Length);
-        }
-        else
-        {
-            // Fallback content scan
-            if (msg.Contains("ERROR", StringComparison.OrdinalIgnoreCase) || msg.Contains("[error]", StringComparison.OrdinalIgnoreCase))
-            {
-                level = "Error";
-            }
-            else if (msg.Contains("WARN", StringComparison.OrdinalIgnoreCase) || msg.Contains("[warn]", StringComparison.OrdinalIgnoreCase))
-            {
-                level = "Warn";
-            }
-            else if (msg.Contains("DEBUG", StringComparison.OrdinalIgnoreCase) || msg.Contains("[debug]", StringComparison.OrdinalIgnoreCase))
-            {
-                level = "Debug";
-            }
-        }
+            LogSource.Carton => ParseCartonLog(message),
+            LogSource.SingBox => ParseSingBoxLog(message),
+            _ => (DateTime.Now.ToString("HH:mm:ss"), "Info", message)
+        };
 
-        // Extract and remove connection context ID, e.g., "[1651110515 5.0s] " or "[1234] "
-        var contextRegex = new System.Text.RegularExpressions.Regex(@"^\[\d+(?:\s+[^\]]+)?\]\s*");
-        msg = contextRegex.Replace(msg, "");
+        if (msg.Length > MaxMessageLength)
+        {
+            msg = msg[..MaxMessageLength] + "...";
+        }
 
         var entry = new LogEntryViewModel
         {
-            Time = DateTime.Now.ToString("HH:mm:ss"),
+            Time = time,
             Source = source,
             SourceDisplayName = GetSourceDisplayName(source),
             Level = level,
             Message = msg
         };
 
-        _allLogs.Add(entry);
+        var removed = _allLogs.Add(entry);
+        if (removed != null)
+        {
+            if (Logs.Contains(removed))
+            {
+                Logs.Remove(removed);
+            }
+            else
+            {
+                _hasPendingVisibleRefresh = true;
+            }
+        }
+
         if (_isOnPage && _isWindowVisible && MatchesFilter(entry))
         {
             Logs.Add(entry);
@@ -170,18 +170,98 @@ public partial class LogsViewModel : PageViewModelBase
             _hasPendingVisibleRefresh = true;
         }
 
-        while (_allLogs.Count > MaxLogEntries)
+        TrimRetainedLogs();
+    }
+
+    private static (string Time, string Level, string Message) ParseCartonLog(string message)
+    {
+        if (string.IsNullOrEmpty(message))
         {
-            var removed = _allLogs[0];
-            _allLogs.RemoveAt(0);
-            if (_isOnPage && _isWindowVisible)
+            return (DateTime.Now.ToString("HH:mm:ss"), "Info", string.Empty);
+        }
+
+        if (message.StartsWith("[ERROR] ", StringComparison.OrdinalIgnoreCase))
+        {
+            return (DateTime.Now.ToString("HH:mm:ss"), "Error", message["[ERROR] ".Length..]);
+        }
+
+        if (message.StartsWith("[WARN] ", StringComparison.OrdinalIgnoreCase) ||
+            message.StartsWith("[WARNING] ", StringComparison.OrdinalIgnoreCase))
+        {
+            var prefixLength = message.StartsWith("[WARNING] ", StringComparison.OrdinalIgnoreCase)
+                ? "[WARNING] ".Length
+                : "[WARN] ".Length;
+            return (DateTime.Now.ToString("HH:mm:ss"), "Warn", message[prefixLength..]);
+        }
+
+        if (message.StartsWith("[DEBUG] ", StringComparison.OrdinalIgnoreCase))
+        {
+            return (DateTime.Now.ToString("HH:mm:ss"), "Debug", message["[DEBUG] ".Length..]);
+        }
+
+        if (message.StartsWith("[INFO] ", StringComparison.OrdinalIgnoreCase))
+        {
+            return (DateTime.Now.ToString("HH:mm:ss"), "Info", message["[INFO] ".Length..]);
+        }
+
+        return (DateTime.Now.ToString("HH:mm:ss"), "Info", message);
+    }
+
+    private static (string Time, string Level, string Message) ParseSingBoxLog(string message)
+    {
+        var msg = AnsiEscapeRegex.Replace(message, "");
+        var parts = msg.Split(' ', 4, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 4)
+        {
+            return (DateTime.Now.ToString("HH:mm:ss"), "Info", msg);
+        }
+
+        var time = parts[2].Length >= 8 ? parts[2][..8] : DateTime.Now.ToString("HH:mm:ss");
+        var remainder = parts[3];
+        var levelSplit = remainder.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        if (levelSplit.Length == 0)
+        {
+            return (time, "Info", string.Empty);
+        }
+
+        var level = NormalizeSingBoxLevel(levelSplit[0]);
+        msg = levelSplit.Length > 1 ? levelSplit[1] : string.Empty;
+
+        if (msg.Length > 0 && msg[0] == '[')
+        {
+            var endIndex = msg.IndexOf(']');
+            if (endIndex > 0)
             {
-                Logs.Remove(removed);
+                msg = msg[(endIndex + 1)..].TrimStart();
             }
-            else
-            {
-                _hasPendingVisibleRefresh = true;
-            }
+        }
+
+        return (time, level, msg);
+    }
+
+    private static string NormalizeSingBoxLevel(string value)
+    {
+        return value.ToUpperInvariant() switch
+        {
+            "DEBUG" => "Debug",
+            "WARN" or "WARNING" => "Warn",
+            "ERROR" or "FATAL" => "Error",
+            _ => "Info"
+        };
+    }
+
+    private void TrimRetainedLogs()
+    {
+        var limit = _isOnPage && _isWindowVisible ? MaxVisibleLogEntries : MaxHiddenLogEntries;
+        if (_allLogs.Capacity != limit)
+        {
+            _allLogs.Resize(limit);
+            _hasPendingVisibleRefresh = true;
+        }
+
+        if (_isOnPage && _isWindowVisible)
+        {
+            ApplyFilters();
         }
     }
 
@@ -330,6 +410,76 @@ public partial class LogsViewModel : PageViewModelBase
             _ => source.ToString()
         };
     }
+}
+
+internal sealed class FixedLogBuffer : IEnumerable<LogEntryViewModel>
+{
+    private LogEntryViewModel[] _buffer;
+    private int _start;
+    private int _count;
+
+    public FixedLogBuffer(int capacity)
+    {
+        _buffer = new LogEntryViewModel[Math.Max(1, capacity)];
+    }
+
+    public int Count => _count;
+    public int Capacity => _buffer.Length;
+
+    public LogEntryViewModel? Add(LogEntryViewModel entry)
+    {
+        if (_count < _buffer.Length)
+        {
+            _buffer[(_start + _count) % _buffer.Length] = entry;
+            _count++;
+            return null;
+        }
+
+        var removed = _buffer[_start];
+        _buffer[_start] = entry;
+        _start = (_start + 1) % _buffer.Length;
+        return removed;
+    }
+
+    public void Clear()
+    {
+        Array.Clear(_buffer, 0, _buffer.Length);
+        _start = 0;
+        _count = 0;
+    }
+
+    public void Resize(int capacity)
+    {
+        var newCapacity = Math.Max(1, capacity);
+        if (newCapacity == _buffer.Length)
+        {
+            return;
+        }
+
+        var newBuffer = new LogEntryViewModel[newCapacity];
+        var copyCount = Math.Min(_count, newCapacity);
+        var skip = _count - copyCount;
+        for (var i = 0; i < copyCount; i++)
+        {
+            newBuffer[i] = this[skip + i];
+        }
+
+        _buffer = newBuffer;
+        _start = 0;
+        _count = copyCount;
+    }
+
+    private LogEntryViewModel this[int index] => _buffer[(_start + index) % _buffer.Length];
+
+    public IEnumerator<LogEntryViewModel> GetEnumerator()
+    {
+        for (var i = 0; i < _count; i++)
+        {
+            yield return this[i];
+        }
+    }
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
 }
 
 public partial class LogEntryViewModel : ObservableObject

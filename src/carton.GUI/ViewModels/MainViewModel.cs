@@ -83,12 +83,16 @@ public partial class MainViewModel : ViewModelBase
     };
 
     public DashboardViewModel DashboardViewModel { get; }
-    public ProfilesViewModel ProfilesViewModel { get; }
-    public GroupsViewModel GroupsViewModel { get; }
     public LogsViewModel LogsViewModel { get; }
 
+    private readonly Lazy<ProfilesViewModel> _lazyProfilesViewModel;
+    private readonly Lazy<GroupsViewModel> _lazyGroupsViewModel;
     private readonly Lazy<ConnectionsViewModel> _lazyConnectionsViewModel;
     private readonly Lazy<SettingsViewModel> _lazySettingsViewModel;
+    private GroupsViewModel? _activeGroupsViewModel;
+
+    public ProfilesViewModel ProfilesViewModel => _lazyProfilesViewModel.Value;
+    public GroupsViewModel? ActiveGroupsViewModel => _activeGroupsViewModel;
     public ConnectionsViewModel ConnectionsViewModel => _lazyConnectionsViewModel.Value;
     public SettingsViewModel SettingsViewModel => _lazySettingsViewModel.Value;
     public ILocalizationService Localization => _localizationService;
@@ -102,6 +106,8 @@ public partial class MainViewModel : ViewModelBase
     public bool IsConnectionsPage => SelectedPage == NavigationPage.Connections;
     public bool IsLogsPage => SelectedPage == NavigationPage.Logs;
     public bool IsSettingsPage => SelectedPage == NavigationPage.Settings;
+    public bool IsTransientPage => SelectedPage is NavigationPage.Profiles or NavigationPage.Connections or NavigationPage.Logs or NavigationPage.Settings;
+    public PageViewModelBase? ActiveTransientPage => IsTransientPage ? CurrentPage : null;
 
     public MainViewModel()
     {
@@ -130,8 +136,8 @@ public partial class MainViewModel : ViewModelBase
         _singBoxManager.LogReceived += OnLogReceived;
 
         DashboardViewModel = new DashboardViewModel(_singBoxManager, _kernelManager, _profileManager, _configManager, LogsViewModel.AddLog);
-        ProfilesViewModel = new ProfilesViewModel(_profileManager, _configManager, _singBoxManager);
-        GroupsViewModel = new GroupsViewModel(_singBoxManager);
+        _lazyProfilesViewModel = new Lazy<ProfilesViewModel>(() => new ProfilesViewModel(_profileManager, _configManager, _singBoxManager));
+        _lazyGroupsViewModel = new Lazy<GroupsViewModel>(() => new GroupsViewModel(_singBoxManager));
         _lazyConnectionsViewModel = new Lazy<ConnectionsViewModel>(() => new ConnectionsViewModel(_singBoxManager));
         var appUpdateService = new AppUpdateService("https://github.com/821869798/carton", null, LogsViewModel.AddLog);
         _lazySettingsViewModel = new Lazy<SettingsViewModel>(() => new SettingsViewModel(_configManager, _profileManager, _kernelManager, _preferencesService, _localizationService, _themeService, new StartupService(), appUpdateService));
@@ -226,7 +232,10 @@ public partial class MainViewModel : ViewModelBase
             };
             OnPropertyChanged(nameof(ShowStartButton));
             OnPropertyChanged(nameof(ShowStopButton));
-            ConnectionsViewModel.OnServiceStatusChanged(status == ServiceStatus.Running);
+            if (_lazyConnectionsViewModel.IsValueCreated)
+            {
+                _lazyConnectionsViewModel.Value.OnServiceStatusChanged(status == ServiceStatus.Running);
+            }
         });
     }
 
@@ -260,7 +269,7 @@ public partial class MainViewModel : ViewModelBase
         {
             NavigationPage.Dashboard => DashboardViewModel,
             NavigationPage.Profiles => ProfilesViewModel,
-            NavigationPage.Groups => GroupsViewModel,
+            NavigationPage.Groups => EnsureGroupsViewModel(),
             NavigationPage.Connections => ConnectionsViewModel,
             NavigationPage.Logs => LogsViewModel,
             NavigationPage.Settings => SettingsViewModel,
@@ -269,16 +278,16 @@ public partial class MainViewModel : ViewModelBase
 
         if (value == NavigationPage.Groups)
         {
-            GroupsViewModel.OnNavigatedTo();
+            EnsureGroupsViewModel().OnNavigatedTo();
         }
 
         if (value == NavigationPage.Connections)
         {
             ConnectionsViewModel.OnNavigatedTo();
         }
-        else
+        else if (_lazyConnectionsViewModel.IsValueCreated)
         {
-            ConnectionsViewModel.OnNavigatedFrom();
+            _lazyConnectionsViewModel.Value.OnNavigatedFrom();
         }
 
         if (value == NavigationPage.Dashboard)
@@ -300,6 +309,8 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsConnectionsPage));
         OnPropertyChanged(nameof(IsLogsPage));
         OnPropertyChanged(nameof(IsSettingsPage));
+        OnPropertyChanged(nameof(IsTransientPage));
+        OnPropertyChanged(nameof(ActiveTransientPage));
     }
 
     public void SetWindowVisible(bool isVisible)
@@ -310,8 +321,26 @@ public partial class MainViewModel : ViewModelBase
         }
 
         _isWindowVisible = isVisible;
-        ConnectionsViewModel.SetWindowVisible(isVisible);
+        if (_lazyConnectionsViewModel.IsValueCreated)
+        {
+            _lazyConnectionsViewModel.Value.SetWindowVisible(isVisible);
+        }
+
         LogsViewModel.SetWindowVisible(isVisible);
+    }
+
+    public bool IsGroupsViewModelCreated => _lazyGroupsViewModel.IsValueCreated;
+
+    public GroupsViewModel EnsureGroupsViewModel()
+    {
+        var groupsViewModel = _lazyGroupsViewModel.Value;
+        if (!ReferenceEquals(_activeGroupsViewModel, groupsViewModel))
+        {
+            _activeGroupsViewModel = groupsViewModel;
+            OnPropertyChanged(nameof(ActiveGroupsViewModel));
+        }
+
+        return groupsViewModel;
     }
 
     [RelayCommand]

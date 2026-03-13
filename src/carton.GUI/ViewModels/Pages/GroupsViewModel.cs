@@ -55,7 +55,6 @@ public partial class GroupsViewModel : PageViewModelBase
     {
         _singBoxManager = singBoxManager;
         _singBoxManager.StatusChanged += OnServiceStatusChanged;
-        _ = LoadGroupsAsync();
     }
 
     public void OnNavigatedTo()
