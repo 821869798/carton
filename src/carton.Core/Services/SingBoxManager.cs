@@ -240,7 +240,7 @@ public class SingBoxManager : ISingBoxManager, IDisposable
             _process.BeginOutputReadLine();
             _process.BeginErrorReadLine();
 
-            var ready = await WaitForApiReadyAsync(null, TimeSpan.FromSeconds(15));
+            var ready = await WaitForApiReadyAsync(null, TimeSpan.FromSeconds(25));
             if (!ready)
             {
                 if (_process.HasExited)
