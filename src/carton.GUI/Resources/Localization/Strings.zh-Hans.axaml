@@ -79,11 +79,13 @@
 
   <x:String x:Key="Dashboard.Section.Configuration">配置</x:String>
 	<x:String x:Key="Dashboard.Field.Port">Mixed 端口</x:String>
+  <x:String x:Key="Dashboard.Field.LogLevel">日志等级</x:String>
 	<x:String x:Key="Dashboard.Option.AllowLan">允许局域网连接</x:String>
 	<x:String x:Key="Dashboard.Option.SystemProxy">系统代理</x:String>
 	<x:String x:Key="Dashboard.Option.Tun">虚拟网卡 (TUN)</x:String>
 	<x:String x:Key="Dashboard.Port.Edit">编辑端口</x:String>
 	<x:String x:Key="Dashboard.Port.Save">保存端口</x:String>
+  <x:String x:Key="Dashboard.LogLevel.HighVolumeHint">当前日志较多，推荐 warn 及以上</x:String>
 	<x:String x:Key="Dashboard.StartupPrompt">启动前请选择一个配置</x:String>
 	<x:String x:Key="Dashboard.Button.Start">启动</x:String>
 	<x:String x:Key="Dashboard.ClashMode">Clash 出站模式</x:String>

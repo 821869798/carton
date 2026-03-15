@@ -34,5 +34,7 @@ public class ProfileRuntimeOptions
     public bool AllowLanConnections { get; set; }
     public bool EnableSystemProxy { get; set; }
     public bool EnableTunInbound { get; set; }
+    public string LogLevel { get; set; } = carton.Core.Utilities.SingBoxLogLevelHelper.DefaultLevel;
+    public bool LogLevelInitialized { get; set; }
     public bool Initialized { get; set; }
 }

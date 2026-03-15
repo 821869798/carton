@@ -80,11 +80,13 @@
 
   <x:String x:Key="Dashboard.Section.Configuration">Configuration</x:String>
   <x:String x:Key="Dashboard.Field.Port">Mixed Port</x:String>
+  <x:String x:Key="Dashboard.Field.LogLevel">Log Level</x:String>
 	<x:String x:Key="Dashboard.Option.AllowLan">Allow LAN Connections</x:String>
 	<x:String x:Key="Dashboard.Option.SystemProxy">System Proxy</x:String>
   <x:String x:Key="Dashboard.Option.Tun">Virtual Adapter (TUN)</x:String>
   <x:String x:Key="Dashboard.Port.Edit">Edit Port</x:String>
   <x:String x:Key="Dashboard.Port.Save">Save Port</x:String>
+  <x:String x:Key="Dashboard.LogLevel.HighVolumeHint">Current log volume is high. Warn or above is recommended.</x:String>
 	<x:String x:Key="Dashboard.StartupPrompt">Select a profile before starting</x:String>
 	<x:String x:Key="Dashboard.Button.Start">Start</x:String>
   <x:String x:Key="Dashboard.ClashMode">Clash Outbound Mode</x:String>

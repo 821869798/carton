@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Threading;
 using carton.Core.Models;
 using carton.Core.Serialization;
+using carton.Core.Utilities;
 
 namespace carton.Core.Services;
 
@@ -214,6 +215,7 @@ public class ProfileManager : IProfileManager
             var normalized = CloneRuntimeOptions(options);
             normalized.Initialized = true;
             normalized.InboundPort = NormalizePort(normalized.InboundPort);
+            normalized.LogLevelInitialized = true;
             profile.RuntimeOptions = normalized;
             await SaveDataUnlockedAsync(data);
         }
@@ -332,12 +334,23 @@ public class ProfileManager : IProfileManager
         if (options != null && options.Initialized)
         {
             options.InboundPort = NormalizePort(options.InboundPort);
+            if (options.LogLevelInitialized)
+            {
+                options.LogLevel = NormalizeLogLevel(options.LogLevel);
+                return options;
+            }
+
+            var resolvedLogLevel = await TryLoadLogLevelFromConfigAsync(profileId);
+            options.LogLevel = NormalizeLogLevel(resolvedLogLevel ?? options.LogLevel);
+            options.LogLevelInitialized = true;
             return options;
         }
 
         var resolved = await TryLoadRuntimeOptionsFromConfigAsync(profileId) ?? options ?? new ProfileRuntimeOptions();
         resolved.Initialized = true;
         resolved.InboundPort = NormalizePort(resolved.InboundPort);
+        resolved.LogLevel = NormalizeLogLevel(resolved.LogLevel);
+        resolved.LogLevelInitialized = true;
         return resolved;
     }
 
@@ -391,6 +404,7 @@ public class ProfileManager : IProfileManager
             var port = TryReadInt(inboundElement.Value, "listen_port") ?? 2028;
             var listen = TryReadString(inboundElement.Value, "listen");
             var setSystemProxy = TryReadBool(inboundElement.Value, "set_system_proxy") ?? false;
+            var logLevel = NormalizeLogLevel(ReadLogLevel(document.RootElement));
 
             return new ProfileRuntimeOptions
             {
@@ -398,6 +412,8 @@ public class ProfileManager : IProfileManager
                 AllowLanConnections = string.Equals(listen, "0.0.0.0", StringComparison.OrdinalIgnoreCase),
                 EnableSystemProxy = setSystemProxy,
                 EnableTunInbound = hasTun,
+                LogLevel = logLevel,
+                LogLevelInitialized = true,
                 Initialized = true
             };
         }
@@ -492,8 +508,50 @@ public class ProfileManager : IProfileManager
             AllowLanConnections = options.AllowLanConnections,
             EnableSystemProxy = options.EnableSystemProxy,
             EnableTunInbound = options.EnableTunInbound,
+            LogLevel = NormalizeLogLevel(options.LogLevel),
+            LogLevelInitialized = options.LogLevelInitialized,
             Initialized = options.Initialized
         };
+    }
+
+    private async Task<string?> TryLoadLogLevelFromConfigAsync(int profileId)
+    {
+        try
+        {
+            var configContent = await _configManager.LoadConfigAsync(profileId);
+            if (string.IsNullOrWhiteSpace(configContent))
+            {
+                return null;
+            }
+
+            using var document = JsonDocument.Parse(configContent);
+            return ReadLogLevel(document.RootElement);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadLogLevel(JsonElement rootElement)
+    {
+        if (rootElement.ValueKind != JsonValueKind.Object ||
+            !rootElement.TryGetProperty("log", out var logElement) ||
+            logElement.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return TryReadString(logElement, "level");
+    }
+
+    private static string NormalizeLogLevel(string? level)
+    {
+        return SingBoxLogLevelHelper.Normalize(level);
     }
 
     private static int NormalizePort(int port)

@@ -18,17 +18,30 @@
                   CornerRadius="8"
                   Padding="10">
             <StackPanel Spacing="10">
-              <Grid ColumnDefinitions="Auto,120,Auto,*" ColumnSpacing="10">
+              <Grid ColumnDefinitions="Auto,120,Auto,Auto,*" ColumnSpacing="10">
                 <TextBlock Grid.Column="0"
                            Text="{DynamicResource Dashboard.Field.Port}"
                            VerticalAlignment="Center"/>
                 <TextBox Grid.Column="1"
-                         Text="{Binding InboundPortText}"
-                         IsReadOnly="{Binding IsPortInputReadOnly}"
+                          Text="{Binding InboundPortText}"
+                         LostFocus="InboundPortTextBox_OnLostFocus"
                          VerticalAlignment="Center"/>
-                <Button Grid.Column="2"
-                        Content="{Binding PortEditButtonText}"
-                        Command="{Binding TogglePortEditCommand}"/>
+                <TextBlock Grid.Column="2"
+                           Text="{DynamicResource Dashboard.Field.LogLevel}"
+                           VerticalAlignment="Center"/>
+                <ComboBox Grid.Column="3"
+                          ItemsSource="{Binding LogLevelOptions}"
+                          SelectedItem="{Binding SelectedLogLevel}"
+                          Width="90"
+                          HorizontalAlignment="Left"
+                          VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="4"
+                           Text="{DynamicResource Dashboard.LogLevel.HighVolumeHint}"
+                           IsVisible="{Binding ShowVerboseLogLevelHint}"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
               </Grid>
 
               <StackPanel Orientation="Horizontal" Spacing="18">

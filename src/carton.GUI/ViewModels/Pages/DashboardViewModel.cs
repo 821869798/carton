@@ -37,6 +37,7 @@ public partial class DashboardViewModel : PageViewModelBase
     private string? _currentClashMode;
     private ProfileRuntimeOptions _runtimeOptions = new();
     private bool _suppressRuntimeOptionUpdates;
+    private static readonly ObservableCollection<string> SupportedLogLevels = new(SingBoxLogLevelHelper.Levels);
     public override NavigationPage PageType => NavigationPage.Dashboard;
 
     [ObservableProperty]
@@ -142,9 +143,6 @@ public partial class DashboardViewModel : PageViewModelBase
     private string _inboundPortText = "2028";
 
     [ObservableProperty]
-    private bool _isPortEditing;
-
-    [ObservableProperty]
     private bool _allowLanConnections;
 
     [ObservableProperty]
@@ -153,29 +151,29 @@ public partial class DashboardViewModel : PageViewModelBase
     [ObservableProperty]
     private bool _enableTunInbound;
 
+    [ObservableProperty]
+    private string _selectedLogLevel = SingBoxLogLevelHelper.DefaultLevel;
+
     partial void OnAllowLanConnectionsChanged(bool value) => UpdateRuntimeOptions(options => options.AllowLanConnections = value);
     partial void OnEnableSystemProxyChanged(bool value) => UpdateRuntimeOptions(options => options.EnableSystemProxy = value);
     partial void OnEnableTunInboundChanged(bool value) => UpdateRuntimeOptions(options => options.EnableTunInbound = value);
+    partial void OnSelectedLogLevelChanged(string value)
+    {
+        UpdateRuntimeOptions(options => options.LogLevel = NormalizeLogLevel(value));
+        OnPropertyChanged(nameof(ShowVerboseLogLevelHint));
+    }
 
     private const int DefaultClashApiPort = 9090;
 
     public bool ShowStartupSelector => !IsConnected;
     public bool ShowDashboardMetrics => IsConnected;
-    public bool IsPortInputReadOnly => !IsPortEditing;
-    public string PortEditButtonText => IsPortEditing
-        ? GetString("Dashboard.Port.Save", "Save Port")
-        : GetString("Dashboard.Port.Edit", "Edit Port");
+    public ObservableCollection<string> LogLevelOptions => SupportedLogLevels;
+    public bool ShowVerboseLogLevelHint => SingBoxLogLevelHelper.IsVerbose(SelectedLogLevel);
 
     partial void OnIsConnectedChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowStartupSelector));
         OnPropertyChanged(nameof(ShowDashboardMetrics));
-    }
-
-    partial void OnIsPortEditingChanged(bool value)
-    {
-        OnPropertyChanged(nameof(IsPortInputReadOnly));
-        OnPropertyChanged(nameof(PortEditButtonText));
     }
 
     public DashboardViewModel()
@@ -186,7 +184,6 @@ public partial class DashboardViewModel : PageViewModelBase
         _clashConfigCache = ClashConfigCacheService.Instance;
         _localizationService.LanguageChanged += (_, _) =>
         {
-            OnPropertyChanged(nameof(PortEditButtonText));
             UpdateSessionStartTime();
             _ = RefreshKernelVersionAsync();
         };
@@ -407,6 +404,7 @@ public partial class DashboardViewModel : PageViewModelBase
             return;
         }
 
+        CommitInboundPortEdit();
         if (!TryGetValidatedPort(out var port, out var validationError))
         {
             StartupStatus = validationError;
@@ -484,24 +482,17 @@ public partial class DashboardViewModel : PageViewModelBase
         }
     }
 
-    [RelayCommand]
-    private void TogglePortEdit()
+    public void CommitInboundPortEdit()
     {
-        if (!IsPortEditing)
-        {
-            IsPortEditing = true;
-            return;
-        }
-
         if (!TryGetValidatedPort(out var port, out var error))
         {
             StartupStatus = error;
+            InboundPortText = _runtimeOptions.InboundPort.ToString();
             return;
         }
 
         InboundPortText = port.ToString();
         PersistRuntimePort(port);
-        IsPortEditing = false;
         StartupStatus = string.Empty;
     }
 
@@ -597,10 +588,10 @@ public partial class DashboardViewModel : PageViewModelBase
         _suppressRuntimeOptionUpdates = true;
         _runtimeOptions = options ?? new ProfileRuntimeOptions();
         InboundPortText = _runtimeOptions.InboundPort.ToString();
-        IsPortEditing = false;
         AllowLanConnections = _runtimeOptions.AllowLanConnections;
         EnableSystemProxy = _runtimeOptions.EnableSystemProxy;
         EnableTunInbound = _runtimeOptions.EnableTunInbound;
+        SelectedLogLevel = NormalizeLogLevel(_runtimeOptions.LogLevel);
         _suppressRuntimeOptionUpdates = false;
     }
 
@@ -630,6 +621,8 @@ public partial class DashboardViewModel : PageViewModelBase
             AllowLanConnections = options.AllowLanConnections,
             EnableSystemProxy = options.EnableSystemProxy,
             EnableTunInbound = options.EnableTunInbound,
+            LogLevel = NormalizeLogLevel(options.LogLevel),
+            LogLevelInitialized = true,
             Initialized = true
         };
     }
@@ -712,6 +705,7 @@ public partial class DashboardViewModel : PageViewModelBase
             }
 
             root["inbounds"] = inbounds;
+            ApplyRuntimeLogLevel(root, NormalizeLogLevel(_runtimeOptions.LogLevel));
 
             var experimental = root["experimental"] as JsonObject ?? new JsonObject();
             root["experimental"] = experimental;
@@ -766,8 +760,7 @@ public partial class DashboardViewModel : PageViewModelBase
                 Encoder = carton.Core.Utilities.UnicodeJsonEncoder.Instance
             });
             await File.WriteAllTextAsync(runtimeConfigPath, json);
-            IsPortEditing = false;
-            LogInfo($"Runtime inbounds prepared: port={port}, lan={AllowLanConnections}, systemProxy={EnableSystemProxy}, tun={EnableTunInbound}");
+            LogInfo($"Runtime inbounds prepared: port={port}, lan={AllowLanConnections}, systemProxy={EnableSystemProxy}, tun={EnableTunInbound}, logLevel={NormalizeLogLevel(_runtimeOptions.LogLevel)}");
             return runtimeConfigPath;
         }
         catch (Exception ex)
@@ -939,10 +932,31 @@ public partial class DashboardViewModel : PageViewModelBase
         return true;
     }
 
+    private static void ApplyRuntimeLogLevel(JsonObject root, string logLevel)
+    {
+        if (root["log"] is not JsonObject logConfig)
+        {
+            root["log"] = new JsonObject
+            {
+                ["level"] = NormalizeLogLevel(logLevel),
+                ["disabled"] = false,
+                ["timestamp"] = true
+            };
+            return;
+        }
+
+        logConfig["level"] = NormalizeLogLevel(logLevel);
+    }
+
     private string GetString(string key, string fallback)
     {
         var value = _localizationService.GetString(key);
         return string.Equals(value, key, StringComparison.Ordinal) ? fallback : value;
+    }
+
+    private static string NormalizeLogLevel(string? level)
+    {
+        return SingBoxLogLevelHelper.Normalize(level);
     }
 
 }
