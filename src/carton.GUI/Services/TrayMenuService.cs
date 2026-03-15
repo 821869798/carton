@@ -29,11 +29,11 @@ public sealed class TrayMenuService : IDisposable
     private NativeMenuItem? _startStopItem;
     private NativeMenuItem? _profilesMenuItem;
     private NativeMenuItem? _groupsMenuItem;
+    private NativeMenuItem? _profilesEmptyMenuItem;
     private readonly Dictionary<GroupItemViewModel, NotifyCollectionChangedEventHandler> _groupItemsHandlers = new();
+    private readonly Dictionary<DashboardProfileItemViewModel, NativeMenuItem> _profileMenuItems = new();
     private int _profilesRefreshPending;
     private int _groupsRefreshPending;
-    private int _profilesMenuHash;
-    private bool _hasProfilesMenuHash;
     private int _groupsMenuHash;
     private bool _hasGroupsMenuHash;
     private bool _isInitialized;
@@ -108,6 +108,9 @@ public sealed class TrayMenuService : IDisposable
             _trayIcon.Dispose();
             _trayIcon = null;
         }
+
+        _profileMenuItems.Clear();
+        _profilesEmptyMenuItem = null;
 
         if (_application != null)
         {
@@ -275,39 +278,7 @@ public sealed class TrayMenuService : IDisposable
         void Update()
         {
             Interlocked.Exchange(ref _profilesRefreshPending, 0);
-            var menuHash = ComputeProfilesMenuHash();
-            if (_hasProfilesMenuHash && _profilesMenuHash == menuHash)
-            {
-                return;
-            }
-
-            var menu = new NativeMenu();
-            if (_dashboardViewModel.AvailableProfiles.Count == 0)
-            {
-                menu.Items.Add(new NativeMenuItem
-                {
-                    Header = _localizationService["Tray.Profiles.Empty"],
-                    IsEnabled = false
-                });
-            }
-            else
-            {
-                foreach (var profile in _dashboardViewModel.AvailableProfiles)
-                {
-                    var item = new NativeMenuItem
-                    {
-                        Header = profile.Name,
-                        IsChecked = profile.IsSelected,
-                        ToggleType = NativeMenuItemToggleType.Radio
-                    };
-                    item.Click += (_, _) => SelectProfile(profile);
-                    menu.Items.Add(item);
-                }
-            }
-
-            _profilesMenuItem.Menu = menu;
-            _profilesMenuHash = menuHash;
-            _hasProfilesMenuHash = true;
+            UpdateProfilesMenuItems();
         }
 
         RunOnUiThread(Update);
@@ -342,26 +313,29 @@ public sealed class TrayMenuService : IDisposable
         void Update()
         {
             Interlocked.Exchange(ref _groupsRefreshPending, 0);
-            var menuHash = ComputeGroupsMenuHash(groupsViewModel, _mainViewModel?.IsConnected == true);
+            var menu = new NativeMenu();
+            var isConnected = _mainViewModel?.IsConnected == true;
+            var hasGroups = groupsViewModel.Groups.Count > 0 && isConnected;
+            var menuHash = hasGroups
+                ? ComputeGroupsMenuHash(groupsViewModel, true)
+                : ComputeGroupsStateHash(isConnected, isEmptyState: isConnected);
+
             if (_hasGroupsMenuHash && _groupsMenuHash == menuHash)
             {
                 return;
             }
 
-            var menu = new NativeMenu();
-            var hasGroups = groupsViewModel.Groups.Count > 0 && _mainViewModel?.IsConnected == true;
-
             if (!hasGroups)
             {
                 menu.Items.Add(new NativeMenuItem
                 {
-                    Header = _localizationService[_mainViewModel?.IsConnected == true
+                    Header = _localizationService[isConnected
                         ? "Tray.Groups.Empty"
                         : "Tray.Groups.Unavailable"],
                     IsEnabled = false
                 });
                 _groupsMenuItem.Menu = menu;
-                _groupsMenuItem.IsEnabled = _mainViewModel?.IsConnected == true;
+                _groupsMenuItem.IsEnabled = isConnected;
                 _groupsMenuHash = menuHash;
                 _hasGroupsMenuHash = true;
                 return;
@@ -591,7 +565,6 @@ public sealed class TrayMenuService : IDisposable
 
     private void OnLanguageChanged(object? sender, AppLanguage e)
     {
-        _hasProfilesMenuHash = false;
         _hasGroupsMenuHash = false;
 
         RunOnUiThread(() =>
@@ -664,24 +637,107 @@ public sealed class TrayMenuService : IDisposable
         }
     }
 
-    private int ComputeProfilesMenuHash()
+    private void UpdateProfilesMenuItems()
     {
-        var hash = new HashCode();
-        hash.Add(_dashboardViewModel?.AvailableProfiles.Count ?? -1);
-
-        if (_dashboardViewModel == null || _dashboardViewModel.AvailableProfiles.Count == 0)
+        if (_profilesMenuItem == null || _dashboardViewModel == null)
         {
-            hash.Add(_localizationService["Tray.Profiles.Empty"]);
-            return hash.ToHashCode();
+            return;
         }
 
-        foreach (var profile in _dashboardViewModel.AvailableProfiles)
+        var menu = _profilesMenuItem.Menu ?? new NativeMenu();
+        _profilesMenuItem.Menu = menu;
+        var profiles = _dashboardViewModel.AvailableProfiles;
+
+        if (profiles.Count == 0)
         {
-            hash.Add(profile.Name, StringComparer.Ordinal);
-            hash.Add(profile.IsSelected);
+            _profileMenuItems.Clear();
+
+            if (_profilesEmptyMenuItem == null)
+            {
+                _profilesEmptyMenuItem = new NativeMenuItem
+                {
+                    IsEnabled = false
+                };
+            }
+
+            _profilesEmptyMenuItem.Header = _localizationService["Tray.Profiles.Empty"];
+
+            if (menu.Items.Count != 1 || !ReferenceEquals(menu.Items[0], _profilesEmptyMenuItem))
+            {
+                menu.Items.Clear();
+                menu.Items.Add(_profilesEmptyMenuItem);
+            }
+
+            return;
         }
 
-        return hash.ToHashCode();
+        _profilesEmptyMenuItem = null;
+
+        for (var i = menu.Items.Count - 1; i >= 0; i--)
+        {
+            if (menu.Items[i] is NativeMenuItem item &&
+                !_profileMenuItems.ContainsValue(item))
+            {
+                menu.Items.RemoveAt(i);
+            }
+        }
+
+        var activeProfiles = new HashSet<DashboardProfileItemViewModel>(profiles);
+        foreach (var entry in new List<KeyValuePair<DashboardProfileItemViewModel, NativeMenuItem>>(_profileMenuItems))
+        {
+            if (activeProfiles.Contains(entry.Key))
+            {
+                continue;
+            }
+
+            menu.Items.Remove(entry.Value);
+            _profileMenuItems.Remove(entry.Key);
+        }
+
+        for (var i = 0; i < profiles.Count; i++)
+        {
+            var profile = profiles[i];
+            if (!_profileMenuItems.TryGetValue(profile, out var item))
+            {
+                item = CreateProfileMenuItem(profile);
+                _profileMenuItems[profile] = item;
+            }
+
+            UpdateProfileMenuItem(item, profile);
+            MoveProfileMenuItem(menu, item, i);
+        }
+    }
+
+    private NativeMenuItem CreateProfileMenuItem(DashboardProfileItemViewModel profile)
+    {
+        var item = new NativeMenuItem
+        {
+            ToggleType = NativeMenuItemToggleType.Radio
+        };
+        item.Click += (_, _) => SelectProfile(profile);
+        return item;
+    }
+
+    private static void UpdateProfileMenuItem(NativeMenuItem item, DashboardProfileItemViewModel profile)
+    {
+        item.Header = profile.Name;
+        item.IsChecked = profile.IsSelected;
+    }
+
+    private static void MoveProfileMenuItem(NativeMenu menu, NativeMenuItem item, int targetIndex)
+    {
+        var currentIndex = menu.Items.IndexOf(item);
+        if (currentIndex == targetIndex)
+        {
+            return;
+        }
+
+        if (currentIndex >= 0)
+        {
+            menu.Items.RemoveAt(currentIndex);
+        }
+
+        menu.Items.Insert(targetIndex, item);
     }
 
     private int ComputeGroupsMenuHash(GroupsViewModel groupsViewModel, bool isConnected)
@@ -717,9 +773,15 @@ public sealed class TrayMenuService : IDisposable
 
     private int ComputeUnavailableGroupsMenuHash()
     {
+        return ComputeGroupsStateHash(isConnected: false, isEmptyState: false);
+    }
+
+    private int ComputeGroupsStateHash(bool isConnected, bool isEmptyState)
+    {
         var hash = new HashCode();
-        hash.Add(false);
-        hash.Add(_localizationService["Tray.Groups.Unavailable"]);
+        hash.Add(isConnected);
+        hash.Add(isEmptyState);
+        hash.Add(_localizationService[isConnected ? "Tray.Groups.Empty" : "Tray.Groups.Unavailable"]);
         return hash.ToHashCode();
     }
 }
