@@ -137,7 +137,6 @@ public partial class MainViewModel : ViewModelBase
         _logStore = new LogStore();
 
         _singBoxManager.StatusChanged += OnStatusChanged;
-        _singBoxManager.TrafficUpdated += OnTrafficUpdated;
         _singBoxManager.ManagerLogReceived += OnManagerLogReceived;
         _singBoxManager.LogReceived += OnLogReceived;
 
@@ -248,15 +247,6 @@ public partial class MainViewModel : ViewModelBase
         });
     }
 
-    private void OnTrafficUpdated(object? sender, TrafficInfo traffic)
-    {
-        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-        {
-            UploadSpeed = FormatBytes(traffic.Uplink) + "/s";
-            DownloadSpeed = FormatBytes(traffic.Downlink) + "/s";
-        });
-    }
-
     private void OnLogReceived(object? sender, string log)
     {
         _logStore.AddLog(log, LogSource.SingBox);
@@ -282,6 +272,10 @@ public partial class MainViewModel : ViewModelBase
         else if (previousPage == _connectionsViewModel)
         {
             _connectionsViewModel?.OnNavigatedFrom();
+        }
+        else if (previousPage == DashboardViewModel)
+        {
+            DashboardViewModel.OnNavigatedFrom();
         }
 
         MarkTransientPageInactive(previousPage?.PageType);
@@ -311,6 +305,7 @@ public partial class MainViewModel : ViewModelBase
 
         if (value == NavigationPage.Dashboard)
         {
+            DashboardViewModel.OnNavigatedTo();
             _ = DashboardViewModel.LoadProfilesAsync();
         }
 
@@ -340,6 +335,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         _isWindowVisible = isVisible;
+        DashboardViewModel.SetWindowVisible(isVisible);
         if (_activeGroupsViewModel != null)
         {
             _activeGroupsViewModel.SetWindowVisible(isVisible);

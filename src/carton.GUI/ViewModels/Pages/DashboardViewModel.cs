@@ -20,6 +20,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace carton.ViewModels;
@@ -39,6 +40,11 @@ public partial class DashboardViewModel : PageViewModelBase
     private bool _suppressRuntimeOptionUpdates;
     private bool _suppressSystemProxyApply;
     private readonly DispatcherTimer _sessionDurationTimer;
+    private bool _isOnPage = true;
+    private bool _isWindowVisible = true;
+    private bool _isLiveRefreshActive;
+    private int _pendingTrafficRefresh;
+    private int _pendingMemoryRefresh;
     private static readonly ObservableCollection<string> SupportedLogLevels = new(SingBoxLogLevelHelper.Levels);
     public override NavigationPage PageType => NavigationPage.Dashboard;
 
@@ -221,15 +227,34 @@ public partial class DashboardViewModel : PageViewModelBase
         _ = RefreshKernelVersionAsync();
         if (_singBoxManager.IsRunning)
         {
-            _ = RefreshClashModeAsync();
-            InitializeTrafficMetrics();
-            InitializeMemoryMetrics();
-            StartSessionDurationTimer();
-            UpdateSessionStartTime();
+            UpdateLiveRefreshState();
             _suppressSystemProxyApply = true;
             EnableSystemProxy = _runtimeOptions.EnableSystemProxy;
             _suppressSystemProxyApply = false;
         }
+    }
+
+    public void OnNavigatedTo()
+    {
+        _isOnPage = true;
+        UpdateLiveRefreshState();
+    }
+
+    public void OnNavigatedFrom()
+    {
+        _isOnPage = false;
+        UpdateLiveRefreshState();
+    }
+
+    public void SetWindowVisible(bool isVisible)
+    {
+        if (_isWindowVisible == isVisible)
+        {
+            return;
+        }
+
+        _isWindowVisible = isVisible;
+        UpdateLiveRefreshState();
     }
 
     private void OnStatusChanged(object? sender, ServiceStatus status)
@@ -258,19 +283,14 @@ public partial class DashboardViewModel : PageViewModelBase
 
         if (status == ServiceStatus.Running)
         {
-            StartSessionDurationTimer();
-            _ = RefreshClashModeAsync();
-            Dispatcher.UIThread.Post(() =>
-            {
-                InitializeTrafficMetrics();
-                InitializeMemoryMetrics();
-            });
+            Dispatcher.UIThread.Post(UpdateLiveRefreshState);
         }
         else
         {
             StopSessionDurationTimer();
             Dispatcher.UIThread.Post(() =>
             {
+                UpdateLiveRefreshState();
                 _clashConfigCache.Clear();
                 UpdateClashModeSelection(null);
                 ResetTrafficDisplay();
@@ -282,50 +302,65 @@ public partial class DashboardViewModel : PageViewModelBase
     {
         if (_singBoxManager == null)
         {
-            ResetTrafficDisplay();
+            ApplyTrafficMetrics(0, 0, 0, 0);
             return;
         }
 
         var state = _singBoxManager.State;
-        UploadSpeed = FormatBytes(state.UploadSpeed) + "/s";
-        DownloadSpeed = FormatBytes(state.DownloadSpeed) + "/s";
-        TotalUpload = FormatBytes(state.TotalUpload);
-        TotalDownload = FormatBytes(state.TotalDownload);
+        ApplyTrafficMetrics(state.UploadSpeed, state.DownloadSpeed, state.TotalUpload, state.TotalDownload);
     }
 
     private void OnTrafficUpdated(object? sender, TrafficInfo traffic)
     {
-        if (_singBoxManager == null)
+        if (_singBoxManager == null || !CanRefreshLiveMetrics())
+        {
+            return;
+        }
+
+        if (Interlocked.Exchange(ref _pendingTrafficRefresh, 1) == 1)
         {
             return;
         }
 
         Dispatcher.UIThread.Post(() =>
         {
-            UploadSpeed = FormatBytes(traffic.Uplink) + "/s";
-            DownloadSpeed = FormatBytes(traffic.Downlink) + "/s";
-            TotalUpload = FormatBytes(_singBoxManager.State.TotalUpload);
-            TotalDownload = FormatBytes(_singBoxManager.State.TotalDownload);
+            Interlocked.Exchange(ref _pendingTrafficRefresh, 0);
+            if (_singBoxManager == null || !CanRefreshLiveMetrics())
+            {
+                return;
+            }
+
+            var state = _singBoxManager.State;
+            ApplyTrafficMetrics(state.UploadSpeed, state.DownloadSpeed, state.TotalUpload, state.TotalDownload);
         });
     }
 
     private void InitializeMemoryMetrics()
     {
-        if (_singBoxManager == null)
-        {
-            MemoryUsage = "0 B";
-            return;
-        }
-
-        var memoryInUse = _singBoxManager.State.MemoryInUse;
-        MemoryUsage = FormatBytes(memoryInUse);
+        ApplyMemoryUsage(_singBoxManager?.State.MemoryInUse ?? 0);
     }
 
     private void OnMemoryUpdated(object? sender, long memoryInUse)
     {
+        if (!CanRefreshLiveMetrics())
+        {
+            return;
+        }
+
+        if (Interlocked.Exchange(ref _pendingMemoryRefresh, 1) == 1)
+        {
+            return;
+        }
+
         Dispatcher.UIThread.Post(() =>
         {
-            MemoryUsage = FormatBytes(memoryInUse);
+            Interlocked.Exchange(ref _pendingMemoryRefresh, 0);
+            if (!CanRefreshLiveMetrics())
+            {
+                return;
+            }
+
+            ApplyMemoryUsage(_singBoxManager?.State.MemoryInUse ?? memoryInUse);
         });
     }
     public async Task LoadProfilesAsync()
@@ -847,11 +882,8 @@ public partial class DashboardViewModel : PageViewModelBase
 
     private void ResetTrafficDisplay()
     {
-        UploadSpeed = "0 B/s";
-        DownloadSpeed = "0 B/s";
-        TotalUpload = "0 B";
-        TotalDownload = "0 B";
-        MemoryUsage = "0 B";
+        ApplyTrafficMetrics(0, 0, 0, 0);
+        ApplyMemoryUsage(0);
         SessionStartTimeText = "--";
     }
 
@@ -906,6 +938,56 @@ public partial class DashboardViewModel : PageViewModelBase
         {
             _sessionDurationTimer.Stop();
         }
+    }
+
+    private bool CanRefreshLiveMetrics()
+    {
+        return _singBoxManager is { IsRunning: true } && _isOnPage && _isWindowVisible;
+    }
+
+    private void UpdateLiveRefreshState()
+    {
+        var shouldRefresh = CanRefreshLiveMetrics();
+        if (_isLiveRefreshActive == shouldRefresh)
+        {
+            return;
+        }
+
+        _isLiveRefreshActive = shouldRefresh;
+        if (shouldRefresh)
+        {
+            StartSessionDurationTimer();
+            RefreshVisibleDashboardData();
+            return;
+        }
+
+        StopSessionDurationTimer();
+    }
+
+    private void RefreshVisibleDashboardData()
+    {
+        if (!CanRefreshLiveMetrics())
+        {
+            return;
+        }
+
+        UpdateSessionStartTime();
+        InitializeTrafficMetrics();
+        InitializeMemoryMetrics();
+        _ = RefreshClashModeAsync();
+    }
+
+    private void ApplyTrafficMetrics(long uploadSpeed, long downloadSpeed, long totalUpload, long totalDownload)
+    {
+        UploadSpeed = FormatBytes(uploadSpeed) + "/s";
+        DownloadSpeed = FormatBytes(downloadSpeed) + "/s";
+        TotalUpload = FormatBytes(totalUpload);
+        TotalDownload = FormatBytes(totalDownload);
+    }
+
+    private void ApplyMemoryUsage(long memoryInUse)
+    {
+        MemoryUsage = FormatBytes(memoryInUse);
     }
 
     private async Task<ClashConfigSnapshot?> GetClashConfigFromApiAsync()
