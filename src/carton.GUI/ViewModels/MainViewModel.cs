@@ -141,7 +141,7 @@ public partial class MainViewModel : ViewModelBase
         _singBoxManager.LogReceived += OnLogReceived;
 
         DashboardViewModel = new DashboardViewModel(_singBoxManager, _kernelManager, _profileManager, _configManager, _logStore.AddLog);
-        _lazyGroupsViewModel = new Lazy<GroupsViewModel>(() => new GroupsViewModel(_singBoxManager));
+        _lazyGroupsViewModel = new Lazy<GroupsViewModel>(() => new GroupsViewModel(_singBoxManager, _preferencesService));
         _appUpdateService = new AppUpdateService("https://github.com/821869798/carton", null, _logStore.AddLog);
         _transientPageUnloadTimer = new DispatcherTimer
         {

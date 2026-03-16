@@ -620,6 +620,7 @@ public class SingBoxManager : ISingBoxManager, IDisposable
                     Destination = ComposeDestination(host, destinationIp, destinationPort),
                     Domain = host,
                     Protocol = ResolveProtocol(conn, metadata),
+                    Chains = ReadChains(chains),
                     Outbound = ResolveOutbound(conn, chains),
                     Upload = ReadInt64(conn, "upload"),
                     Download = ReadInt64(conn, "download")
@@ -659,30 +660,38 @@ public class SingBoxManager : ISingBoxManager, IDisposable
             return outbound;
         }
 
-        if (chains.ValueKind == JsonValueKind.Array)
+        var tags = ReadChains(chains);
+        if (tags.Count > 0)
         {
-            var tags = new List<string>();
-            foreach (var chain in chains.EnumerateArray())
-            {
-                if (chain.ValueKind != JsonValueKind.String)
-                {
-                    continue;
-                }
-
-                var tag = chain.GetString();
-                if (!string.IsNullOrWhiteSpace(tag))
-                {
-                    tags.Add(tag);
-                }
-            }
-
-            if (tags.Count > 0)
-            {
-                return string.Join(" -> ", tags);
-            }
+            return string.Join(" -> ", tags);
         }
 
         return string.Empty;
+    }
+
+    private static List<string> ReadChains(JsonElement chains)
+    {
+        var tags = new List<string>();
+        if (chains.ValueKind != JsonValueKind.Array)
+        {
+            return tags;
+        }
+
+        foreach (var chain in chains.EnumerateArray())
+        {
+            if (chain.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            var tag = chain.GetString();
+            if (!string.IsNullOrWhiteSpace(tag))
+            {
+                tags.Add(tag);
+            }
+        }
+
+        return tags;
     }
 
     private static string ComposeEndpoint(string address, string port)

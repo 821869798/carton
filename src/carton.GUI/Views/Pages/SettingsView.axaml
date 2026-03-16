@@ -80,6 +80,7 @@
         <StackPanel Spacing="12">
           <CheckBox Content="{DynamicResource Settings.General.StartAtLogin}" IsChecked="{Binding StartAtLogin}"/>
           <CheckBox Content="{DynamicResource Settings.General.AutoStartOnLaunch}" IsChecked="{Binding AutoStartOnLaunch}"/>
+          <CheckBox Content="{DynamicResource Settings.General.AutoDisconnectConnectionsOnNodeSwitch}" IsChecked="{Binding AutoDisconnectConnectionsOnNodeSwitch}"/>
         </StackPanel>
       </Border>
 

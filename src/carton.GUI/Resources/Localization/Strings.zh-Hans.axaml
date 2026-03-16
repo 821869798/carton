@@ -143,6 +143,7 @@
 	<x:String x:Key="Settings.Section.General">通用</x:String>
 	<x:String x:Key="Settings.General.StartAtLogin">开机启动</x:String>
 	<x:String x:Key="Settings.General.AutoStartOnLaunch">打开 Carton 时自动启动</x:String>
+	<x:String x:Key="Settings.General.AutoDisconnectConnectionsOnNodeSwitch">切换节点时自动断开连接</x:String>
 
 	<x:String x:Key="Settings.Section.Update">应用更新</x:String>
 	<x:String x:Key="Settings.Update.Channel">更新通道</x:String>

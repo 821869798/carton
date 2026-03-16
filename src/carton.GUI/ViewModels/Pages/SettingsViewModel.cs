@@ -44,6 +44,9 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     private bool _autoStartOnLaunch;
 
     [ObservableProperty]
+    private bool _autoDisconnectConnectionsOnNodeSwitch = true;
+
+    [ObservableProperty]
     private AppTheme _selectedTheme = AppTheme.System;
 
     [ObservableProperty]
@@ -65,6 +68,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     }
 
     partial void OnAutoStartOnLaunchChanged(bool value) => UpdatePreference(p => p.AutoStartOnLaunch = value);
+    partial void OnAutoDisconnectConnectionsOnNodeSwitchChanged(bool value) => UpdatePreference(p => p.AutoDisconnectConnectionsOnNodeSwitch = value);
     partial void OnSelectedThemeChanged(AppTheme value) => OnThemeChanged(value);
     partial void OnSelectedLanguageChanged(LanguageOptionViewModel? value) => OnLanguageOptionChanged(value);
     partial void OnSelectedUpdateChannelChanged(string value) => OnUpdateChannelChanged(value);
@@ -291,6 +295,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         _suppressPreferenceUpdates = true;
         StartAtLogin = _currentPreferences.StartAtLogin;
         AutoStartOnLaunch = _currentPreferences.AutoStartOnLaunch;
+        AutoDisconnectConnectionsOnNodeSwitch = _currentPreferences.AutoDisconnectConnectionsOnNodeSwitch;
         SelectedTheme = _currentPreferences.Theme;
         SelectedLanguage = Languages.FirstOrDefault(l => l.Language == _currentPreferences.Language) ?? Languages.FirstOrDefault();
         SelectedUpdateChannel = UpdateChannelToString(_currentPreferences.UpdateChannel);
@@ -575,6 +580,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         _suppressPreferenceUpdates = true;
         StartAtLogin = _currentPreferences.StartAtLogin;
         AutoStartOnLaunch = _currentPreferences.AutoStartOnLaunch;
+        AutoDisconnectConnectionsOnNodeSwitch = _currentPreferences.AutoDisconnectConnectionsOnNodeSwitch;
         SelectedTheme = _currentPreferences.Theme;
         SelectedLanguage = Languages.FirstOrDefault(l => l.Language == _currentPreferences.Language) ?? Languages.FirstOrDefault();
         SelectedUpdateChannel = UpdateChannelToString(_currentPreferences.UpdateChannel);

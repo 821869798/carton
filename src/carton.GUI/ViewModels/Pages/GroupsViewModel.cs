@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -18,6 +19,7 @@ public partial class GroupsViewModel : PageViewModelBase
     private const string WaitingForSingBoxResourceKey = "Groups.Status.WaitingForSingBoxStart";
     private static readonly TimeSpan CacheExpirationInterval = TimeSpan.FromMinutes(1);
     private readonly ISingBoxManager? _singBoxManager;
+    private readonly IPreferencesService? _preferencesService;
     private readonly SemaphoreSlim _loadSemaphore = new(1, 1);
     private readonly ClashConfigCacheService _clashConfigCache;
     private readonly ObservableCollection<OutboundItemViewModel> _expandedProxyItems = new();
@@ -66,6 +68,11 @@ public partial class GroupsViewModel : PageViewModelBase
     {
         _singBoxManager = singBoxManager;
         _singBoxManager.StatusChanged += OnServiceStatusChanged;
+    }
+
+    public GroupsViewModel(ISingBoxManager singBoxManager, IPreferencesService preferencesService) : this(singBoxManager)
+    {
+        _preferencesService = preferencesService;
     }
 
     public void OnNavigatedTo()
@@ -399,6 +406,7 @@ public partial class GroupsViewModel : PageViewModelBase
         try
         {
             await _singBoxManager.SelectOutboundAsync(groupTag, outboundTag);
+            await DisconnectAffectedConnectionsAsync(groupTag);
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
@@ -420,6 +428,41 @@ public partial class GroupsViewModel : PageViewModelBase
                 StatusMessage = $"Failed to select outbound: {ex.Message}";
             });
         }
+    }
+
+    private async Task DisconnectAffectedConnectionsAsync(string groupTag)
+    {
+        if (_singBoxManager == null ||
+            string.IsNullOrWhiteSpace(groupTag) ||
+            !ShouldAutoDisconnectConnectionsOnNodeSwitch())
+        {
+            return;
+        }
+
+        var connections = await _singBoxManager.GetConnectionsAsync();
+        var affectedConnections = connections
+            .Where(connection =>
+                connection.Chains.Any(chain => string.Equals(chain, groupTag, StringComparison.OrdinalIgnoreCase)) ||
+                string.Equals(connection.Outbound, groupTag, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (affectedConnections.Length == 0)
+        {
+            return;
+        }
+
+        var disconnectTasks = new Task[affectedConnections.Length];
+        for (var i = 0; i < affectedConnections.Length; i++)
+        {
+            disconnectTasks[i] = _singBoxManager.CloseConnectionAsync(affectedConnections[i].Id);
+        }
+
+        await Task.WhenAll(disconnectTasks);
+    }
+
+    private bool ShouldAutoDisconnectConnectionsOnNodeSwitch()
+    {
+        return _preferencesService?.Load().AutoDisconnectConnectionsOnNodeSwitch ?? true;
     }
 
     private async Task RefreshGroupSelectionAsync(string groupTag)

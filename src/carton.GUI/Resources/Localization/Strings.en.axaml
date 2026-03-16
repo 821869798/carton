@@ -147,6 +147,7 @@
 	<x:String x:Key="Settings.Section.General">General</x:String>
 	<x:String x:Key="Settings.General.StartAtLogin">Start at Login</x:String>
 	<x:String x:Key="Settings.General.AutoStartOnLaunch">Auto start Carton when opened</x:String>
+	<x:String x:Key="Settings.General.AutoDisconnectConnectionsOnNodeSwitch">Auto disconnect connections on node switch</x:String>
 
 	<x:String x:Key="Settings.Section.Update">Updates</x:String>
 	<x:String x:Key="Settings.Update.Channel">Channel</x:String>

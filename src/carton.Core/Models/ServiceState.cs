@@ -49,6 +49,7 @@ public class ConnectionInfo
     public string Domain { get; set; } = string.Empty;
     public string Protocol { get; set; } = string.Empty;
     public string Outbound { get; set; } = string.Empty;
+    public List<string> Chains { get; set; } = new();
     public long Upload { get; set; }
     public long Download { get; set; }
 }
