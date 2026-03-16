@@ -9,6 +9,7 @@ The project is still in an early stage, but its direction is already clear:
 - Keep the experience close to official SFM to reduce migration cost
 - Prioritize performance, responsiveness, and startup speed
 - Add useful features without breaking the main workflow
+- Non-Electron, non-Tauri, and non-web-tech desktop shell
 
 > `carton` is not an official SFM client and is not affiliated with the sing-box team.
 
@@ -23,6 +24,8 @@ The project is still in an early stage, but its direction is already clear:
 ### Performance-oriented
 
 - Built with `Avalonia` and `.NET 10`
+- Non-Electron, non-Tauri, and non-web-tech desktop framework approach
+- One direct motivation is that many real-world apps built on those stacks can easily start at `200MB+` memory usage
 - Includes `NativeAOT` publish scripts for faster startup and lower runtime overhead
 - Uses on-demand page loading and background page release/refresh control to reduce long-running resource usage
 
