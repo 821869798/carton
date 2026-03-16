@@ -20,11 +20,12 @@ public partial class GroupsViewModel : PageViewModelBase
     private readonly ISingBoxManager? _singBoxManager;
     private readonly SemaphoreSlim _loadSemaphore = new(1, 1);
     private readonly ClashConfigCacheService _clashConfigCache;
-    private readonly Dictionary<string, List<OutboundItemViewModel>> _outboundItemsByTag = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, bool> _groupExpandStates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ObservableCollection<OutboundItemViewModel> _expandedProxyItems = new();
+    private readonly HashSet<string> _testingOutboundTags = new(StringComparer.OrdinalIgnoreCase);
     private readonly DispatcherTimer _urlTestRefreshTimer;
     private IReadOnlyList<GroupCacheSnapshot> _cachedGroups = Array.Empty<GroupCacheSnapshot>();
     private DateTimeOffset? _lastCacheRefreshAt;
+    private string? _expandedGroupName;
     private bool _isRefreshingUrlTestGroups;
     private bool _isPageActive;
     private bool _isWindowVisible = true;
@@ -100,7 +101,6 @@ public partial class GroupsViewModel : PageViewModelBase
     {
         _isPageActive = false;
         UpdateUrlTestRefreshState();
-        _groupExpandStates.Clear();
         ReleaseViewGroups(clearStatusMessage: false);
     }
 
@@ -144,6 +144,7 @@ public partial class GroupsViewModel : PageViewModelBase
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     ReleaseViewGroups(clearStatusMessage: false);
+                    _expandedGroupName = null;
                     _cachedGroups = Array.Empty<GroupCacheSnapshot>();
                     TrayGroups = Array.Empty<GroupMenuSnapshot>();
                     StatusMessage = LocalizationService.Instance[WaitingForSingBoxResourceKey];
@@ -225,6 +226,7 @@ public partial class GroupsViewModel : PageViewModelBase
             Dispatcher.UIThread.Post(() =>
             {
                 ReleaseViewGroups(clearStatusMessage: false);
+                _expandedGroupName = null;
                 _cachedGroups = Array.Empty<GroupCacheSnapshot>();
                 TrayGroups = Array.Empty<GroupMenuSnapshot>();
                 StatusMessage = status == ServiceStatus.Error
@@ -248,41 +250,68 @@ public partial class GroupsViewModel : PageViewModelBase
 
     private void UpdateTestDelayCommandStates()
     {
-        foreach (var group in Groups)
+        foreach (var item in _expandedProxyItems)
         {
-            foreach (var item in group.Items)
+            if (item.TestDelayCommand is AsyncRelayCommand asyncCommand)
             {
-                if (item.TestDelayCommand is AsyncRelayCommand asyncCommand)
-                {
-                    asyncCommand.NotifyCanExecuteChanged();
-                }
+                asyncCommand.NotifyCanExecuteChanged();
             }
         }
     }
 
     private void RecalculateEffectiveDelays()
     {
-        var selectedOutboundByGroup = new Dictionary<string, string>(Groups.Count, StringComparer.OrdinalIgnoreCase);
-        foreach (var group in Groups)
+        if (_cachedGroups.Count == 0)
         {
-            selectedOutboundByGroup[group.Name] = group.SelectedOutbound;
+            SyncExpandedProxyItemsFromCache();
+            UpdateTrayGroupsFromCache();
+            return;
         }
 
-        var rawDelayByTag = CreateRawDelayLookup(_outboundItemsByTag);
-        var resolvedDelayLookup = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var selectedOutboundByGroup = new Dictionary<string, string>(_cachedGroups.Count, StringComparer.OrdinalIgnoreCase);
+        var rawDelayByTag = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var group in Groups)
+        foreach (var group in _cachedGroups)
         {
+            selectedOutboundByGroup[group.Name] = group.SelectedOutbound;
             foreach (var item in group.Items)
             {
-                item.Delay = ResolveEffectiveDelay(
+                if (item.RawDelay > 0 && !rawDelayByTag.ContainsKey(item.Tag))
+                {
+                    rawDelayByTag[item.Tag] = item.RawDelay;
+                }
+            }
+        }
+
+        var resolvedDelayLookup = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var updatedGroups = new List<GroupCacheSnapshot>(_cachedGroups.Count);
+
+        foreach (var group in _cachedGroups)
+        {
+            var updatedItems = new List<OutboundCacheSnapshot>(group.Items.Count);
+            foreach (var item in group.Items)
+            {
+                var delay = ResolveEffectiveDelay(
                     item.Tag,
                     selectedOutboundByGroup,
                     rawDelayByTag,
                     resolvedDelayLookup,
                     new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+                updatedItems.Add(item with
+                {
+                    Delay = delay,
+                    IsSelected = string.Equals(item.Tag, group.SelectedOutbound, StringComparison.OrdinalIgnoreCase)
+                });
             }
+
+            updatedGroups.Add(group with { Items = updatedItems });
         }
+
+        _cachedGroups = updatedGroups;
+        SyncViewGroupsFromCache();
+        SyncExpandedProxyItemsFromCache();
+        UpdateTrayGroupsFromCache();
     }
 
     private static int ResolveEffectiveDelay(
@@ -379,16 +408,8 @@ public partial class GroupsViewModel : PageViewModelBase
                     group.SelectedOutbound = outboundTag;
                 }
 
+                UpdateCachedGroupSelection(groupTag, outboundTag);
                 RecalculateEffectiveDelays();
-                if (Groups.Count > 0)
-                {
-                    UpdateCachesFromLoadedGroups();
-                }
-                else
-                {
-                    UpdateCachedGroupSelection(groupTag, outboundTag);
-                    UpdateTrayGroupsFromCache();
-                }
                 StatusMessage = $"Selected {outboundTag} for {groupTag}";
             });
         }
@@ -445,29 +466,71 @@ public partial class GroupsViewModel : PageViewModelBase
 
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            foreach (var existingGroup in Groups)
-            {
-                if (!groupLookup.TryGetValue(existingGroup.Name, out var updatedGroup))
-                {
-                    continue;
-                }
-
-                existingGroup.SelectedOutbound = updatedGroup.Selected;
-                var updatedItemLookup = CreateOutboundItemLookup(updatedGroup);
-
-                foreach (var existingItem in existingGroup.Items)
-                {
-                    if (updatedItemLookup.TryGetValue(existingItem.Tag, out var updatedItem))
-                    {
-                        ApplySharedRawDelay(updatedItem.Tag, updatedItem.UrlTestDelay);
-                    }
-                }
-            }
-
+            MergeUpdatedGroupsIntoCache(groupLookup, tagSet);
             RecalculateEffectiveDelays();
-            UpdateCachesFromLoadedGroups();
             _lastCacheRefreshAt = DateTimeOffset.UtcNow;
         });
+    }
+
+    private void MergeUpdatedGroupsIntoCache(
+        IReadOnlyDictionary<string, OutboundGroup> groupLookup,
+        IReadOnlySet<string> updatedGroupTags)
+    {
+        if (_cachedGroups.Count == 0)
+        {
+            return;
+        }
+
+        var mergedGroups = new List<GroupCacheSnapshot>(_cachedGroups.Count);
+        var hasChanges = false;
+
+        foreach (var existingGroup in _cachedGroups)
+        {
+            if (!updatedGroupTags.Contains(existingGroup.Name) ||
+                !groupLookup.TryGetValue(existingGroup.Name, out var updatedGroup))
+            {
+                mergedGroups.Add(existingGroup);
+                continue;
+            }
+
+            var existingItemLookup = new Dictionary<string, OutboundCacheSnapshot>(existingGroup.Items.Count, StringComparer.OrdinalIgnoreCase);
+            foreach (var existingItem in existingGroup.Items)
+            {
+                existingItemLookup[existingItem.Tag] = existingItem;
+            }
+
+            var mergedItems = new List<OutboundCacheSnapshot>(updatedGroup.Items.Count);
+            foreach (var updatedItem in updatedGroup.Items)
+            {
+                existingItemLookup.TryGetValue(updatedItem.Tag, out var existingItem);
+
+                var mergedItem = new OutboundCacheSnapshot(
+                    updatedItem.Tag,
+                    updatedItem.Type,
+                    existingItem?.Delay ?? 0,
+                    updatedItem.UrlTestDelay,
+                    string.Equals(updatedItem.Tag, updatedGroup.Selected, StringComparison.OrdinalIgnoreCase));
+
+                mergedItems.Add(mergedItem);
+                hasChanges |= mergedItem != existingItem;
+            }
+
+            var mergedGroup = existingGroup with
+            {
+                Type = updatedGroup.Type,
+                SelectedOutbound = updatedGroup.Selected,
+                IsSelectable = !string.Equals(updatedGroup.Type, "URLTest", StringComparison.OrdinalIgnoreCase),
+                Items = mergedItems
+            };
+
+            mergedGroups.Add(mergedGroup);
+            hasChanges |= mergedGroup != existingGroup;
+        }
+
+        if (hasChanges)
+        {
+            _cachedGroups = mergedGroups;
+        }
     }
 
     private void OnUrlTestRefreshTimerTick(object? sender, EventArgs e)
@@ -523,11 +586,7 @@ public partial class GroupsViewModel : PageViewModelBase
             return;
         }
 
-        item.IsTesting = true;
-        if (item.TestDelayCommand is AsyncRelayCommand asyncCommand)
-        {
-            asyncCommand.NotifyCanExecuteChanged();
-        }
+        SetOutboundTestingState(item.Tag, true);
 
         StatusMessage = $"Testing {item.Tag}...";
 
@@ -535,29 +594,22 @@ public partial class GroupsViewModel : PageViewModelBase
         {
             var delays = await _singBoxManager.RunOutboundDelayTestsAsync(new[] { item.Tag });
             var delay = delays.TryGetValue(item.Tag, out var value) && value >= 0 ? value : 0;
-            ApplySharedRawDelay(item.Tag, delay);
+            UpdateCachedRawDelay(item.Tag, delay);
             RecalculateEffectiveDelays();
-            UpdateCachesFromLoadedGroups();
-            StatusMessage = item.Delay > 0
-                ? $"{item.Tag}: {item.Delay}ms"
+            var resolvedDelay = GetCachedEffectiveDelay(item.Tag);
+            StatusMessage = resolvedDelay > 0
+                ? $"{item.Tag}: {resolvedDelay}ms"
                 : $"{item.Tag}: timeout";
         }
         catch (Exception ex)
         {
-            ApplySharedRawDelay(item.Tag, 0);
+            UpdateCachedRawDelay(item.Tag, 0);
             RecalculateEffectiveDelays();
             StatusMessage = $"Failed to test {item.Tag}: {ex.Message}";
         }
         finally
         {
-            foreach (var sharedItem in GetSharedOutboundItems(item.Tag))
-            {
-                sharedItem.IsTesting = false;
-                if (sharedItem.TestDelayCommand is AsyncRelayCommand updatedCommand)
-                {
-                    updatedCommand.NotifyCanExecuteChanged();
-                }
-            }
+            SetOutboundTestingState(item.Tag, false);
         }
     }
 
@@ -592,59 +644,98 @@ public partial class GroupsViewModel : PageViewModelBase
         }
 
         SelectedGroup = group;
-        group.IsExpanded = !group.IsExpanded;
-        _groupExpandStates[group.Name] = group.IsExpanded;
+        if (string.Equals(_expandedGroupName, group.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            CollapseExpandedGroup();
+            return;
+        }
+
+        ExpandGroup(group);
     }
 
-    private void RegisterOutboundItem(OutboundItemViewModel item)
+    private void ExpandGroup(GroupItemViewModel group)
     {
-        if (string.IsNullOrWhiteSpace(item.Tag))
+        var cachedGroup = FindCachedGroup(group.Name);
+        if (cachedGroup == null)
         {
             return;
         }
 
-        if (!_outboundItemsByTag.TryGetValue(item.Tag, out var items))
-        {
-            items = new List<OutboundItemViewModel>();
-            _outboundItemsByTag[item.Tag] = items;
-        }
-
-        items.Add(item);
-        var sharedDelay = GetFirstPositiveRawDelay(items);
-        if (sharedDelay > 0 && item.RawDelay != sharedDelay)
-        {
-            item.RawDelay = sharedDelay;
-        }
+        CollapseExpandedGroup();
+        PopulateExpandedProxyItems(cachedGroup, group.SelectOutboundCommand);
+        group.Items = _expandedProxyItems;
+        group.IsExpanded = true;
+        _expandedGroupName = group.Name;
     }
 
-    private IReadOnlyList<OutboundItemViewModel> GetSharedOutboundItems(string tag)
+    private void CollapseExpandedGroup()
     {
-        return _outboundItemsByTag.TryGetValue(tag, out var items)
-            ? items
-            : Array.Empty<OutboundItemViewModel>();
+        CollapseExpandedGroup(clearExpandedGroupName: true);
     }
 
-    private int GetSharedRawDelay(string tag)
+    private void CollapseExpandedGroup(bool clearExpandedGroupName)
     {
-        var items = GetSharedOutboundItems(tag);
-        for (var i = 0; i < items.Count; i++)
+        if (!string.IsNullOrWhiteSpace(_expandedGroupName))
         {
-            var delay = items[i].RawDelay;
-            if (delay > 0)
+            var expandedGroup = FindGroupByName(_expandedGroupName);
+            if (expandedGroup != null)
             {
-                return delay;
+                expandedGroup.IsExpanded = false;
+                expandedGroup.Items = Array.Empty<OutboundItemViewModel>();
             }
         }
 
-        return 0;
+        _expandedProxyItems.Clear();
+        if (clearExpandedGroupName)
+        {
+            _expandedGroupName = null;
+        }
     }
 
-    private void ApplySharedRawDelay(string tag, int delay)
+    private void PopulateExpandedProxyItems(
+        GroupCacheSnapshot cachedGroup,
+        IAsyncRelayCommand<string>? selectOutboundCommand)
     {
-        foreach (var item in GetSharedOutboundItems(tag))
+        _expandedProxyItems.Clear();
+
+        foreach (var item in cachedGroup.Items)
         {
-            item.RawDelay = delay;
+            var viewModel = new OutboundItemViewModel
+            {
+                Tag = item.Tag,
+                Type = item.Type,
+                Delay = item.Delay,
+                RawDelay = item.RawDelay,
+                IsSelected = item.IsSelected,
+                IsTesting = _testingOutboundTags.Contains(item.Tag),
+                SelectOutboundCommand = selectOutboundCommand
+            };
+
+            viewModel.TestDelayCommand = new AsyncRelayCommand(
+                () => TestOutboundAsync(viewModel),
+                () => _singBoxManager?.IsRunning == true && !viewModel.IsTesting);
+
+            _expandedProxyItems.Add(viewModel);
         }
+    }
+
+    private IReadOnlyList<OutboundItemViewModel> GetExpandedOutboundItems(string tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag) || _expandedProxyItems.Count == 0)
+        {
+            return Array.Empty<OutboundItemViewModel>();
+        }
+
+        var items = new List<OutboundItemViewModel>();
+        foreach (var item in _expandedProxyItems)
+        {
+            if (string.Equals(item.Tag, tag, StringComparison.OrdinalIgnoreCase))
+            {
+                items.Add(item);
+            }
+        }
+
+        return items;
     }
 
     private async Task TestGroupAsync(
@@ -663,7 +754,13 @@ public partial class GroupsViewModel : PageViewModelBase
             return;
         }
 
-        var targets = BuildUniqueOutboundTargets(group.Items, onlyTestMissingDelay);
+        var cachedGroup = FindCachedGroup(group.Name);
+        if (cachedGroup == null)
+        {
+            return;
+        }
+
+        var targets = BuildUniqueOutboundTargets(cachedGroup.Items, onlyTestMissingDelay);
 
         if (targets.Count == 0)
         {
@@ -683,14 +780,7 @@ public partial class GroupsViewModel : PageViewModelBase
         {
             foreach (var item in targets)
             {
-                foreach (var sharedItem in GetSharedOutboundItems(item.Tag))
-                {
-                    sharedItem.IsTesting = true;
-                    if (sharedItem.TestDelayCommand is AsyncRelayCommand asyncCommand)
-                    {
-                        asyncCommand.NotifyCanExecuteChanged();
-                    }
-                }
+                SetOutboundTestingState(item.Tag, true);
             }
         });
 
@@ -713,7 +803,7 @@ public partial class GroupsViewModel : PageViewModelBase
 
             if (updateTestingState)
             {
-                UpdateCachesFromLoadedGroups();
+                UpdateTrayGroupsFromCache();
                 StatusMessage = $"Test completed: {group.Name}";
             }
         }
@@ -730,14 +820,7 @@ public partial class GroupsViewModel : PageViewModelBase
             {
                 foreach (var item in targets)
                 {
-                    foreach (var sharedItem in GetSharedOutboundItems(item.Tag))
-                    {
-                        sharedItem.IsTesting = false;
-                        if (sharedItem.TestDelayCommand is AsyncRelayCommand asyncCommand)
-                        {
-                            asyncCommand.NotifyCanExecuteChanged();
-                        }
-                    }
+                    SetOutboundTestingState(item.Tag, false);
                 }
 
                 if (updateTestingState)
@@ -758,7 +841,13 @@ public partial class GroupsViewModel : PageViewModelBase
             return;
         }
 
-        var targets = BuildUniqueOutboundTargets(group.Items, onlyTestMissingDelay: false);
+        var cachedGroup = FindCachedGroup(group.Name);
+        if (cachedGroup == null)
+        {
+            return;
+        }
+
+        var targets = BuildUniqueOutboundTargets(cachedGroup.Items, onlyTestMissingDelay: false);
 
         if (targets.Count == 0)
         {
@@ -784,14 +873,7 @@ public partial class GroupsViewModel : PageViewModelBase
         {
             foreach (var item in targets)
             {
-                foreach (var sharedItem in GetSharedOutboundItems(item.Tag))
-                {
-                    sharedItem.IsTesting = true;
-                    if (sharedItem.TestDelayCommand is AsyncRelayCommand asyncCommand)
-                    {
-                        asyncCommand.NotifyCanExecuteChanged();
-                    }
-                }
+                SetOutboundTestingState(item.Tag, true);
             }
         });
 
@@ -811,7 +893,7 @@ public partial class GroupsViewModel : PageViewModelBase
 
             if (updateTestingState)
             {
-                UpdateCachesFromLoadedGroups();
+                UpdateTrayGroupsFromCache();
                 StatusMessage = $"Test completed: {group.Name}";
             }
         }
@@ -828,14 +910,7 @@ public partial class GroupsViewModel : PageViewModelBase
             {
                 foreach (var item in targets)
                 {
-                    foreach (var sharedItem in GetSharedOutboundItems(item.Tag))
-                    {
-                        sharedItem.IsTesting = false;
-                        if (sharedItem.TestDelayCommand is AsyncRelayCommand asyncCommand)
-                        {
-                            asyncCommand.NotifyCanExecuteChanged();
-                        }
-                    }
+                    SetOutboundTestingState(item.Tag, false);
                 }
 
                 if (updateTestingState)
@@ -930,9 +1005,9 @@ public partial class GroupsViewModel : PageViewModelBase
     private List<string> GetUrlTestGroupNames()
     {
         var result = new List<string>();
-        for (var i = 0; i < Groups.Count; i++)
+        for (var i = 0; i < _cachedGroups.Count; i++)
         {
-            var group = Groups[i];
+            var group = _cachedGroups[i];
             if (string.Equals(group.Type, "URLTest", StringComparison.OrdinalIgnoreCase))
             {
                 result.Add(group.Name);
@@ -940,36 +1015,6 @@ public partial class GroupsViewModel : PageViewModelBase
         }
 
         return result;
-    }
-
-    private static int GetFirstPositiveRawDelay(IReadOnlyList<OutboundItemViewModel> items)
-    {
-        for (var i = 0; i < items.Count; i++)
-        {
-            var delay = items[i].RawDelay;
-            if (delay > 0)
-            {
-                return delay;
-            }
-        }
-
-        return 0;
-    }
-
-    private static Dictionary<string, int> CreateRawDelayLookup(
-        IReadOnlyDictionary<string, List<OutboundItemViewModel>> outboundItemsByTag)
-    {
-        var rawDelayByTag = new Dictionary<string, int>(outboundItemsByTag.Count, StringComparer.OrdinalIgnoreCase);
-        foreach (var entry in outboundItemsByTag)
-        {
-            var delay = GetFirstPositiveRawDelay(entry.Value);
-            if (delay > 0)
-            {
-                rawDelayByTag[entry.Key] = delay;
-            }
-        }
-
-        return rawDelayByTag;
     }
 
     private static Dictionary<string, int> CreateResolvedDelayLookup(IReadOnlyList<OutboundGroup> groups)
@@ -1027,40 +1072,20 @@ public partial class GroupsViewModel : PageViewModelBase
                 continue;
             }
 
-            var outboundItems = new List<OutboundItemViewModel>(cachedGroup.Items.Count);
-            for (var i = 0; i < cachedGroup.Items.Count; i++)
-            {
-                var item = cachedGroup.Items[i];
-                outboundItems.Add(new OutboundItemViewModel
-                {
-                    Tag = item.Tag,
-                    Type = item.Type,
-                    Delay = item.Delay,
-                    RawDelay = item.RawDelay
-                });
-            }
-
             var groupVm = new GroupItemViewModel
             {
                 Name = cachedGroup.Name,
                 Type = cachedGroup.Type,
                 SelectedOutbound = cachedGroup.SelectedOutbound,
-                Items = new ObservableCollection<OutboundItemViewModel>(outboundItems),
-                IsExpanded = _groupExpandStates.TryGetValue(cachedGroup.Name, out var isExpanded) && isExpanded
+                ItemCount = cachedGroup.Items.Count,
+                CollapsedPreviewItems = CreateCollapsedPreviewItems(cachedGroup.Items),
+                Items = Array.Empty<OutboundItemViewModel>(),
+                IsExpanded = false
             };
 
             groupVm.SelectOutboundCommand = new AsyncRelayCommand<string>(
                 outboundTag => SelectOutboundAsync(cachedGroup.Name, outboundTag),
                 _ => cachedGroup.IsSelectable && _singBoxManager?.IsRunning == true);
-
-            foreach (var item in groupVm.Items)
-            {
-                RegisterOutboundItem(item);
-                item.SelectOutboundCommand = groupVm.SelectOutboundCommand;
-                item.TestDelayCommand = new AsyncRelayCommand(
-                    () => TestOutboundAsync(item),
-                    () => _singBoxManager?.IsRunning == true && !item.IsTesting);
-            }
 
             groupVm.UpdateItemSelection();
 
@@ -1076,6 +1101,15 @@ public partial class GroupsViewModel : PageViewModelBase
 
             firstGroup ??= groupVm;
             Groups.Add(groupVm);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_expandedGroupName))
+        {
+            var expandedGroup = FindGroupByName(_expandedGroupName);
+            if (expandedGroup != null)
+            {
+                ExpandGroup(expandedGroup);
+            }
         }
 
         SelectedGroup = preferGlobalGroup
@@ -1113,37 +1147,26 @@ public partial class GroupsViewModel : PageViewModelBase
         return cachedGroups;
     }
 
-    private void UpdateCachesFromLoadedGroups()
+    private void SyncViewGroupsFromCache()
     {
         if (Groups.Count == 0)
         {
             return;
         }
 
-        var cachedGroups = new List<GroupCacheSnapshot>(Groups.Count);
         foreach (var group in Groups)
         {
-            var cachedItems = new List<OutboundCacheSnapshot>(group.Items.Count);
-            foreach (var item in group.Items)
+            var cachedGroup = FindCachedGroup(group.Name);
+            if (cachedGroup == null)
             {
-                cachedItems.Add(new OutboundCacheSnapshot(
-                    item.Tag,
-                    item.Type,
-                    item.Delay,
-                    item.RawDelay,
-                    item.IsSelected));
+                continue;
             }
 
-            cachedGroups.Add(new GroupCacheSnapshot(
-                group.Name,
-                group.Type,
-                group.SelectedOutbound,
-                !string.Equals(group.Type, "URLTest", StringComparison.OrdinalIgnoreCase),
-                cachedItems));
+            group.Type = cachedGroup.Type;
+            group.SelectedOutbound = cachedGroup.SelectedOutbound;
+            group.ItemCount = cachedGroup.Items.Count;
+            group.CollapsedPreviewItems = CreateCollapsedPreviewItems(cachedGroup.Items);
         }
-
-        _cachedGroups = cachedGroups;
-        UpdateTrayGroupsFromCache();
     }
 
     private void UpdateCachedGroupSelection(string groupTag, string outboundTag)
@@ -1164,20 +1187,14 @@ public partial class GroupsViewModel : PageViewModelBase
                 continue;
             }
 
-            var updatedItems = new List<OutboundCacheSnapshot>(group.Items.Count);
-            foreach (var item in group.Items)
-            {
-                var isSelected = string.Equals(item.Tag, outboundTag, StringComparison.OrdinalIgnoreCase);
-                updatedItems.Add(item with { IsSelected = isSelected });
-                hasChanges |= item.IsSelected != isSelected;
-            }
-
-            updatedGroups.Add(group with { SelectedOutbound = outboundTag, Items = updatedItems });
+            updatedGroups.Add(group with { SelectedOutbound = outboundTag });
+            hasChanges = true;
         }
 
         if (hasChanges)
         {
             _cachedGroups = updatedGroups;
+            SyncViewGroupsFromCache();
         }
     }
 
@@ -1210,7 +1227,7 @@ public partial class GroupsViewModel : PageViewModelBase
 
     private void ReleaseViewGroups(bool clearStatusMessage)
     {
-        _outboundItemsByTag.Clear();
+        CollapseExpandedGroup(clearExpandedGroupName: false);
         Groups.Clear();
         SelectedGroup = null;
         IsTestingGroup = false;
@@ -1227,11 +1244,12 @@ public partial class GroupsViewModel : PageViewModelBase
     }
 
     private List<OutboundItemViewModel> BuildUniqueOutboundTargets(
-        ObservableCollection<OutboundItemViewModel> items,
+        IReadOnlyList<OutboundCacheSnapshot> items,
         bool onlyTestMissingDelay)
     {
         var result = new List<OutboundItemViewModel>(items.Count);
         var seenTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var positiveRawDelayTags = onlyTestMissingDelay ? CreatePositiveRawDelayTagSet() : null;
 
         for (var i = 0; i < items.Count; i++)
         {
@@ -1241,36 +1259,48 @@ public partial class GroupsViewModel : PageViewModelBase
                 continue;
             }
 
-            if (onlyTestMissingDelay && HasPositiveSharedRawDelay(item.Tag))
+            if (positiveRawDelayTags?.Contains(item.Tag) == true)
             {
                 continue;
             }
 
-            result.Add(item);
+            result.Add(new OutboundItemViewModel
+            {
+                Tag = item.Tag,
+                Type = item.Type,
+                Delay = item.Delay,
+                RawDelay = item.RawDelay,
+                IsSelected = item.IsSelected
+            });
         }
 
         return result;
     }
 
-    private bool HasPositiveSharedRawDelay(string tag)
+    private HashSet<string> CreatePositiveRawDelayTagSet()
     {
-        var sharedItems = GetSharedOutboundItems(tag);
-        for (var i = 0; i < sharedItems.Count; i++)
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in _cachedGroups)
         {
-            if (sharedItems[i].RawDelay > 0)
+            foreach (var item in group.Items)
             {
-                return true;
+                if (item.RawDelay > 0)
+                {
+                    result.Add(item.Tag);
+                }
             }
         }
 
-        return false;
+        return result;
     }
 
     private bool AllTargetsHaveSharedDelay(List<OutboundItemViewModel> targets)
     {
+        var positiveRawDelayTags = CreatePositiveRawDelayTagSet();
         for (var i = 0; i < targets.Count; i++)
         {
-            if (!HasPositiveSharedRawDelay(targets[i].Tag))
+            if (!positiveRawDelayTags.Contains(targets[i].Tag))
             {
                 return false;
             }
@@ -1296,16 +1326,9 @@ public partial class GroupsViewModel : PageViewModelBase
 
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            ApplySharedRawDelay(item.Tag, delay);
+            UpdateCachedRawDelay(item.Tag, delay);
             RecalculateEffectiveDelays();
-            foreach (var sharedItem in GetSharedOutboundItems(item.Tag))
-            {
-                sharedItem.IsTesting = false;
-                if (sharedItem.TestDelayCommand is AsyncRelayCommand asyncCommand)
-                {
-                    asyncCommand.NotifyCanExecuteChanged();
-                }
-            }
+            SetOutboundTestingState(item.Tag, false);
 
             completedCounter[0]++;
             if (updateTestingState)
@@ -1329,16 +1352,154 @@ public partial class GroupsViewModel : PageViewModelBase
 
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            ApplySharedRawDelay(item.Tag, delay);
+            UpdateCachedRawDelay(item.Tag, delay);
             RecalculateEffectiveDelays();
         });
+    }
+
+    private GroupCacheSnapshot? FindCachedGroup(string groupName)
+    {
+        for (var i = 0; i < _cachedGroups.Count; i++)
+        {
+            var group = _cachedGroups[i];
+            if (string.Equals(group.Name, groupName, StringComparison.OrdinalIgnoreCase))
+            {
+                return group;
+            }
+        }
+
+        return null;
+    }
+
+    private void SyncExpandedProxyItemsFromCache()
+    {
+        if (string.IsNullOrWhiteSpace(_expandedGroupName))
+        {
+            _expandedProxyItems.Clear();
+            return;
+        }
+
+        var expandedGroup = FindGroupByName(_expandedGroupName);
+        var cachedGroup = FindCachedGroup(_expandedGroupName);
+        if (expandedGroup == null || cachedGroup == null)
+        {
+            CollapseExpandedGroup();
+            return;
+        }
+
+        var selectCommand = expandedGroup.SelectOutboundCommand;
+        _expandedProxyItems.Clear();
+        PopulateExpandedProxyItems(cachedGroup, selectCommand);
+        expandedGroup.Items = _expandedProxyItems;
+        expandedGroup.UpdateItemSelection();
+    }
+
+    private void UpdateCachedRawDelay(string tag, int delay)
+    {
+        if (_cachedGroups.Count == 0 || string.IsNullOrWhiteSpace(tag))
+        {
+            return;
+        }
+
+        var updatedGroups = new List<GroupCacheSnapshot>(_cachedGroups.Count);
+        var hasChanges = false;
+
+        foreach (var group in _cachedGroups)
+        {
+            var updatedItems = new List<OutboundCacheSnapshot>(group.Items.Count);
+            var groupChanged = false;
+
+            foreach (var item in group.Items)
+            {
+                if (string.Equals(item.Tag, tag, StringComparison.OrdinalIgnoreCase))
+                {
+                    var updatedItem = item with { RawDelay = delay };
+                    updatedItems.Add(updatedItem);
+                    groupChanged |= updatedItem != item;
+                }
+                else
+                {
+                    updatedItems.Add(item);
+                }
+            }
+
+            updatedGroups.Add(groupChanged ? group with { Items = updatedItems } : group);
+            hasChanges |= groupChanged;
+        }
+
+        if (hasChanges)
+        {
+            _cachedGroups = updatedGroups;
+        }
+    }
+
+    private void SetOutboundTestingState(string tag, bool isTesting)
+    {
+        if (string.IsNullOrWhiteSpace(tag))
+        {
+            return;
+        }
+
+        if (isTesting)
+        {
+            _testingOutboundTags.Add(tag);
+        }
+        else
+        {
+            _testingOutboundTags.Remove(tag);
+        }
+
+        foreach (var item in GetExpandedOutboundItems(tag))
+        {
+            item.IsTesting = isTesting;
+            if (item.TestDelayCommand is AsyncRelayCommand asyncCommand)
+            {
+                asyncCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    private int GetCachedEffectiveDelay(string tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag))
+        {
+            return 0;
+        }
+
+        foreach (var group in _cachedGroups)
+        {
+            foreach (var item in group.Items)
+            {
+                if (string.Equals(item.Tag, tag, StringComparison.OrdinalIgnoreCase))
+                {
+                    return item.Delay;
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    private static IReadOnlyList<OutboundCacheSnapshot> CreateCollapsedPreviewItems(IReadOnlyList<OutboundCacheSnapshot> items)
+    {
+        const int collapsedPreviewItemLimit = 24;
+        if (items.Count <= collapsedPreviewItemLimit)
+        {
+            return items;
+        }
+
+        var previewItems = new List<OutboundCacheSnapshot>(collapsedPreviewItemLimit);
+        for (var i = 0; i < collapsedPreviewItemLimit; i++)
+        {
+            previewItems.Add(items[i]);
+        }
+
+        return previewItems;
     }
 }
 
 public partial class GroupItemViewModel : ObservableObject
 {
-    private const int CollapsedPreviewItemLimit = 24;
-
     [ObservableProperty]
     private string _name = string.Empty;
 
@@ -1349,31 +1510,18 @@ public partial class GroupItemViewModel : ObservableObject
     private string _selectedOutbound = string.Empty;
 
     [ObservableProperty]
-    private ObservableCollection<OutboundItemViewModel> _items = new();
+    private int _itemCount;
+
+    [ObservableProperty]
+    private IReadOnlyList<OutboundCacheSnapshot> _collapsedPreviewItems = Array.Empty<OutboundCacheSnapshot>();
+
+    [ObservableProperty]
+    private IReadOnlyList<OutboundItemViewModel> _items = Array.Empty<OutboundItemViewModel>();
 
     [ObservableProperty]
     private bool _isExpanded;
 
     public IAsyncRelayCommand<string>? SelectOutboundCommand { get; set; }
-
-    public IReadOnlyList<OutboundItemViewModel> CollapsedPreviewItems
-    {
-        get
-        {
-            if (Items.Count <= CollapsedPreviewItemLimit)
-            {
-                return Items;
-            }
-
-            var previewItems = new List<OutboundItemViewModel>(CollapsedPreviewItemLimit);
-            for (var i = 0; i < CollapsedPreviewItemLimit; i++)
-            {
-                previewItems.Add(Items[i]);
-            }
-
-            return previewItems;
-        }
-    }
 
     public bool IsCollapsed => !IsExpanded;
 
@@ -1382,10 +1530,9 @@ public partial class GroupItemViewModel : ObservableObject
         UpdateItemSelection();
     }
 
-    partial void OnItemsChanged(ObservableCollection<OutboundItemViewModel> value)
+    partial void OnItemsChanged(IReadOnlyList<OutboundItemViewModel> value)
     {
         UpdateItemSelection();
-        OnPropertyChanged(nameof(CollapsedPreviewItems));
     }
 
     partial void OnIsExpandedChanged(bool value)

@@ -86,7 +86,7 @@
                       <Border Padding="7,1"
                               CornerRadius="999"
                               Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
-                        <TextBlock Text="{Binding Items.Count}"
+                        <TextBlock Text="{Binding ItemCount}"
                                    FontSize="11"
                                    VerticalAlignment="Center"
                                    Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
@@ -167,7 +167,7 @@
                       </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
-                      <DataTemplate DataType="vm:OutboundItemViewModel">
+                      <DataTemplate DataType="vm:OutboundCacheSnapshot">
                         <Grid Width="12"
                               Height="12"
                               ToolTip.Tip="{Binding Tag}">
