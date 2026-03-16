@@ -95,6 +95,7 @@ public partial class MainViewModel : ViewModelBase
     private LogsViewModel? _logsViewModel;
     private SettingsViewModel? _settingsViewModel;
     private GroupsViewModel? _activeGroupsViewModel;
+    private DateTime? _groupsInactiveAtUtc;
     private DateTime? _profilesInactiveAtUtc;
     private DateTime? _connectionsInactiveAtUtc;
     private DateTime? _logsInactiveAtUtc;
@@ -410,10 +411,27 @@ public partial class MainViewModel : ViewModelBase
     private void TryUnloadInactiveTransientPages()
     {
         var now = DateTime.UtcNow;
+        TryUnloadGroupsPage(now);
         TryUnloadTransientPage(NavigationPage.Profiles, _profilesInactiveAtUtc, _profilesViewModel, disposable => _profilesViewModel = null, now);
         TryUnloadTransientPage(NavigationPage.Connections, _connectionsInactiveAtUtc, _connectionsViewModel, disposable => _connectionsViewModel = null, now);
         TryUnloadTransientPage(NavigationPage.Logs, _logsInactiveAtUtc, _logsViewModel, disposable => _logsViewModel = null, now);
         TryUnloadTransientPage(NavigationPage.Settings, _settingsInactiveAtUtc, _settingsViewModel, disposable => _settingsViewModel = null, now);
+    }
+
+    private void TryUnloadGroupsPage(DateTime now)
+    {
+        if (SelectedPage == NavigationPage.Groups || _groupsInactiveAtUtc == null || _activeGroupsViewModel == null)
+        {
+            return;
+        }
+
+        if (now - _groupsInactiveAtUtc.Value < TransientPageUnloadDelay)
+        {
+            return;
+        }
+
+        _activeGroupsViewModel.TrimInactiveUi();
+        _groupsInactiveAtUtc = null;
     }
 
     private void TryUnloadTransientPage(NavigationPage page, DateTime? inactiveAtUtc, IDisposable? viewModel, Action<IDisposable> clearReference, DateTime now)
@@ -441,6 +459,9 @@ public partial class MainViewModel : ViewModelBase
         var inactiveAt = DateTime.UtcNow;
         switch (page)
         {
+            case NavigationPage.Groups:
+                _groupsInactiveAtUtc = inactiveAt;
+                break;
             case NavigationPage.Profiles:
                 _profilesInactiveAtUtc = inactiveAt;
                 break;
@@ -460,6 +481,9 @@ public partial class MainViewModel : ViewModelBase
     {
         switch (page)
         {
+            case NavigationPage.Groups:
+                _groupsInactiveAtUtc = null;
+                break;
             case NavigationPage.Profiles:
                 _profilesInactiveAtUtc = null;
                 break;

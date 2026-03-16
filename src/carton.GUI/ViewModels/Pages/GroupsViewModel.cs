@@ -108,6 +108,15 @@ public partial class GroupsViewModel : PageViewModelBase
     {
         _isPageActive = false;
         UpdateUrlTestRefreshState();
+    }
+
+    public void TrimInactiveUi()
+    {
+        if (_isPageActive)
+        {
+            return;
+        }
+
         ReleaseViewGroups(clearStatusMessage: false);
     }
 
