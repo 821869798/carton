@@ -128,6 +128,9 @@
 	<x:String x:Key="Dashboard.Startup.InvalidConfigJson">Invalid profile config JSON</x:String>
 	<x:String x:Key="Dashboard.Startup.UpdateInboundsFailed">Failed to update inbounds</x:String>
 	<x:String x:Key="Dashboard.Startup.PortOutOfRange">Port must be between 1 and 65535</x:String>
+	<x:String x:Key="Dashboard.Auth.PasswordTitle">Authorization Required</x:String>
+	<x:String x:Key="Dashboard.Auth.PasswordPrompt">Enter your password to authorize TUN mode (setuid will be set on sing-box)</x:String>
+	<x:String x:Key="Dashboard.Auth.Failed">Failed to authorize kernel</x:String>
 
 	<x:String x:Key="Settings.Section.Kernel">Kernel</x:String>
 	<x:String x:Key="Settings.Kernel.Version">Version</x:String>

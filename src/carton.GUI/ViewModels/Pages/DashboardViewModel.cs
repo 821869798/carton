@@ -487,6 +487,26 @@ public partial class DashboardViewModel : PageViewModelBase
 
         StartupStatus = _localizationService["Status.Starting"];
         LogInfo($"Starting with profile: {target.Name} ({target.Id})");
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && EnableTunInbound
+            && !await _singBoxManager.IsLinuxCoreAuthorizedAsync())
+        {
+            var password = await ShowLinuxPasswordDialogAsync();
+            if (password == null)
+            {
+                StartupStatus = string.Empty;
+                return;
+            }
+
+            var (authSuccess, authError) = await _singBoxManager.AuthorizeCoreOnLinuxAsync(password);
+            if (!authSuccess)
+            {
+                StartupStatus = GetString("Dashboard.Auth.Failed", "Failed to authorize kernel");
+                LogError($"Linux kernel authorization failed: {authError}");
+                return;
+            }
+        }
+
         var success = await _singBoxManager.StartAsync(runtimeConfigPath);
         if (success)
         {
@@ -568,6 +588,71 @@ public partial class DashboardViewModel : PageViewModelBase
     private void LogError(string message)
     {
         _logWriter?.Invoke($"[ERROR] {message}");
+    }
+
+    private async Task<string?> ShowLinuxPasswordDialogAsync()
+    {
+        var desktop = Avalonia.Application.Current?.ApplicationLifetime
+            as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+        var window = desktop?.MainWindow;
+        if (window == null) return null;
+
+        var dialog = new Avalonia.Controls.Window
+        {
+            Width = 400,
+            Height = 190,
+            CanResize = false,
+            WindowStartupLocation = Avalonia.Controls.WindowStartupLocation.CenterOwner,
+            Title = GetString("Dashboard.Auth.PasswordTitle", "Authorization Required")
+        };
+
+        var prompt = new Avalonia.Controls.TextBlock
+        {
+            Text = GetString("Dashboard.Auth.PasswordPrompt",
+                "Enter your password to authorize TUN mode (setuid will be set on sing-box)"),
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            Margin = new Avalonia.Thickness(0, 0, 0, 8)
+        };
+
+        var passwordBox = new Avalonia.Controls.TextBox
+        {
+            PasswordChar = '\u2022',
+            Watermark = "Password",
+            Margin = new Avalonia.Thickness(0, 0, 0, 16)
+        };
+
+        var okBtn = new Avalonia.Controls.Button
+        {
+            Content = GetString("Settings.Data.StoreInAppDir.ConfirmButton", "Confirm"),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            MinWidth = 110
+        };
+        okBtn.Click += (_, _) => dialog.Close(passwordBox.Text);
+
+        var cancelBtn = new Avalonia.Controls.Button
+        {
+            Content = GetString("Profiles.Form.CancelButton", "Cancel"),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            MinWidth = 110
+        };
+        cancelBtn.Click += (_, _) => dialog.Close(null);
+
+        var buttons = new Avalonia.Controls.StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 8,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right
+        };
+        buttons.Children.Add(cancelBtn);
+        buttons.Children.Add(okBtn);
+
+        dialog.Content = new Avalonia.Controls.StackPanel
+        {
+            Margin = new Avalonia.Thickness(20),
+            Children = { prompt, passwordBox, buttons }
+        };
+
+        return await dialog.ShowDialog<string?>(window);
     }
 
     private async Task<string?> EnsureProfileConfigPathForStartAsync(Profile profile, string profileName)

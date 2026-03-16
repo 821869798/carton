@@ -124,6 +124,9 @@
 	<x:String x:Key="Dashboard.Startup.InvalidConfigJson">配置文件 JSON 无效</x:String>
 	<x:String x:Key="Dashboard.Startup.UpdateInboundsFailed">更新入站配置失败</x:String>
 	<x:String x:Key="Dashboard.Startup.PortOutOfRange">端口必须在 1 到 65535 之间</x:String>
+	<x:String x:Key="Dashboard.Auth.PasswordTitle">需要授权</x:String>
+	<x:String x:Key="Dashboard.Auth.PasswordPrompt">请输入密码以授权 TUN 模式（将为 sing-box 设置 setuid 权限）</x:String>
+	<x:String x:Key="Dashboard.Auth.Failed">内核授权失败</x:String>
 
 	<x:String x:Key="Settings.Section.Kernel">内核</x:String>
 	<x:String x:Key="Settings.Kernel.Version">版本</x:String>
