@@ -217,7 +217,19 @@
 	<x:String x:Key="Settings.Section.About">About</x:String>
 	<x:String x:Key="Settings.About.Name">Carton</x:String>
 	<x:String x:Key="Settings.About.Version">Version</x:String>
-	<x:String x:Key="Settings.About.Description">A cross-platform proxy client powered by sing-box</x:String>
+  <x:String x:Key="Settings.About.Description">A cross-platform proxy client powered by sing-box</x:String>
 
-	<x:String x:Key="Common.Unknown">unknown</x:String>
+  <x:String x:Key="Status.KernelMissingStartFailed">Start failed. sing-box kernel is missing. Please install it from Settings.</x:String>
+  <x:String x:Key="Settings.Kernel.DownloadedPendingReplace">Kernel downloaded. Stop sing-box and click Update again when you are ready to replace it.</x:String>
+  <x:String x:Key="Settings.Kernel.ReplaceCancelled">Kernel replacement canceled.</x:String>
+  <x:String x:Key="Settings.Kernel.StoppingService">Stopping sing-box...</x:String>
+  <x:String x:Key="Settings.Kernel.StopServiceFailed">Failed to stop sing-box before replacing the kernel.</x:String>
+  <x:String x:Key="Settings.Kernel.ReplaceDialog.Title">Replace Kernel</x:String>
+  <x:String x:Key="Settings.Kernel.ReplaceDialog.MessageAfterDownload">Kernel download is complete. Replacing the kernel will stop the currently running sing-box. Replace it now?</x:String>
+  <x:String x:Key="Settings.Kernel.ReplaceDialog.Message">Replacing the kernel will stop the currently running sing-box. Continue?</x:String>
+  <x:String x:Key="Settings.Kernel.ReplaceDialog.ReplaceNow">Replace Now</x:String>
+  <x:String x:Key="Settings.Kernel.ReplaceDialog.Continue">Continue</x:String>
+  <x:String x:Key="Settings.Kernel.ReplaceDialog.Later">Later</x:String>
+
+  <x:String x:Key="Common.Unknown">unknown</x:String>
 </ResourceDictionary>

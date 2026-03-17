@@ -28,9 +28,11 @@ public partial class MainViewModel : ViewModelBase
     private readonly IAppUpdateService _appUpdateService;
     private readonly LogStore _logStore;
     private readonly DispatcherTimer _transientPageUnloadTimer;
+    private AppPreferences _currentPreferences = new();
     private bool _isShuttingDown;
     private bool _autoStartOnLaunch;
     private bool _isWindowVisible = true;
+    private bool _suppressPreferenceUpdates;
 
     [ObservableProperty]
     private PageViewModelBase _currentPage;
@@ -77,6 +79,23 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string _latestVersion = string.Empty;
 
+    [ObservableProperty]
+    private DownloadMirror _selectedKernelDownloadMirror = DownloadMirror.GitHub;
+
+    [ObservableProperty]
+    private bool _hasKernelDownloadFailed;
+
+    partial void OnSelectedKernelDownloadMirrorChanged(DownloadMirror value)
+    {
+        if (_suppressPreferenceUpdates)
+        {
+            return;
+        }
+
+        _currentPreferences.KernelDownloadMirror = value;
+        _preferencesService.Save(_currentPreferences);
+    }
+
     public ObservableCollection<NavigationPage> NavigationPages { get; } = new()
     {
         NavigationPage.Dashboard,
@@ -86,6 +105,8 @@ public partial class MainViewModel : ViewModelBase
         NavigationPage.Logs,
         NavigationPage.Settings
     };
+    public ObservableCollection<DownloadMirror> KernelDownloadMirrors { get; } = new(Enum.GetValues<DownloadMirror>());
+    public string KernelPrimaryActionText => HasKernelDownloadFailed ? GetLocalizedRetryLabel() : _localizationService["MainWindow.KernelDialog.Button.Download"];
 
     public DashboardViewModel DashboardViewModel { get; }
 
@@ -167,15 +188,21 @@ public partial class MainViewModel : ViewModelBase
                 var page = NavigationPages[i];
                 NavigationPages[i] = page;
             }
+
+            OnPropertyChanged(nameof(KernelPrimaryActionText));
         });
     }
 
     private async Task InitializeAsync()
     {
-        var preferences = _preferencesService.Load();
-        _localizationService.SetLanguage(preferences.Language);
-        _themeService.ApplyTheme(preferences.Theme);
-        _autoStartOnLaunch = preferences.AutoStartOnLaunch;
+        _currentPreferences = _preferencesService.Load();
+        _suppressPreferenceUpdates = true;
+        SelectedKernelDownloadMirror = _currentPreferences.KernelDownloadMirror;
+        _suppressPreferenceUpdates = false;
+
+        _localizationService.SetLanguage(_currentPreferences.Language);
+        _themeService.ApplyTheme(_currentPreferences.Theme);
+        _autoStartOnLaunch = _currentPreferences.AutoStartOnLaunch;
 
         var kernelInfo = await _kernelManager.GetInstalledKernelInfoAsync();
         IsKernelInstalled = kernelInfo != null;
@@ -213,6 +240,8 @@ public partial class MainViewModel : ViewModelBase
     {
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
+            HasKernelDownloadFailed = false;
+            OnPropertyChanged(nameof(KernelPrimaryActionText));
             DownloadProgress = e.Progress;
             DownloadStatus = $"{e.Status} {e.BytesReceived / 1024 / 1024:F1}MB / {e.TotalBytes / 1024 / 1024:F1}MB";
         });
@@ -223,6 +252,7 @@ public partial class MainViewModel : ViewModelBase
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             KernelStatus = status;
+            DownloadStatus = status;
         });
     }
 
@@ -395,6 +425,7 @@ public partial class MainViewModel : ViewModelBase
             _configManager,
             _profileManager,
             _kernelManager,
+            _singBoxManager,
             _preferencesService,
             _localizationService,
             _themeService,
@@ -512,6 +543,7 @@ public partial class MainViewModel : ViewModelBase
         {
             var latestVersion = await _kernelManager.GetLatestVersionAsync();
             LatestVersion = latestVersion ?? "unknown";
+            ConnectionStatus = GetMissingKernelStartMessage();
             ShowKernelDialog = true;
             return;
         }
@@ -561,7 +593,7 @@ public partial class MainViewModel : ViewModelBase
             var success = await _singBoxManager.StartAsync(configPath);
             if (!success)
             {
-                ConnectionStatus = _localizationService["Status.FailedStart"];
+                ConnectionStatus = BuildStartFailureStatus();
             }
         }
     }
@@ -657,26 +689,97 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private async Task DownloadKernel()
     {
+        DownloadProgress = 0;
+        HasKernelDownloadFailed = false;
+        OnPropertyChanged(nameof(KernelPrimaryActionText));
         IsDownloadingKernel = true;
         DownloadStatus = _localizationService["Status.KernelDownloading"];
 
-        var success = await _kernelManager.DownloadAndInstallAsync();
+        var success = await _kernelManager.DownloadAndInstallAsync(null, SelectedKernelDownloadMirror);
 
         IsDownloadingKernel = false;
 
         if (success)
         {
+            HasKernelDownloadFailed = false;
+            ClearKernelCacheFile();
             IsKernelInstalled = true;
             ShowKernelDialog = false;
             var kernelInfo = await _kernelManager.GetInstalledKernelInfoAsync();
             KernelStatus = $"sing-box {kernelInfo?.KernelVersion ?? "installed"}";
         }
+        else
+        {
+            HasKernelDownloadFailed = true;
+            DownloadStatus = BuildKernelDownloadFailureMessage();
+        }
+
+        OnPropertyChanged(nameof(KernelPrimaryActionText));
     }
 
     [RelayCommand]
     private void CloseKernelDialog()
     {
         ShowKernelDialog = false;
+    }
+
+    private string BuildStartFailureStatus()
+    {
+        if (!IsKernelInstalled || !_kernelManager.IsKernelInstalled)
+        {
+            return GetMissingKernelStartMessage();
+        }
+
+        var fallback = _localizationService["Status.FailedStart"];
+        var detail = _singBoxManager.State.ErrorMessage;
+        if (!string.IsNullOrWhiteSpace(detail) &&
+            detail.Contains("sing-box binary not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return GetMissingKernelStartMessage();
+        }
+
+        return string.IsNullOrWhiteSpace(detail) ? fallback : $"{fallback}: {detail}";
+    }
+
+    private string GetMissingKernelStartMessage()
+    {
+        return GetString(
+            "Status.KernelMissingStartFailed",
+            "Start failed. sing-box kernel is missing. Please install it from Settings.");
+    }
+
+    private string BuildKernelDownloadFailureMessage()
+    {
+        var detail = KernelStatus;
+        var hint = _localizationService.CurrentLanguage == AppLanguage.SimplifiedChinese
+            ? "可切换镜像后继续下载，或稍后下载。"
+            : "Switch mirrors to continue downloading, or download later.";
+
+        return string.IsNullOrWhiteSpace(detail) ? hint : $"{detail} {hint}";
+    }
+
+    private string GetLocalizedRetryLabel()
+    {
+        return _localizationService.CurrentLanguage == AppLanguage.SimplifiedChinese
+            ? "继续下载"
+            : "Continue";
+    }
+
+    private void ClearKernelCacheFile()
+    {
+        try
+        {
+            var baseDirectory = carton.Core.Utilities.PathHelper.GetAppDataPath();
+            var cacheDbPath = Path.Combine(baseDirectory, "cache.db");
+            if (File.Exists(cacheDbPath))
+            {
+                File.Delete(cacheDbPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            DownloadStatus = $"{KernelStatus} Failed to clear cache.db: {ex.Message}";
+        }
     }
 
     [RelayCommand]

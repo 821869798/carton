@@ -273,6 +273,11 @@ public partial class DashboardViewModel : PageViewModelBase
             OnPropertyChanged(nameof(ShowTerminalProxyButtons));
             UpdateSessionStartTime();
 
+            if (status == ServiceStatus.Error)
+            {
+                StartupStatus = BuildStartFailureStatus();
+            }
+
             _suppressSystemProxyApply = true;
             if (status == ServiceStatus.Running)
             {
@@ -432,6 +437,13 @@ public partial class DashboardViewModel : PageViewModelBase
             return;
         }
 
+        if (_kernelManager?.IsKernelInstalled != true)
+        {
+            StartupStatus = GetMissingKernelStartMessage();
+            LogError(StartupStatus);
+            return;
+        }
+
         var target = SelectedStartupProfile ?? AvailableProfiles.FirstOrDefault();
         if (target == null)
         {
@@ -512,10 +524,10 @@ public partial class DashboardViewModel : PageViewModelBase
         {
             ApplyRunningSystemProxy(EnableSystemProxy);
         }
-        StartupStatus = success ? string.Empty : _localizationService["Status.FailedStart"];
+        StartupStatus = success ? string.Empty : BuildStartFailureStatus();
         if (!success)
         {
-            LogError("Failed to start sing-box");
+            LogError(StartupStatus);
         }
     }
 
@@ -1233,6 +1245,31 @@ public partial class DashboardViewModel : PageViewModelBase
     {
         var value = _localizationService.GetString(key);
         return string.Equals(value, key, StringComparison.Ordinal) ? fallback : value;
+    }
+
+    private string BuildStartFailureStatus()
+    {
+        if (_kernelManager?.IsKernelInstalled != true)
+        {
+            return GetMissingKernelStartMessage();
+        }
+
+        var fallback = _localizationService["Status.FailedStart"];
+        var detail = _singBoxManager?.State.ErrorMessage;
+        if (!string.IsNullOrWhiteSpace(detail) &&
+            detail.Contains("sing-box binary not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return GetMissingKernelStartMessage();
+        }
+
+        return string.IsNullOrWhiteSpace(detail) ? fallback : $"{fallback}: {detail}";
+    }
+
+    private string GetMissingKernelStartMessage()
+    {
+        return GetString(
+            "Status.KernelMissingStartFailed",
+            "Start failed. sing-box kernel is missing. Please install it from Settings.");
     }
 
     private static string NormalizeLogLevel(string? level)

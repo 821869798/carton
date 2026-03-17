@@ -97,6 +97,7 @@
 
             <TextBlock Text="{Binding StartupStatus}"
                        IsVisible="{Binding StartupStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                       TextWrapping="Wrap"
                        Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
           </StackPanel>
         </StackPanel>
@@ -183,6 +184,7 @@
                        FontSize="11"
                        HorizontalAlignment="Right"
                        VerticalAlignment="Center"
+                       TextWrapping="Wrap"
                        Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
           </Grid>
         </Border>

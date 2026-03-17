@@ -213,10 +213,22 @@
 	<x:String x:Key="Settings.Section.About">关于</x:String>
 	<x:String x:Key="Settings.About.Name">Carton</x:String>
 	<x:String x:Key="Settings.About.Version">版本</x:String>
-	<x:String x:Key="Settings.About.Description">基于 sing-box 的跨平台代理客户端</x:String>
+  <x:String x:Key="Settings.About.Description">基于 sing-box 的跨平台代理客户端</x:String>
 
-	<x:String x:Key="Common.Unknown">未知</x:String>
-	<x:String x:Key="Dashboard.KernelMemory.Title">内核和内存</x:String>
-	<x:String x:Key="Dashboard.KernelMemory.KernelVersion">内核版本</x:String>
+  <x:String x:Key="Status.KernelMissingStartFailed">启动失败，sing-box内核不存在，请前往设置页面安装</x:String>
+  <x:String x:Key="Settings.Kernel.DownloadedPendingReplace">内核已下载完成。准备替换时请先停止 sing-box，然后再次点击更新。</x:String>
+  <x:String x:Key="Settings.Kernel.ReplaceCancelled">已取消替换内核。</x:String>
+  <x:String x:Key="Settings.Kernel.StoppingService">正在停止 sing-box...</x:String>
+  <x:String x:Key="Settings.Kernel.StopServiceFailed">替换内核前停止 sing-box 失败。</x:String>
+  <x:String x:Key="Settings.Kernel.ReplaceDialog.Title">替换内核</x:String>
+  <x:String x:Key="Settings.Kernel.ReplaceDialog.MessageAfterDownload">内核已经下载完成。替换内核会先停止当前正在运行的 sing-box，现在立即替换吗？</x:String>
+  <x:String x:Key="Settings.Kernel.ReplaceDialog.Message">替换内核会先停止当前正在运行的 sing-box，是否继续？</x:String>
+  <x:String x:Key="Settings.Kernel.ReplaceDialog.ReplaceNow">立即替换</x:String>
+  <x:String x:Key="Settings.Kernel.ReplaceDialog.Continue">继续</x:String>
+  <x:String x:Key="Settings.Kernel.ReplaceDialog.Later">稍后</x:String>
+
+  <x:String x:Key="Common.Unknown">未知</x:String>
+  <x:String x:Key="Dashboard.KernelMemory.Title">内核和内存</x:String>
+  <x:String x:Key="Dashboard.KernelMemory.KernelVersion">内核版本</x:String>
 	<x:String x:Key="Dashboard.KernelMemory.MemoryUsage">内存使用</x:String>
 </ResourceDictionary>

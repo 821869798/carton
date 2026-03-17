@@ -90,16 +90,18 @@
       </Grid>
     </SplitView>
 
-    <OverlayLayer Grid.Row="0" Grid.RowSpan="2">
-      <Panel IsVisible="{Binding ShowKernelDialog}">
-        <Border Background="#80000000"/>
-        <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
-                CornerRadius="8"
-                Padding="24"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                MinWidth="400">
-          <StackPanel Spacing="16">
+    <Grid Grid.Row="0"
+          Grid.RowSpan="2"
+          IsVisible="{Binding ShowKernelDialog}"
+          Background="#80000000">
+      <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+              CornerRadius="8"
+              Padding="24"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Center"
+              MinWidth="400"
+              MaxWidth="560">
+        <StackPanel Spacing="16">
             <TextBlock Text="{DynamicResource MainWindow.KernelDialog.Title}" FontSize="18" FontWeight="SemiBold"/>
             <TextBlock TextWrapping="Wrap">
               <Run Text="{DynamicResource MainWindow.KernelDialog.DescriptionLine1}"/>
@@ -107,20 +109,31 @@
               <Run Text="{DynamicResource MainWindow.KernelDialog.LatestVersionPrefix}"/>
               <Run Text="{Binding LatestVersion}" FontWeight="Medium"/>
             </TextBlock>
-            
+
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+              <TextBlock Grid.Column="0"
+                         Text="{DynamicResource Settings.Kernel.Mirror}"
+                         VerticalAlignment="Center"/>
+              <ComboBox Grid.Column="1"
+                        ItemsSource="{Binding KernelDownloadMirrors}"
+                        SelectedItem="{Binding SelectedKernelDownloadMirror}"
+                        MinWidth="150"
+                        IsEnabled="{Binding !IsDownloadingKernel}"/>
+            </Grid>
+             
             <ProgressBar IsIndeterminate="False"
                          Value="{Binding DownloadProgress}"
                          Maximum="100"
                          IsVisible="{Binding IsDownloadingKernel}"
                          Height="4"/>
-            
+             
             <TextBlock Text="{Binding DownloadStatus}"
-                       IsVisible="{Binding IsDownloadingKernel}"
+                       TextWrapping="Wrap"
                        FontSize="12"
                        Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
 
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-              <Button Content="{DynamicResource MainWindow.KernelDialog.Button.Download}" 
+              <Button Content="{Binding KernelPrimaryActionText}" 
                       Command="{Binding DownloadKernelCommand}"
                       Classes="accent"
                       IsEnabled="{Binding !IsDownloadingKernel}"/>
@@ -128,10 +141,9 @@
                       Command="{Binding CloseKernelDialogCommand}"
                       IsEnabled="{Binding !IsDownloadingKernel}"/>
             </StackPanel>
-          </StackPanel>
-        </Border>
-      </Panel>
-    </OverlayLayer>
+        </StackPanel>
+      </Border>
+    </Grid>
   </Grid>
 
 </Window>

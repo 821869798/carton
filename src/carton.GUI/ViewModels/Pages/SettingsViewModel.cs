@@ -24,6 +24,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     private readonly IConfigManager? _configManager;
     private readonly IProfileManager? _profileManager;
     private readonly IKernelManager? _kernelManager;
+    private readonly ISingBoxManager? _singBoxManager;
     private readonly IPreferencesService? _preferencesService;
     private readonly ILocalizationService? _localizationService;
     private readonly IThemeService? _themeService;
@@ -33,6 +34,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     private GitHubReleaseInfo? _latestReleaseInfo;
     private bool _requiresManualAppUpdate;
     private AppPreferences _currentPreferences = new();
+    private KernelPackageDownloadResult? _pendingKernelPackage;
     private bool _suppressPreferenceUpdates;
 
     public override NavigationPage PageType => NavigationPage.Settings;
@@ -73,7 +75,11 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     partial void OnSelectedLanguageChanged(LanguageOptionViewModel? value) => OnLanguageOptionChanged(value);
     partial void OnSelectedUpdateChannelChanged(string value) => OnUpdateChannelChanged(value);
     partial void OnAutoCheckAppUpdatesChanged(bool value) => UpdatePreference(p => p.AutoCheckAppUpdates = value);
-    partial void OnSelectedKernelDownloadMirrorChanged(DownloadMirror value) => UpdatePreference(p => p.KernelDownloadMirror = value);
+    partial void OnSelectedKernelDownloadMirrorChanged(DownloadMirror value)
+    {
+        ClearPendingKernelPackage();
+        UpdatePreference(p => p.KernelDownloadMirror = value);
+    }
 
     [ObservableProperty]
     private ObservableCollection<ProfileViewModel> _profiles = new();
@@ -161,6 +167,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         IConfigManager configManager,
         IProfileManager profileManager,
         IKernelManager kernelManager,
+        ISingBoxManager singBoxManager,
         IPreferencesService preferencesService,
         ILocalizationService localizationService,
         IThemeService themeService,
@@ -170,6 +177,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         _configManager = configManager;
         _profileManager = profileManager;
         _kernelManager = kernelManager;
+        _singBoxManager = singBoxManager;
         _preferencesService = preferencesService;
         _localizationService = localizationService;
         _themeService = themeService;
@@ -358,9 +366,21 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         if (_kernelManager == null || IsUpdatingKernel) return;
 
         IsUpdatingKernel = true;
-        UpdateStatus = GetString("Settings.Kernel.StartingDownload", "Starting download...");
+        var package = _pendingKernelPackage;
+        if (package == null || !File.Exists(package.TempFilePath))
+        {
+            UpdateStatus = GetString("Settings.Kernel.StartingDownload", "Starting download...");
+            package = await _kernelManager.DownloadPackageAsync(null, SelectedKernelDownloadMirror);
+            if (package == null)
+            {
+                IsUpdatingKernel = false;
+                return;
+            }
 
-        var success = await _kernelManager.DownloadAndInstallAsync(null, SelectedKernelDownloadMirror);
+            _pendingKernelPackage = package;
+        }
+
+        var success = await ApplyPendingKernelPackageAsync(package);
 
         IsUpdatingKernel = false;
 
@@ -399,6 +419,13 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         IsUpdatingKernel = true;
         UpdateStatus = GetString("Settings.Kernel.InstallingCustom", "Installing custom kernel...");
 
+        var readyToReplace = await PrepareForKernelReplacementAsync(requirePromptWhenRunning: true, promptAfterDownload: false);
+        if (!readyToReplace)
+        {
+            IsUpdatingKernel = false;
+            return;
+        }
+
         var success = await _kernelManager.InstallCustomKernelAsync(file.Path.LocalPath);
 
         IsUpdatingKernel = false;
@@ -415,8 +442,158 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     {
         if (_kernelManager == null) return;
 
-        await _kernelManager.UninstallAsync();
+        var success = await _kernelManager.UninstallAsync();
+        if (success)
+        {
+            ClearKernelCacheFile();
+        }
+
         await RefreshKernelInfoAsync();
+    }
+
+    private async Task<bool> ApplyPendingKernelPackageAsync(KernelPackageDownloadResult package)
+    {
+        if (_kernelManager == null)
+        {
+            return false;
+        }
+
+        if (!File.Exists(package.TempFilePath))
+        {
+            _pendingKernelPackage = null;
+            UpdateStatus = GetString("Settings.Kernel.DownloadMissing", "Downloaded kernel package is missing. Please download again.");
+            return false;
+        }
+
+        var promptAfterDownload = _singBoxManager?.IsRunning == true;
+        var readyToReplace = await PrepareForKernelReplacementAsync(requirePromptWhenRunning: true, promptAfterDownload: promptAfterDownload);
+        if (!readyToReplace)
+        {
+            return false;
+        }
+
+        var success = await _kernelManager.InstallPackageAsync(package);
+        if (success)
+        {
+            ClearPendingKernelPackage();
+        }
+
+        return success;
+    }
+
+    private async Task<bool> PrepareForKernelReplacementAsync(bool requirePromptWhenRunning, bool promptAfterDownload)
+    {
+        if (_singBoxManager?.IsRunning != true)
+        {
+            return true;
+        }
+
+        if (requirePromptWhenRunning)
+        {
+            var shouldReplace = await ShowKernelReplacementDialogAsync(promptAfterDownload);
+            if (!shouldReplace)
+            {
+                UpdateStatus = promptAfterDownload
+                    ? GetString("Settings.Kernel.DownloadedPendingReplace", "Kernel downloaded. Stop sing-box and click Update again when you are ready to replace it.")
+                    : GetString("Settings.Kernel.ReplaceCancelled", "Kernel replacement canceled.");
+                return false;
+            }
+        }
+
+        UpdateStatus = GetString("Settings.Kernel.StoppingService", "Stopping sing-box...");
+        await _singBoxManager.StopAsync();
+
+        if (_singBoxManager.IsRunning)
+        {
+            UpdateStatus = GetString("Settings.Kernel.StopServiceFailed", "Failed to stop sing-box before replacing the kernel.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task<bool> ShowKernelReplacementDialogAsync(bool promptAfterDownload)
+    {
+        var desktop = Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+        var owner = desktop?.MainWindow;
+        if (owner == null)
+        {
+            return true;
+        }
+
+        var dialog = new Window
+        {
+            Width = 460,
+            Height = 210,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Title = GetString("Settings.Kernel.ReplaceDialog.Title", "Replace Kernel")
+        };
+
+        var message = new TextBlock
+        {
+            Text = promptAfterDownload
+                ? GetString("Settings.Kernel.ReplaceDialog.MessageAfterDownload", "Kernel download is complete. Replacing the kernel will stop the currently running sing-box. Replace it now?")
+                : GetString("Settings.Kernel.ReplaceDialog.Message", "Replacing the kernel will stop the currently running sing-box. Continue?"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 16)
+        };
+
+        var confirmButton = new Button
+        {
+            Content = promptAfterDownload
+                ? GetString("Settings.Kernel.ReplaceDialog.ReplaceNow", "Replace Now")
+                : GetString("Settings.Kernel.ReplaceDialog.Continue", "Continue"),
+            MinWidth = 110
+        };
+        confirmButton.Click += (_, _) => dialog.Close(true);
+
+        var laterButton = new Button
+        {
+            Content = GetString("Settings.Kernel.ReplaceDialog.Later", "Later"),
+            MinWidth = 90
+        };
+        laterButton.Click += (_, _) => dialog.Close(false);
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 8,
+            Children =
+            {
+                laterButton,
+                confirmButton
+            }
+        };
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(20),
+            Children =
+            {
+                message,
+                buttons
+            }
+        };
+
+        return await dialog.ShowDialog<bool>(owner);
+    }
+
+    private void ClearPendingKernelPackage()
+    {
+        if (_pendingKernelPackage != null && File.Exists(_pendingKernelPackage.TempFilePath))
+        {
+            try
+            {
+                File.Delete(_pendingKernelPackage.TempFilePath);
+            }
+            catch
+            {
+            }
+        }
+
+        _pendingKernelPackage = null;
     }
 
     [RelayCommand]

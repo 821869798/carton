@@ -17,6 +17,8 @@ public interface IKernelManager
 
     Task<KernelInfo?> GetInstalledKernelInfoAsync();
     Task<string?> GetLatestVersionAsync();
+    Task<KernelPackageDownloadResult?> DownloadPackageAsync(string? version = null, DownloadMirror mirror = DownloadMirror.GitHub);
+    Task<bool> InstallPackageAsync(KernelPackageDownloadResult package);
     Task<bool> DownloadAndInstallAsync(string? version = null, DownloadMirror mirror = DownloadMirror.GitHub);
     Task<bool> InstallCustomKernelAsync(string sourcePath);
     Task<bool> UninstallAsync();
@@ -29,6 +31,12 @@ public class DownloadProgress
     public long TotalBytes { get; set; }
     public double Progress => TotalBytes > 0 ? (double)BytesReceived / TotalBytes * 100 : 0;
     public string Status { get; set; } = string.Empty;
+}
+
+public sealed class KernelPackageDownloadResult
+{
+    public string TempFilePath { get; init; } = string.Empty;
+    public string VersionLabel { get; init; } = string.Empty;
 }
 
 public class KernelManager : IKernelManager
@@ -164,84 +172,13 @@ public class KernelManager : IKernelManager
 
     public async Task<bool> DownloadAndInstallAsync(string? version = null, DownloadMirror mirror = DownloadMirror.GitHub)
     {
-        try
+        var package = await DownloadPackageAsync(version, mirror);
+        if (package == null)
         {
-            if (mirror == DownloadMirror.Ref1nd)
-                return await DownloadAndInstallFromRef1ndAsync();
-
-            version ??= await GetLatestVersionAsync();
-            if (string.IsNullOrEmpty(version))
-            {
-                StatusChanged?.Invoke(this, "Failed to get latest version");
-                return false;
-            }
-
-            StatusChanged?.Invoke(this, $"Downloading sing-box {version}...");
-
-            var platform = PlatformInfo.Current;
-            var assetName = $"sing-box-{version.TrimStart('v')}-{platform.OS}-{platform.Arch}";
-            var archiveExt = platform.OS == "windows" ? ".zip" : ".tar.gz";
-            var originalUrl = $"{GitHubDownloadUrl}/{version}/{assetName}{archiveExt}";
-
-            var downloadUrl = mirror switch
-            {
-                DownloadMirror.GhProxy => $"https://gh-proxy.com/{originalUrl}",
-                _ => originalUrl
-            };
-
-            var tempFile = Path.Combine(Path.GetTempPath(), $"sing-box{archiveExt}");
-
-            using (var response = await _httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead))
-            {
-                response.EnsureSuccessStatusCode();
-
-                var totalBytes = response.Content.Headers.ContentLength ?? 0;
-                var buffer = new byte[8192];
-                var bytesRead = 0L;
-
-                await using var contentStream = await response.Content.ReadAsStreamAsync();
-                await using var fileStream = File.Create(tempFile);
-
-                int read;
-                while ((read = await contentStream.ReadAsync(buffer)) > 0)
-                {
-                    await fileStream.WriteAsync(buffer.AsMemory(0, read));
-                    bytesRead += read;
-
-                    DownloadProgressChanged?.Invoke(this, new DownloadProgress
-                    {
-                        BytesReceived = bytesRead,
-                        TotalBytes = totalBytes,
-                        Status = "Downloading..."
-                    });
-                }
-            }
-
-            StatusChanged?.Invoke(this, "Extracting...");
-
-            await ExtractArchiveAsync(tempFile, _binDirectory);
-
-            File.Delete(tempFile);
-
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                var chmodPath = Path.Combine(_binDirectory, "sing-box");
-                if (File.Exists(chmodPath))
-                {
-                    Process.Start("chmod", $"+x \"{chmodPath}\"")?.WaitForExit();
-                }
-            }
-
-            await GetInstalledKernelInfoAsync();
-            StatusChanged?.Invoke(this, $"Successfully installed sing-box {version}");
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            StatusChanged?.Invoke(this, $"Failed to install: {ex.Message}");
             return false;
         }
+
+        return await InstallPackageAsync(package);
     }
 
     /// <summary>
@@ -318,6 +255,121 @@ public class KernelManager : IKernelManager
 
             await GetInstalledKernelInfoAsync();
             StatusChanged?.Invoke(this, "Successfully installed sing-box (ref1nd)");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            StatusChanged?.Invoke(this, $"Failed to install: {ex.Message}");
+            return false;
+        }
+    }
+
+    public async Task<KernelPackageDownloadResult?> DownloadPackageAsync(string? version = null, DownloadMirror mirror = DownloadMirror.GitHub)
+    {
+        try
+        {
+            if (mirror == DownloadMirror.Ref1nd)
+            {
+                var platform = PlatformInfo.Current;
+                var fileName = GetRef1ndFileName(platform);
+                if (fileName == null)
+                {
+                    StatusChanged?.Invoke(this, $"ref1nd channel does not support platform: {platform.OS}-{platform.Arch}");
+                    return null;
+                }
+
+                var downloadUrl = $"{Ref1ndBaseUrl}/{fileName}";
+                StatusChanged?.Invoke(this, "Downloading ref1nd sing-box...");
+
+                var tempExt = platform.OS == "windows" ? ".exe" : ".tar.gz";
+                var tempFile = Path.Combine(Path.GetTempPath(), $"sing-box-ref1nd-{Guid.NewGuid():N}{tempExt}");
+                await DownloadFileAsync(downloadUrl, tempFile);
+                StatusChanged?.Invoke(this, "Downloaded ref1nd sing-box");
+
+                return new KernelPackageDownloadResult
+                {
+                    TempFilePath = tempFile,
+                    VersionLabel = "(ref1nd)"
+                };
+            }
+
+            version ??= await GetLatestVersionAsync();
+            if (string.IsNullOrEmpty(version))
+            {
+                StatusChanged?.Invoke(this, "Failed to get latest version");
+                return null;
+            }
+
+            StatusChanged?.Invoke(this, $"Downloading sing-box {version}...");
+
+            var currentPlatform = PlatformInfo.Current;
+            var assetName = $"sing-box-{version.TrimStart('v')}-{currentPlatform.OS}-{currentPlatform.Arch}";
+            var archiveExt = currentPlatform.OS == "windows" ? ".zip" : ".tar.gz";
+            var originalUrl = $"{GitHubDownloadUrl}/{version}/{assetName}{archiveExt}";
+
+            var downloadUrlForMirror = mirror switch
+            {
+                DownloadMirror.GhProxy => $"https://gh-proxy.com/{originalUrl}",
+                _ => originalUrl
+            };
+
+            var archiveFile = Path.Combine(Path.GetTempPath(), $"sing-box-{Guid.NewGuid():N}{archiveExt}");
+            await DownloadFileAsync(downloadUrlForMirror, archiveFile);
+            StatusChanged?.Invoke(this, $"Downloaded sing-box {version}");
+
+            return new KernelPackageDownloadResult
+            {
+                TempFilePath = archiveFile,
+                VersionLabel = version
+            };
+        }
+        catch (Exception ex)
+        {
+            StatusChanged?.Invoke(this, $"Failed to download: {ex.Message}");
+            return null;
+        }
+    }
+
+    public async Task<bool> InstallPackageAsync(KernelPackageDownloadResult package)
+    {
+        try
+        {
+            if (package == null || string.IsNullOrWhiteSpace(package.TempFilePath) || !File.Exists(package.TempFilePath))
+            {
+                StatusChanged?.Invoke(this, "Downloaded package not found");
+                return false;
+            }
+
+            var platform = PlatformInfo.Current;
+            var versionLabel = string.IsNullOrWhiteSpace(package.VersionLabel) ? "package" : package.VersionLabel;
+            var isDirectExecutable = platform.OS == "windows" &&
+                                     string.Equals(Path.GetExtension(package.TempFilePath), ".exe", StringComparison.OrdinalIgnoreCase);
+
+            if (isDirectExecutable)
+            {
+                StatusChanged?.Invoke(this, "Installing...");
+                await KillRunningKernelAsync();
+                var destination = Path.Combine(_binDirectory, "sing-box.exe");
+                File.Move(package.TempFilePath, destination, overwrite: true);
+            }
+            else
+            {
+                StatusChanged?.Invoke(this, "Extracting...");
+                await ExtractArchiveAsync(package.TempFilePath, _binDirectory);
+                TryDeleteFile(package.TempFilePath);
+
+                if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    var chmodPath = Path.Combine(_binDirectory, "sing-box");
+                    if (File.Exists(chmodPath))
+                    {
+                        Process.Start("chmod", $"+x \"{chmodPath}\"")?.WaitForExit();
+                    }
+                }
+            }
+
+            await GetInstalledKernelInfoAsync();
+            StatusChanged?.Invoke(this, $"Successfully installed sing-box {versionLabel}");
             return true;
         }
         catch (Exception ex)
@@ -437,6 +489,47 @@ public class KernelManager : IKernelManager
             }
 
             Directory.Delete(tempDir, true);
+        }
+    }
+
+    private async Task DownloadFileAsync(string downloadUrl, string tempFile)
+    {
+        using var response = await _httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
+        response.EnsureSuccessStatusCode();
+
+        var totalBytes = response.Content.Headers.ContentLength ?? 0;
+        var buffer = new byte[8192];
+        var bytesRead = 0L;
+
+        await using var contentStream = await response.Content.ReadAsStreamAsync();
+        await using var fileStream = File.Create(tempFile);
+
+        int read;
+        while ((read = await contentStream.ReadAsync(buffer)) > 0)
+        {
+            await fileStream.WriteAsync(buffer.AsMemory(0, read));
+            bytesRead += read;
+
+            DownloadProgressChanged?.Invoke(this, new DownloadProgress
+            {
+                BytesReceived = bytesRead,
+                TotalBytes = totalBytes,
+                Status = "Downloading..."
+            });
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
         }
     }
 
