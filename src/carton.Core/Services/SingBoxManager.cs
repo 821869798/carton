@@ -296,8 +296,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
 
             if (_process != null)
             {
-                _process.Kill(true);
-                await _process.WaitForExitAsync();
+                await StopManagedProcessAsync(_process);
                 _process.Dispose();
                 _process = null;
             }
@@ -501,6 +500,58 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
         var unixOutput = await unixProcess.StandardOutput.ReadToEndAsync();
         await unixProcess.WaitForExitAsync();
         return unixProcess.ExitCode == 0 && !string.IsNullOrWhiteSpace(unixOutput);
+    }
+
+    private async Task StopManagedProcessAsync(Process process)
+    {
+        if (process.HasExited)
+        {
+            return;
+        }
+
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            try
+            {
+                using var signalProcess = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "kill",
+                        Arguments = $"-TERM {process.Id}",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    }
+                };
+
+                signalProcess.Start();
+                await signalProcess.WaitForExitAsync();
+            }
+            catch (Exception ex)
+            {
+                LogManager($"[WARN] Failed to send SIGTERM to sing-box process {process.Id}: {ex.Message}");
+            }
+
+            for (var i = 0; i < 20; i++)
+            {
+                if (process.HasExited)
+                {
+                    return;
+                }
+
+                await Task.Delay(250);
+            }
+
+            LogManager($"[WARN] sing-box process {process.Id} did not exit after SIGTERM, forcing termination");
+        }
+
+        if (!process.HasExited)
+        {
+            process.Kill(true);
+            await process.WaitForExitAsync();
+        }
     }
 
     public void Dispose()

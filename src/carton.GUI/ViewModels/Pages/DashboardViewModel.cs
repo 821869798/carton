@@ -875,7 +875,13 @@ public partial class DashboardViewModel : PageViewModelBase
             }
             mixedInbound["listen"] = AllowLanConnections ? "0.0.0.0" : "127.0.0.1";
             mixedInbound["listen_port"] = port;
-            mixedInbound["set_system_proxy"] = EnableSystemProxy;
+            // On Linux, a setuid sing-box runs with AT_SECURE and cannot safely
+            // invoke gsettings / kwriteconfig helpers, so carton must manage the
+            // desktop proxy itself after startup. Keep the original behavior on
+            // other platforms.
+            mixedInbound["set_system_proxy"] = RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                ? false
+                : EnableSystemProxy;
 
             if (EnableTunInbound)
             {
