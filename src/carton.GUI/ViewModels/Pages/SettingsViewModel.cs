@@ -249,8 +249,13 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         CurrentAppVersion = _appUpdateService?.CurrentVersion ?? GetString("Common.Unknown", "unknown");
         _requiresManualAppUpdate = _appUpdateService != null && !_appUpdateService.SupportsInAppUpdates;
         IsPortableApp = _requiresManualAppUpdate;
-        LatestAvailableVersion = string.Empty;
-        AppUpdateStatus = string.Empty;
+        LatestAvailableVersion = _appUpdateService?.PendingRestartVersion ?? string.Empty;
+        IsAppUpdateAvailable = false;
+        IsAppUpdateReadyToInstall = _appUpdateService?.IsUpdatePendingRestart == true;
+        AppUpdateProgress = 0;
+        AppUpdateStatus = IsAppUpdateReadyToInstall
+            ? GetString("Settings.Update.Status.Ready", "Update downloaded. Restart to apply.")
+            : string.Empty;
         SelectedUpdateChannel = UpdateChannelToString(_currentPreferences.UpdateChannel);
     }
 
@@ -799,9 +804,15 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
             {
                 _pendingAppUpdate = null;
                 IsAppUpdateAvailable = false;
-                IsAppUpdateReadyToInstall = false;
                 AppUpdateProgress = 0;
-                AppUpdateStatus = GetString("Settings.Update.Status.Latest", "Already up to date");
+                IsAppUpdateReadyToInstall = _appUpdateService.IsUpdatePendingRestart;
+                if (IsAppUpdateReadyToInstall)
+                {
+                    LatestAvailableVersion = _appUpdateService.PendingRestartVersion ?? LatestAvailableVersion;
+                }
+                AppUpdateStatus = IsAppUpdateReadyToInstall
+                    ? GetString("Settings.Update.Status.Ready", "Update downloaded. Restart to apply.")
+                    : GetString("Settings.Update.Status.Latest", "Already up to date");
                 return;
             }
 
@@ -872,6 +883,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         try
         {
             await _appUpdateService.DownloadUpdateAsync(_pendingAppUpdate, SelectedUpdateChannel, progress);
+            IsAppUpdateAvailable = false;
             IsAppUpdateReadyToInstall = true;
             AppUpdateStatus = GetString("Settings.Update.Status.Ready", "Update downloaded. Restart to apply.");
         }
