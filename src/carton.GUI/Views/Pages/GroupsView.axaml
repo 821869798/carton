@@ -64,6 +64,8 @@
                     VerticalAlignment="Top"
                     RowSpacing="8">
                 <Grid ColumnDefinitions="*,Auto,Auto"
+                      Background="Transparent"
+                      PointerPressed="OnGroupItemPressed"
                       ColumnSpacing="8">
                   <StackPanel Grid.Column="0"
                               Spacing="6">
@@ -107,51 +109,39 @@
                           Padding="6,3"
                           MinWidth="0"/>
 
-                  <Grid Grid.Column="2">
-                    <Button VerticalAlignment="Top"
-                            IsVisible="{Binding IsCollapsed}"
-                            Command="{Binding DataContext.ToggleGroupExpansionCommand, ElementName=GroupsViewRoot}"
-                            CommandParameter="{Binding}"
-                            Width="32"
-                            Height="28"
-                            Padding="0"
-                            MinWidth="32"
-                            HorizontalContentAlignment="Center"
-                            VerticalContentAlignment="Center">
-                      <Grid Width="16"
-                            Height="16"
+                  <Grid Grid.Column="2"
+                        Width="32"
+                        Height="28"
+                        VerticalAlignment="Top"
+                        IsHitTestVisible="False">
+                    <Grid IsVisible="{Binding IsCollapsed}"
+                          Width="32"
+                          Height="28"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center">
+                      <Path Width="14"
+                            Height="14"
                             HorizontalAlignment="Center"
-                            VerticalAlignment="Center">
-                        <Path Stroke="{DynamicResource SystemControlForegroundBaseHighBrush}"
-                              StrokeThickness="1.6"
-                              Data="M 2 3.5 L 14 3.5"/>
-                        <Path Stroke="{DynamicResource SystemControlForegroundBaseHighBrush}"
-                              StrokeThickness="1.6"
-                              Data="M 4 8.5 L 8 4.5 L 12 8.5 M 8 4.5 L 8 13"/>
-                      </Grid>
-                    </Button>
-                    <Button VerticalAlignment="Top"
-                            IsVisible="{Binding IsExpanded}"
-                            Command="{Binding DataContext.ToggleGroupExpansionCommand, ElementName=GroupsViewRoot}"
-                            CommandParameter="{Binding}"
-                            Width="32"
-                            Height="28"
-                            Padding="0"
-                            MinWidth="32"
-                            HorizontalContentAlignment="Center"
-                            VerticalContentAlignment="Center">
-                      <Grid Width="16"
-                            Height="16"
+                            VerticalAlignment="Center"
+                            Stroke="{DynamicResource SystemControlForegroundBaseHighBrush}"
+                            StrokeThickness="1.8"
+                            StrokeLineCap="Round"
+                            Data="M 5 3.5 L 9.5 7 L 5 10.5"/>
+                    </Grid>
+                    <Grid IsVisible="{Binding IsExpanded}"
+                          Width="32"
+                          Height="28"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center">
+                      <Path Width="14"
+                            Height="14"
                             HorizontalAlignment="Center"
-                            VerticalAlignment="Center">
-                        <Path Stroke="{DynamicResource SystemControlForegroundBaseHighBrush}"
-                              StrokeThickness="1.6"
-                              Data="M 2 12.5 L 14 12.5"/>
-                        <Path Stroke="{DynamicResource SystemControlForegroundBaseHighBrush}"
-                              StrokeThickness="1.6"
-                              Data="M 4 7.5 L 8 11.5 L 12 7.5 M 8 3 L 8 11.5"/>
-                      </Grid>
-                    </Button>
+                            VerticalAlignment="Center"
+                            Stroke="{DynamicResource SystemControlForegroundBaseHighBrush}"
+                            StrokeThickness="1.8"
+                            StrokeLineCap="Round"
+                            Data="M 3.5 5 L 7 9.5 L 10.5 5"/>
+                    </Grid>
                   </Grid>
                 </Grid>
 
