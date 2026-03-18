@@ -116,22 +116,18 @@ jobs:
             rid: win-x64
             mainExe: carton.exe
             icon: src/carton.GUI/Assets/carton_icon.ico
-            portableExt: zip
           - os: windows-latest
             rid: win-arm64
             mainExe: carton.exe
             icon: src/carton.GUI/Assets/carton_icon.ico
-            portableExt: zip
           - os: ubuntu-22.04
             rid: linux-x64
             mainExe: carton
             icon: src/carton.GUI/Assets/carton_icon.png
-            portableExt: tar.gz
           - os: ubuntu-22.04
             rid: linux-arm64
             mainExe: carton
             icon: src/carton.GUI/Assets/carton_icon.png
-            portableExt: tar.gz
     env:
       VERSION: ${{ needs.metadata.outputs.version }}
       CHANNEL: ${{ needs.metadata.outputs.channel }}
@@ -247,7 +243,6 @@ jobs:
             --packTitle "$APP_NAME" \
             --icon "$icon_path" \
             --outputDir "$PACK_DIR"
-          echo "$package_channel" > "$PACK_DIR/channel.txt"
 
       - name: Package with Velopack (Windows)
         if: runner.os == 'Windows'
@@ -265,7 +260,6 @@ jobs:
             --packTitle "$env:APP_NAME" `
             --icon $iconPath `
             --outputDir $env:PACK_DIR
-          Set-Content -Path "$env:PACK_DIR\channel.txt" -Value $packageChannel
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
@@ -281,145 +275,151 @@ jobs:
       - build
     if: ${{ needs.build.result == 'success' }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
 
-      - name: Normalize installer filenames
+      - name: Prepare release assets
+        shell: bash
         env:
           VERSION: ${{ needs.metadata.outputs.version }}
-        shell: bash
         run: |
           set -euo pipefail
           shopt -s nullglob
 
           app_name="${APP_NAME:-carton}"
+          release_dir="$RUNNER_TEMP/release-assets"
+          rm -rf "$release_dir"
+          mkdir -p "$release_dir"
+
           for artifact in dist/vpk-*; do
             [[ -d "$artifact" ]] || continue
             artifact_name=$(basename "$artifact")
             rid=$(echo "$artifact_name" | sed 's/^vpk-//;s/-[^-]*$//')
 
             while IFS= read -r -d '' setup; do
-              base_name=$(basename "$setup")
-              target="${app_name}-${VERSION}-${rid}-Setup.exe"
-              if [[ "$base_name" == "$target" ]]; then
-                continue
-              fi
-              dest="${setup%/*}/$target"
-              cp -f "$setup" "$dest"
+              cp -f "$setup" "$release_dir/${app_name}-${VERSION}-${rid}-Setup.exe"
             done < <(find "$artifact" -maxdepth 1 -type f -iname '*setup.exe' -print0)
 
             while IFS= read -r -d '' appimage; do
-              base_name=$(basename "$appimage")
-              target="${app_name}-${VERSION}-${rid}.AppImage"
-              if [[ "$base_name" == "$target" ]]; then
-                continue
-              fi
-              dest="${appimage%/*}/$target"
-              cp -f "$appimage" "$dest"
+              cp -f "$appimage" "$release_dir/${app_name}-${VERSION}-${rid}.AppImage"
             done < <(find "$artifact" -maxdepth 1 -type f -iname '*.AppImage' -print0)
+
+            while IFS= read -r -d '' portable; do
+              cp -f "$portable" "$release_dir/$(basename "$portable")"
+            done < <(find "$artifact" -maxdepth 1 -type f \( -name '*-portable.zip' -o -name '*-portable.tar.gz' \) -print0)
+
+            while IFS= read -r -d '' nupkg; do
+              cp -f "$nupkg" "$release_dir/$(basename "$nupkg")"
+            done < <(find "$artifact" -maxdepth 1 -type f -name '*.nupkg' -print0)
+
+            while IFS= read -r -d '' releases_json; do
+              cp -f "$releases_json" "$release_dir/$(basename "$releases_json")"
+            done < <(find "$artifact" -maxdepth 1 -type f -name 'releases*.json' -print0)
           done
 
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 10.0.x
+          if ! find "$release_dir" -maxdepth 1 -type f | grep -q .; then
+            echo "No release assets were prepared." >&2
+            exit 1
+          fi
 
-      - name: Install Velopack CLI
-        shell: bash
-        run: |
-          dotnet tool update --global vpk --version 0.0.1298
-          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+          echo "RELEASE_ASSETS_DIR=$release_dir" >> "$GITHUB_ENV"
 
-      - name: Upload release via Velopack
+      - name: Create or update GitHub release
         shell: bash
         env:
-          REPO_URL: https://github.com/${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.metadata.outputs.tag }}
+          REPO: ${{ github.repository }}
           RELEASE_NAME: ${{ needs.metadata.outputs.release_name }}
           IS_PRERELEASE: ${{ needs.metadata.outputs.is_prerelease }}
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          args=("$TAG" "--repo" "$REPO" "--title" "$RELEASE_NAME")
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            args+=("--prerelease")
+          fi
+
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release edit "${args[@]}"
+          else
+            gh release create "${args[@]}" --target "$TARGET_SHA" --notes ""
+          fi
+
+      - name: Clear existing release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.metadata.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          gh api "repos/$REPO/releases/tags/$TAG" --jq '.assets[].id' | while read -r asset_id; do
+            [[ -n "$asset_id" ]] || continue
+            gh api "repos/$REPO/releases/assets/$asset_id" --method DELETE
+          done
+
+      - name: Upload release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.metadata.outputs.tag }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           shopt -s nullglob
 
-          # 按 channel 把各平台的 vpk 文件合并到一个目录
-          # 跳过 releases*.json（vpk upload 重新生成）和 portable 压缩包（单独上传）
-          # 跳过 channel.txt（辅助文件）
-          upload_dirs=()
-          for artifact in dist/*/; do
-            artifact="${artifact%/}"
-            channel=$(cat "$artifact/channel.txt" 2>/dev/null | tr -d '[:space:]')
-            if [[ -z "$channel" ]]; then
-              echo "Warning: channel.txt missing in $artifact, skipping." >&2
-              continue
-            fi
-
-            upload_dir="dist/$(basename "$artifact")-upload"
-            rm -rf "$upload_dir"
-            mkdir -p "$upload_dir"
-            find "$artifact" -maxdepth 1 -type f \
-              ! -name 'releases*.json' \
-              ! -name 'channel.txt' \
-              ! -name '*-portable.zip' \
-              ! -name '*-portable.tar.gz' \
-              -exec cp {} "$upload_dir/" \;
-            upload_dirs+=("$channel|$upload_dir")
+          uploads=()
+          for pattern in '*-Setup.exe' '*.AppImage' '*-portable.zip' '*-portable.tar.gz' '*.nupkg' 'releases*.json'; do
+            for f in "$RELEASE_ASSETS_DIR"/$pattern; do
+              [[ -f "$f" ]] || continue
+              uploads+=("$f")
+            done
           done
 
-          if [[ ${#upload_dirs[@]} -eq 0 ]]; then
-            echo "No packaged artifacts were found." >&2
+          if [[ ${#uploads[@]} -eq 0 ]]; then
+            echo "No files to upload." >&2
             exit 1
           fi
 
-          first=1
-          for entry in "${upload_dirs[@]}"; do
-            channel="${entry%%|*}"
-            upload_dir="${entry#*|}"
-            flags=(
-              upload github
-              --repoUrl "$REPO_URL"
-              --token "$TOKEN"
-              --channel "$channel"
-              --outputDir "$upload_dir"
-              --tag "$TAG"
-              --releaseName "$RELEASE_NAME"
-            )
-            if [[ "$first" -eq 1 ]]; then
-              flags+=(--publish)
-              first=0
-            else
-              flags+=(--merge)
-            fi
-            if [[ "$IS_PRERELEASE" == "true" ]]; then
-              flags+=(--pre)
-            fi
-            vpk "${flags[@]}"
-          done
+          gh release upload "$TAG" "${uploads[@]}" --repo "$REPO"
 
-      - name: Upload portable archives
+      - name: Update release notes
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.metadata.outputs.tag }}
           REPO: ${{ github.repository }}
           VERSION: ${{ needs.metadata.outputs.version }}
+          CHANNEL: ${{ needs.metadata.outputs.channel }}
         run: |
           set -euo pipefail
-          shopt -s nullglob
 
-          uploads=()
           app_name="${APP_NAME:-carton}"
-          version="${VERSION}"
+          base_url="https://github.com/$REPO/releases/download/$TAG"
+          notes_file="$RUNNER_TEMP/release-notes.md"
 
-          # portable 压缩包（文件名已含 rid，可直接上传）
-          while IFS= read -r -d '' f; do
-            uploads+=("$f")
-          done < <(find dist -maxdepth 2 \( -name '*-portable.zip' -o -name '*-portable.tar.gz' \) -print0)
+          cat > "$notes_file" <<EOF
+          ## 下载
 
-          if [[ ${#uploads[@]} -eq 0 ]]; then
-            echo "No files to upload, skipping."
-            exit 0
-          fi
+          如果你不确定该下载哪个版本，Windows 用户优先选择 \`win-x64\` 安装版。
 
-          gh release upload "$TAG" "${uploads[@]}" --repo "$REPO" --clobber
+          - Windows x64 安装版: [${app_name}-${VERSION}-win-x64-Setup.exe](${base_url}/${app_name}-${VERSION}-win-x64-Setup.exe)
+          - Windows x64 绿色版: [${app_name}-${VERSION}-win-x64-portable.zip](${base_url}/${app_name}-${VERSION}-win-x64-portable.zip)
+          - Windows ARM64 安装版: [${app_name}-${VERSION}-win-arm64-Setup.exe](${base_url}/${app_name}-${VERSION}-win-arm64-Setup.exe)
+          - Windows ARM64 绿色版: [${app_name}-${VERSION}-win-arm64-portable.zip](${base_url}/${app_name}-${VERSION}-win-arm64-portable.zip)
+          - Linux x64 AppImage: [${app_name}-${VERSION}-linux-x64.AppImage](${base_url}/${app_name}-${VERSION}-linux-x64.AppImage)
+          - Linux x64 绿色版: [${app_name}-${VERSION}-linux-x64-portable.tar.gz](${base_url}/${app_name}-${VERSION}-linux-x64-portable.tar.gz)
+          - Linux ARM64 AppImage: [${app_name}-${VERSION}-linux-arm64.AppImage](${base_url}/${app_name}-${VERSION}-linux-arm64.AppImage)
+          - Linux ARM64 绿色版: [${app_name}-${VERSION}-linux-arm64-portable.tar.gz](${base_url}/${app_name}-${VERSION}-linux-arm64-portable.tar.gz)
+
+          ## 说明
+
+          - 当前发布通道：\`${CHANNEL}\`
+          - \`.nupkg\` 和 \`releases*.json\` 文件供自动更新使用，普通用户一般不需要手动下载。
+          EOF
+
+          gh release edit "$TAG" --repo "$REPO" --notes-file "$notes_file"
