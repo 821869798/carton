@@ -11,9 +11,9 @@ $csprojPath = "$repoRoot\src\carton.GUI\carton.GUI.csproj"
 $Version = $csproj.Project.PropertyGroup.Version | Select-Object -First 1
 
 if ($Version -match "-beta" -or $Version -match "-rc" -or $Version -match "-preview") {
-    $Channel = "win-beta"
+    $Channel = "$rid-beta"
 } else {
-    $Channel = "win-release"
+    $Channel = "$rid-release"
 }
 
 $publishDir = "$repoRoot\artifacts\publish\$rid"

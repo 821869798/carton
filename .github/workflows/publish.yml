@@ -117,25 +117,21 @@ jobs:
             mainExe: carton.exe
             icon: src/carton.GUI/Assets/carton_icon.ico
             portableExt: zip
-            channelPrefix: win
           - os: windows-latest
             rid: win-arm64
             mainExe: carton.exe
             icon: src/carton.GUI/Assets/carton_icon.ico
             portableExt: zip
-            channelPrefix: win
           - os: ubuntu-22.04
             rid: linux-x64
             mainExe: carton
             icon: src/carton.GUI/Assets/carton_icon.png
             portableExt: tar.gz
-            channelPrefix: linux
           - os: ubuntu-22.04
             rid: linux-arm64
             mainExe: carton
             icon: src/carton.GUI/Assets/carton_icon.png
             portableExt: tar.gz
-            channelPrefix: linux
     env:
       VERSION: ${{ needs.metadata.outputs.version }}
       CHANNEL: ${{ needs.metadata.outputs.channel }}
@@ -240,7 +236,7 @@ jobs:
         shell: bash
         run: |
           icon_path=$(realpath '${{ matrix.icon }}')
-          package_channel='${{ matrix.channelPrefix }}-'$CHANNEL
+          package_channel='${{ matrix.rid }}-'$CHANNEL
           vpk pack \
             --packId "$APP_NAME" \
             --packVersion "$VERSION" \
@@ -258,7 +254,7 @@ jobs:
         shell: pwsh
         run: |
           $iconPath = (Resolve-Path '${{ matrix.icon }}').Path
-          $packageChannel = "${{ matrix.channelPrefix }}-$env:CHANNEL"
+          $packageChannel = "${{ matrix.rid }}-$env:CHANNEL"
           vpk pack `
             --packId "$env:APP_NAME" `
             --packVersion $env:VERSION `

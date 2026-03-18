@@ -5,6 +5,7 @@ using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -494,24 +495,39 @@ public sealed class AppUpdateService : IAppUpdateService
     private static string ResolveVelopackChannel(string? channel)
     {
         var channelSuffix = IsPrereleaseChannel(channel) ? "beta" : "release";
-        return $"{GetPlatformChannelPrefix()}-{channelSuffix}";
+        return $"{GetPlatformRidPrefix()}-{channelSuffix}";
     }
 
-    private static string GetPlatformChannelPrefix()
+    private static string GetPlatformRidPrefix()
     {
         if (OperatingSystem.IsWindows())
         {
-            return "win";
+            return RuntimeInformation.ProcessArchitecture switch
+            {
+                Architecture.Arm64 => "win-arm64",
+                Architecture.X64 => "win-x64",
+                _ => "win"
+            };
         }
 
         if (OperatingSystem.IsLinux())
         {
-            return "linux";
+            return RuntimeInformation.ProcessArchitecture switch
+            {
+                Architecture.Arm64 => "linux-arm64",
+                Architecture.X64 => "linux-x64",
+                _ => "linux"
+            };
         }
 
         if (OperatingSystem.IsMacOS())
         {
-            return "osx";
+            return RuntimeInformation.ProcessArchitecture switch
+            {
+                Architecture.Arm64 => "osx-arm64",
+                Architecture.X64 => "osx-x64",
+                _ => "osx"
+            };
         }
 
         return "unknown";
