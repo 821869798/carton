@@ -31,7 +31,7 @@ env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   NUGET_XMLDOC_MODE: skip
-  APP_NAME: ${{ github.event.repository.name }}
+  APP_NAME: carton
 
 jobs:
   metadata:
@@ -117,21 +117,25 @@ jobs:
             mainExe: carton.exe
             icon: src/carton.GUI/Assets/carton_icon.ico
             portableExt: zip
+            channelPrefix: win
           - os: windows-latest
             rid: win-arm64
             mainExe: carton.exe
             icon: src/carton.GUI/Assets/carton_icon.ico
             portableExt: zip
+            channelPrefix: win
           - os: ubuntu-22.04
             rid: linux-x64
             mainExe: carton
             icon: src/carton.GUI/Assets/carton_icon.png
             portableExt: tar.gz
+            channelPrefix: linux
           - os: ubuntu-22.04
             rid: linux-arm64
             mainExe: carton
             icon: src/carton.GUI/Assets/carton_icon.png
             portableExt: tar.gz
+            channelPrefix: linux
     env:
       VERSION: ${{ needs.metadata.outputs.version }}
       CHANNEL: ${{ needs.metadata.outputs.channel }}
@@ -236,34 +240,36 @@ jobs:
         shell: bash
         run: |
           icon_path=$(realpath '${{ matrix.icon }}')
+          package_channel='${{ matrix.channelPrefix }}-'$CHANNEL
           vpk pack \
             --packId "$APP_NAME" \
             --packVersion "$VERSION" \
-            --channel "$CHANNEL" \
+            --channel "$package_channel" \
             --runtime ${{ matrix.rid }} \
             --packDir "$PUBLISH_DIR" \
             --mainExe '${{ matrix.mainExe }}' \
             --packTitle "$APP_NAME" \
             --icon "$icon_path" \
             --outputDir "$PACK_DIR"
-          echo "$CHANNEL" > "$PACK_DIR/channel.txt"
+          echo "$package_channel" > "$PACK_DIR/channel.txt"
 
       - name: Package with Velopack (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $iconPath = (Resolve-Path '${{ matrix.icon }}').Path
+          $packageChannel = "${{ matrix.channelPrefix }}-$env:CHANNEL"
           vpk pack `
             --packId "$env:APP_NAME" `
             --packVersion $env:VERSION `
-            --channel $env:CHANNEL `
+            --channel $packageChannel `
             --runtime ${{ matrix.rid }} `
             --packDir $env:PUBLISH_DIR `
             --mainExe '${{ matrix.mainExe }}' `
             --packTitle "$env:APP_NAME" `
             --icon $iconPath `
             --outputDir $env:PACK_DIR
-          Set-Content -Path "$env:PACK_DIR\channel.txt" -Value $env:CHANNEL
+          Set-Content -Path "$env:PACK_DIR\channel.txt" -Value $packageChannel
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
@@ -344,7 +350,7 @@ jobs:
           # 按 channel 把各平台的 vpk 文件合并到一个目录
           # 跳过 releases*.json（vpk upload 重新生成）和 portable 压缩包（单独上传）
           # 跳过 channel.txt（辅助文件）
-          declare -A merged
+          upload_dirs=()
           for artifact in dist/*/; do
             artifact="${artifact%/}"
             channel=$(cat "$artifact/channel.txt" 2>/dev/null | tr -d '[:space:]')
@@ -352,31 +358,34 @@ jobs:
               echo "Warning: channel.txt missing in $artifact, skipping." >&2
               continue
             fi
-            merged_dir="dist/merged-$channel"
-            mkdir -p "$merged_dir"
+
+            upload_dir="dist/$(basename "$artifact")-upload"
+            rm -rf "$upload_dir"
+            mkdir -p "$upload_dir"
             find "$artifact" -maxdepth 1 -type f \
               ! -name 'releases*.json' \
               ! -name 'channel.txt' \
               ! -name '*-portable.zip' \
               ! -name '*-portable.tar.gz' \
-              -exec cp -n {} "$merged_dir/" \;
-            merged[$channel]="$merged_dir"
+              -exec cp {} "$upload_dir/" \;
+            upload_dirs+=("$channel|$upload_dir")
           done
 
-          if [[ ${#merged[@]} -eq 0 ]]; then
+          if [[ ${#upload_dirs[@]} -eq 0 ]]; then
             echo "No packaged artifacts were found." >&2
             exit 1
           fi
 
           first=1
-          for channel in "${!merged[@]}"; do
-            merged_dir="${merged[$channel]}"
+          for entry in "${upload_dirs[@]}"; do
+            channel="${entry%%|*}"
+            upload_dir="${entry#*|}"
             flags=(
               upload github
               --repoUrl "$REPO_URL"
               --token "$TOKEN"
               --channel "$channel"
-              --outputDir "$merged_dir"
+              --outputDir "$upload_dir"
               --tag "$TAG"
               --releaseName "$RELEASE_NAME"
             )

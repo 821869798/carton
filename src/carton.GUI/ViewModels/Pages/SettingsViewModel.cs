@@ -16,6 +16,7 @@ using carton.Core.Services;
 using carton.Core.Models;
 using carton.GUI.Models;
 using carton.GUI.Services;
+using NuGet.Versioning;
 
 namespace carton.ViewModels;
 
@@ -799,6 +800,27 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
                 LatestAvailableVersion = latestRelease.Version;
             }
 
+            if (_requiresManualAppUpdate)
+            {
+                _pendingAppUpdate = null;
+                IsAppUpdateReadyToInstall = false;
+                AppUpdateProgress = 0;
+
+                if (latestRelease != null && IsRemoteVersionNewer(latestRelease.Version, _appUpdateService.CurrentVersion))
+                {
+                    IsAppUpdateAvailable = true;
+                    AppUpdateStatus = GetString("Settings.Update.Status.ManualRequired", "New version available. Download it from the releases page.");
+                    await ShowManualUpdatePromptAsync();
+                }
+                else
+                {
+                    IsAppUpdateAvailable = false;
+                    AppUpdateStatus = GetString("Settings.Update.Status.Latest", "Already up to date");
+                }
+
+                return;
+            }
+
             var result = await _appUpdateService.CheckForUpdatesAsync(SelectedUpdateChannel);
             if (result == null)
             {
@@ -1061,6 +1083,23 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
             : AppUpdateChannel.Release;
     }
 
+    private static bool IsRemoteVersionNewer(string remoteVersion, string currentVersion)
+    {
+        if (SemanticVersion.TryParse(remoteVersion, out var remote) &&
+            SemanticVersion.TryParse(currentVersion, out var local))
+        {
+            return remote > local;
+        }
+
+        if (Version.TryParse(remoteVersion, out var remoteVersionParsed) &&
+            Version.TryParse(currentVersion, out var localVersionParsed))
+        {
+            return remoteVersionParsed > localVersionParsed;
+        }
+
+        return !string.Equals(remoteVersion, currentVersion, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string UpdateChannelToString(AppUpdateChannel channel)
         => channel == AppUpdateChannel.Beta ? "beta" : "release";
 
@@ -1285,6 +1324,11 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         if (owner.DataContext is MainViewModel mainViewModel)
         {
             await mainViewModel.ShutdownAsync();
+        }
+
+        if (owner is carton.Views.MainWindow mainWindow)
+        {
+            mainWindow.AllowClose();
         }
 
         var executablePath = Environment.ProcessPath;

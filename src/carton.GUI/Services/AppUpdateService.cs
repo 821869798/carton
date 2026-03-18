@@ -318,11 +318,10 @@ public sealed class AppUpdateService : IAppUpdateService
         var updater = CreateManager(_stagedChannel);
         try
         {
-            await updater.WaitExitThenApplyUpdatesAsync(
+            updater.ApplyUpdatesAndRestart(
                 _stagedRelease,
-                true,
-                silentRestart,
-                Array.Empty<string>()).ConfigureAwait(false);
+                Array.Empty<string>());
+            await Task.CompletedTask.ConfigureAwait(false);
         }
         finally
         {
@@ -332,9 +331,7 @@ public sealed class AppUpdateService : IAppUpdateService
 
     private UpdateManager CreateManager(string? channel)
     {
-        var normalizedChannel = string.IsNullOrWhiteSpace(channel)
-            ? null
-            : channel.Trim();
+        var normalizedChannel = ResolveVelopackChannel(channel);
 
         var options = new UpdateOptions
         {
@@ -343,7 +340,7 @@ public sealed class AppUpdateService : IAppUpdateService
             MaximumDeltasBeforeFallback = 2
         };
 
-        var source = new GithubSource(_repositoryUrl, _token ?? string.Empty, normalizedChannel == "beta", null);
+        var source = new GithubSource(_repositoryUrl, _token ?? string.Empty, IsPrereleaseChannel(channel), null);
         return new UpdateManager(source, options, _locator.Value);
     }
 
@@ -493,6 +490,32 @@ public sealed class AppUpdateService : IAppUpdateService
 
     private static bool IsPrereleaseChannel(string? channel)
         => string.Equals(channel, "beta", StringComparison.OrdinalIgnoreCase);
+
+    private static string ResolveVelopackChannel(string? channel)
+    {
+        var channelSuffix = IsPrereleaseChannel(channel) ? "beta" : "release";
+        return $"{GetPlatformChannelPrefix()}-{channelSuffix}";
+    }
+
+    private static string GetPlatformChannelPrefix()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return "win";
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            return "linux";
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return "osx";
+        }
+
+        return "unknown";
+    }
 
     private static DateTimeOffset ParseDateTime(JsonElement element)
     {
