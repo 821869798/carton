@@ -397,7 +397,7 @@ jobs:
             vpk "${flags[@]}"
           done
 
-      - name: Upload portable archives and installers
+      - name: Upload portable archives
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -416,17 +416,6 @@ jobs:
           while IFS= read -r -d '' f; do
             uploads+=("$f")
           done < <(find dist -maxdepth 2 \( -name '*-portable.zip' -o -name '*-portable.tar.gz' \) -print0)
-
-          for artifact in dist/vpk-*; do
-            [[ -d "$artifact" ]] || continue
-            while IFS= read -r -d '' setup; do
-              uploads+=("$setup")
-            done < <(find "$artifact" -maxdepth 1 -type f -name "${app_name}-${version}-*-Setup.exe" -print0)
-
-            while IFS= read -r -d '' appimage; do
-              uploads+=("$appimage")
-            done < <(find "$artifact" -maxdepth 1 -type f -name "${app_name}-${version}-*.AppImage" -print0)
-          done
 
           if [[ ${#uploads[@]} -eq 0 ]]; then
             echo "No files to upload, skipping."
