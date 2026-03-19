@@ -93,6 +93,10 @@ jobs:
           set -euo pipefail
 
           release_id="$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.id' 2>/dev/null || true)"
+          if [[ ! "$release_id" =~ ^[0-9]+$ ]]; then
+            release_id=""
+          fi
+
           if [[ -n "$release_id" ]]; then
             gh api "repos/$REPO/releases/$release_id" \
               --method PATCH \
@@ -432,7 +436,12 @@ jobs:
 
           gh release edit "$TAG" --repo "$REPO" --notes-file "$notes_file"
 
-          release_id="$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.id')"
+          release_id="$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.id' 2>/dev/null || true)"
+          if [[ ! "$release_id" =~ ^[0-9]+$ ]]; then
+            echo "Failed to resolve release id for tag: $TAG" >&2
+            exit 1
+          fi
+
           gh api "repos/$REPO/releases/$release_id" \
             --method PATCH \
             -f name="$RELEASE_NAME" \
