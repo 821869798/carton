@@ -15,6 +15,14 @@ The project is still in an early stage, but its direction is already clear:
 
 > `carton` is not an official SFM client and is not affiliated with the sing-box team.
 
+## Screenshots
+
+| Dashboard | Groups |
+| --- | --- |
+| ![Dashboard](./docs/imgs/dashboard.png) | ![Groups](./docs/imgs/group.png) |
+| Connections | Profiles |
+| ![Connections](./docs/imgs/connection.png) | ![Profiles](./docs/imgs/profile.png) |
+
 ## Highlights
 
 ### Familiar workflow close to official SFM
@@ -36,6 +44,7 @@ The project is still in an early stage, but its direction is already clear:
 - Create, import, and edit local configs
 - Import remote subscriptions with manual update and auto-update intervals
 - Save per-profile runtime options before startup
+- If you do not have a `sing-box` subscription URL, you can use [`sublink-worker`](https://github.com/7Sageer/sublink-worker); it provides the online tool [`app.sublink.works`](https://app.sublink.works) to convert various subscription formats or protocol links into `sing-box` configs
 
 ### Node and group enhancements
 
@@ -65,13 +74,14 @@ The project is still in an early stage, but its direction is already clear:
 
 ### Platforms
 
-- Supports `Windows`
-- Supports `Linux`
-- No `macOS` release is planned, because SFM already exists on macOS
+- `Windows`
+- `Linux`
 
 ### Requirements
 
 - `.NET 10 SDK`
+- Windows NativeAOT publishing requires `Desktop development with C++` or an equivalent MSVC / Windows SDK toolchain
+- If you want to generate the installer, `Velopack CLI (vpk)` is also required; `scripts\build-release-win-x64.ps1` will try to install or update it automatically
 
 ### Local build
 
@@ -82,7 +92,7 @@ dotnet build carton.slnx
 ### Windows NativeAOT publish
 
 ```powershell
-scripts\publish-win-aot.bat win-x64 Release
+scripts\test-publish-win-aot.bat win-x64 Release
 ```
 
 Or use the packaging script that also creates the installer:
@@ -91,7 +101,12 @@ Or use the packaging script that also creates the installer:
 scripts\build-release-win-x64.bat
 ```
 
-The repository already contains multiple runtime targets, while the current ready-to-use release scripts are mainly organized around the Windows build flow.
+In practice:
+
+- `scripts\test-publish-win-aot.bat` performs the NativeAOT publish only
+- `scripts\build-release-win-x64.bat` calls `scripts\build-release-win-x64.ps1` and additionally creates the portable archive and Velopack installer
+
+The repository already contains multiple runtime targets, while the current ready-to-use scripts are mainly organized around the Windows AOT build flow.
 
 ## Positioning
 
@@ -105,4 +120,4 @@ then `carton` is being built in exactly that direction.
 
 ## License
 
-This project is released under the MIT License. See [LICENSE](./LICENSE) for details.
+This project is released under the GNU General Public License v3.0. See [LICENSE](./LICENSE) for details.
