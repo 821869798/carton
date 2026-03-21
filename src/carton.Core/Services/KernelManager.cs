@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using carton.Core.Models;
 
 namespace carton.Core.Services;
@@ -116,18 +117,84 @@ public class KernelManager : IKernelManager
             };
 
             process.Start();
-            var output = await process.StandardOutput.ReadToEndAsync();
-            await process.WaitForExitAsync();
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+            await Task.WhenAll(stdoutTask, stderrTask, process.WaitForExitAsync());
 
-            var firstLine = output.Split('\n').FirstOrDefault();
-            if (firstLine != null && firstLine.Contains("sing-box"))
-            {
-                var parts = firstLine.Split(' ');
-                return parts.LastOrDefault()?.Trim();
-            }
+            return ParseInstalledVersion(stdoutTask.Result, stderrTask.Result);
         }
         catch
         {
+        }
+
+        return null;
+    }
+
+    private static string? ParseInstalledVersion(params string?[] outputs)
+    {
+        foreach (var output in outputs)
+        {
+            foreach (var line in SplitLines(output))
+            {
+                var version = TryExtractVersion(line, requireSingBoxPrefix: true);
+                if (!string.IsNullOrWhiteSpace(version))
+                {
+                    return version;
+                }
+            }
+        }
+
+        foreach (var output in outputs)
+        {
+            foreach (var line in SplitLines(output))
+            {
+                var version = TryExtractVersion(line, requireSingBoxPrefix: false);
+                if (!string.IsNullOrWhiteSpace(version))
+                {
+                    return version;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> SplitLines(string? output) =>
+        string.IsNullOrWhiteSpace(output)
+            ? []
+            : output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static string? TryExtractVersion(string line, bool requireSingBoxPrefix)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return null;
+        }
+
+        if (requireSingBoxPrefix && !line.Contains("sing-box", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var prefixedMatch = Regex.Match(
+            line,
+            @"sing-box(?:\s+version)?\s+([^\s\(\[]+)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (prefixedMatch.Success)
+        {
+            return prefixedMatch.Groups[1].Value.Trim();
+        }
+
+        if (!requireSingBoxPrefix)
+        {
+            var fallbackMatch = Regex.Match(
+                line,
+                @"\bv?(?:\d+\.){1,}\d+(?:[-+][^\s\)\]]+)?\b",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (fallbackMatch.Success)
+            {
+                return fallbackMatch.Value.Trim();
+            }
         }
 
         return null;
