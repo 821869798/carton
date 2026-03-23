@@ -632,9 +632,7 @@ public partial class MainViewModel : ViewModelBase
             if (string.IsNullOrWhiteSpace(content))
             {
                 var message = GetString("Status.RemoteConfigEmpty", "Downloaded remote config is empty");
-                _logStore.AddLog($"[ERROR] {message}: {profile.Name} ({profile.Id})");
-                ConnectionStatus = message;
-                return null;
+                return HandleRemoteConfigRefreshFailure(profile, configPath, hasLocalConfig, message);
             }
 
             await _configManager.SaveConfigAsync(profile.Id, content, ProfileType.Remote);
@@ -644,9 +642,7 @@ public partial class MainViewModel : ViewModelBase
             if (string.IsNullOrWhiteSpace(downloadedPath) || !File.Exists(downloadedPath))
             {
                 var message = GetString("Status.RemoteConfigFileMissing", "Remote config download succeeded but file missing");
-                _logStore.AddLog($"[ERROR] {message}: {profile.Name} ({profile.Id})");
-                ConnectionStatus = message;
-                return null;
+                return HandleRemoteConfigRefreshFailure(profile, configPath, hasLocalConfig, message);
             }
 
             var completedMessage = hasLocalConfig
@@ -659,10 +655,23 @@ public partial class MainViewModel : ViewModelBase
         catch (Exception ex)
         {
             var message = GetString("Status.RemoteConfigDownloadFailed", "Failed to download remote config");
-            _logStore.AddLog($"[ERROR] {message}: {profile.Name} ({profile.Id}) - {ex.Message}");
-            ConnectionStatus = $"{message}: {ex.Message}";
-            return null;
+            return HandleRemoteConfigRefreshFailure(profile, configPath, hasLocalConfig, $"{message}: {ex.Message}");
         }
+    }
+
+    private string? HandleRemoteConfigRefreshFailure(Profile profile, string? existingConfigPath, bool hasLocalConfig, string errorMessage)
+    {
+        if (hasLocalConfig && !string.IsNullOrWhiteSpace(existingConfigPath) && File.Exists(existingConfigPath))
+        {
+            var warning = GetString("Status.RemoteConfigRefreshFailedUsingLocal", "Remote config refresh failed, using local cached config");
+            _logStore.AddLog($"[WARN] {errorMessage}: {profile.Name} ({profile.Id}); {warning}");
+            ConnectionStatus = $"{warning}: {errorMessage}";
+            return existingConfigPath;
+        }
+
+        _logStore.AddLog($"[ERROR] {errorMessage}: {profile.Name} ({profile.Id})");
+        ConnectionStatus = errorMessage;
+        return null;
     }
 
     private static bool ShouldRefreshRemoteProfileOnStart(Profile profile)

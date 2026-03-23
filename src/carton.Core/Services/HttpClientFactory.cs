@@ -65,7 +65,7 @@ public static class HttpClientFactory
     {
         var client = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(30)
+            Timeout = TimeSpan.FromSeconds(15)
         };
         client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", $"carton/{_appVersion} sing-box/1.13.0");
         return client;

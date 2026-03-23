@@ -602,6 +602,11 @@ public partial class DashboardViewModel : PageViewModelBase
         _logWriter?.Invoke($"[ERROR] {message}");
     }
 
+    private void LogWarning(string message)
+    {
+        _logWriter?.Invoke($"[WARN] {message}");
+    }
+
     private async Task<string?> ShowLinuxPasswordDialogAsync()
     {
         var desktop = Avalonia.Application.Current?.ApplicationLifetime
@@ -700,9 +705,8 @@ public partial class DashboardViewModel : PageViewModelBase
             var content = await client.GetStringAsync(profile.Url);
             if (string.IsNullOrWhiteSpace(content))
             {
-                StartupStatus = GetString("Status.RemoteConfigEmpty", "Downloaded remote config is empty");
-                LogError($"{StartupStatus}: {profileName} ({profile.Id})");
-                return null;
+                var message = GetString("Status.RemoteConfigEmpty", "Downloaded remote config is empty");
+                return HandleRemoteConfigRefreshFailure(profile, profileName, configPath, hasLocalConfig, message);
             }
 
             await _configManager.SaveConfigAsync(profile.Id, content, ProfileType.Remote);
@@ -711,9 +715,8 @@ public partial class DashboardViewModel : PageViewModelBase
             var downloadedPath = await _configManager.GetConfigPathAsync(profile.Id, ProfileType.Remote);
             if (string.IsNullOrWhiteSpace(downloadedPath) || !File.Exists(downloadedPath))
             {
-                StartupStatus = GetString("Status.RemoteConfigFileMissing", "Remote config download succeeded but file missing");
-                LogError($"{StartupStatus}: {profileName} ({profile.Id})");
-                return null;
+                var message = GetString("Status.RemoteConfigFileMissing", "Remote config download succeeded but file missing");
+                return HandleRemoteConfigRefreshFailure(profile, profileName, configPath, hasLocalConfig, message);
             }
 
             var completedMessage = hasLocalConfig
@@ -726,10 +729,33 @@ public partial class DashboardViewModel : PageViewModelBase
         catch (Exception ex)
         {
             var message = GetString("Status.RemoteConfigDownloadFailed", "Failed to download remote config");
-            StartupStatus = $"{message}: {ex.Message}";
-            LogError($"{message}: {profileName} ({profile.Id}) - {ex.Message}");
-            return null;
+            return HandleRemoteConfigRefreshFailure(
+                profile,
+                profileName,
+                configPath,
+                hasLocalConfig,
+                $"{message}: {ex.Message}");
         }
+    }
+
+    private string? HandleRemoteConfigRefreshFailure(
+        Profile profile,
+        string profileName,
+        string? existingConfigPath,
+        bool hasLocalConfig,
+        string errorMessage)
+    {
+        if (hasLocalConfig && !string.IsNullOrWhiteSpace(existingConfigPath) && File.Exists(existingConfigPath))
+        {
+            var warning = GetString("Status.RemoteConfigRefreshFailedUsingLocal", "Remote config refresh failed, using local cached config");
+            StartupStatus = $"{warning}: {errorMessage}";
+            LogWarning($"{errorMessage}: {profileName} ({profile.Id}); {warning}");
+            return existingConfigPath;
+        }
+
+        StartupStatus = errorMessage;
+        LogError($"{errorMessage}: {profileName} ({profile.Id})");
+        return null;
     }
 
     private static bool ShouldRefreshRemoteProfileOnStart(Profile profile)

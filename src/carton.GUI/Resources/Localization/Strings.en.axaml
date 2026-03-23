@@ -123,6 +123,7 @@
 	<x:String x:Key="Status.RemoteConfigDownloaded">Remote config downloaded</x:String>
 	<x:String x:Key="Status.RemoteConfigRefreshed">Remote config refreshed</x:String>
 	<x:String x:Key="Status.RemoteConfigDownloadFailed">Failed to fetch remote config</x:String>
+	<x:String x:Key="Status.RemoteConfigRefreshFailedUsingLocal">Remote config refresh failed, using local cached config</x:String>
 	<x:String x:Key="Status.KernelDownloading">Starting download...</x:String>
 	<x:String x:Key="Dashboard.Startup.ServiceUnavailable">Service unavailable</x:String>
 	<x:String x:Key="Dashboard.Startup.NoProfileAvailable">No profile available</x:String>

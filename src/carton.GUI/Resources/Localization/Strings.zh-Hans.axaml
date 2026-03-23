@@ -119,6 +119,7 @@
 	<x:String x:Key="Status.RemoteConfigDownloaded">远程配置下载完成</x:String>
 	<x:String x:Key="Status.RemoteConfigRefreshed">远程配置刷新完成</x:String>
 	<x:String x:Key="Status.RemoteConfigDownloadFailed">获取远程配置失败</x:String>
+	<x:String x:Key="Status.RemoteConfigRefreshFailedUsingLocal">远程配置刷新失败，已使用本地缓存配置继续启动</x:String>
 	<x:String x:Key="Status.KernelDownloading">开始下载...</x:String>
 	<x:String x:Key="Dashboard.Startup.ServiceUnavailable">服务不可用</x:String>
 	<x:String x:Key="Dashboard.Startup.NoProfileAvailable">没有可用配置</x:String>
