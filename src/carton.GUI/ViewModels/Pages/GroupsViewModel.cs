@@ -96,6 +96,7 @@ public partial class GroupsViewModel : PageViewModelBase
             else if (Groups.Count == 0)
             {
                 RestoreViewGroupsFromCache();
+                StatusMessage = CreateLoadedGroupsStatusMessage(Groups.Count);
             }
         }
         else if (Groups.Count == 0)
@@ -189,16 +190,12 @@ public partial class GroupsViewModel : PageViewModelBase
                 if (!_isPageActive)
                 {
                     ReleaseViewGroups(clearStatusMessage: false);
-                    StatusMessage = _cachedGroups.Count > 0
-                        ? $"Loaded {_cachedGroups.Count} groups"
-                        : "No groups available";
+                    StatusMessage = CreateLoadedGroupsStatusMessage(CountDisplayableGroups(_cachedGroups));
                     return;
                 }
 
                 RestoreViewGroupsFromCache();
-                StatusMessage = Groups.Count > 0
-                    ? $"Loaded {Groups.Count} groups"
-                    : "No groups available";
+                StatusMessage = CreateLoadedGroupsStatusMessage(Groups.Count);
             });
             _clashConfigCache.MarkClean();
 
@@ -397,6 +394,27 @@ public partial class GroupsViewModel : PageViewModelBase
         }
 
         return string.Equals(clashConfig?.Mode, "global", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int CountDisplayableGroups(IReadOnlyList<GroupCacheSnapshot> groups)
+    {
+        var count = 0;
+        for (var i = 0; i < groups.Count; i++)
+        {
+            if (groups[i].Items.Count > 0)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static string CreateLoadedGroupsStatusMessage(int groupCount)
+    {
+        return groupCount > 0
+            ? $"Loaded {groupCount} groups"
+            : "No groups available";
     }
 
     private async Task SelectOutboundAsync(string groupTag, string? outboundTag)

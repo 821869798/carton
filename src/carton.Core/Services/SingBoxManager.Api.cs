@@ -32,6 +32,12 @@ public partial class SingBoxManager
                     }
 
                     var proxy = proxyProperty.Value;
+                    if (!proxy.TryGetProperty("all", out var allElement) ||
+                        allElement.ValueKind != JsonValueKind.Array)
+                    {
+                        continue;
+                    }
+
                     var group = new OutboundGroup
                     {
                         Tag = proxyProperty.Name,
@@ -39,34 +45,37 @@ public partial class SingBoxManager
                         Selected = ReadString(proxy, "now")
                     };
 
-                     if (proxy.TryGetProperty("all", out var allElement) &&
-                         allElement.ValueKind == JsonValueKind.Array)
-                     {
-                         foreach (var item in allElement.EnumerateArray())
-                         {
-                              if (item.ValueKind == JsonValueKind.String)
-                              {
-                                 var itemTag = item.GetString() ?? string.Empty;
-                                 var itemType = string.Empty;
-                                 JsonElement itemProxy = default;
+                    foreach (var item in allElement.EnumerateArray())
+                    {
+                        if (item.ValueKind != JsonValueKind.String)
+                        {
+                            continue;
+                        }
 
-                                 if (!string.IsNullOrWhiteSpace(itemTag) &&
-                                     proxiesElement.TryGetProperty(itemTag, out var itemProxyElement) &&
-                                     itemProxyElement.ValueKind == JsonValueKind.Object)
-                                 {
-                                     itemProxy = itemProxyElement;
-                                     itemType = ReadString(itemProxy, "type");
-                                 }
+                        var itemTag = item.GetString() ?? string.Empty;
+                        var itemType = string.Empty;
+                        JsonElement itemProxy = default;
 
-                                group.Items.Add(new OutboundItem
-                                {
-                                    Tag = itemTag,
-                                    Type = itemType,
-                                    UrlTestDelay = ReadLatestDelay(itemProxy)
-                                });
-                              }
-                          }
-                     }
+                        if (!string.IsNullOrWhiteSpace(itemTag) &&
+                            proxiesElement.TryGetProperty(itemTag, out var itemProxyElement) &&
+                            itemProxyElement.ValueKind == JsonValueKind.Object)
+                        {
+                            itemProxy = itemProxyElement;
+                            itemType = ReadString(itemProxy, "type");
+                        }
+
+                        group.Items.Add(new OutboundItem
+                        {
+                            Tag = itemTag,
+                            Type = itemType,
+                            UrlTestDelay = ReadLatestDelay(itemProxy)
+                        });
+                    }
+
+                    if (group.Items.Count == 0)
+                    {
+                        continue;
+                    }
 
                     groups.Add(group);
                 }
