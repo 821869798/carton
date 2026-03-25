@@ -192,9 +192,7 @@ public sealed class LogStore
             return (currentTime, "Info", msg);
         }
 
-        var time = timeTokenLength >= 8
-            ? new string(span.Slice(timeTokenStart, 8))
-            : currentTime;
+        var time = ExtractTime(span, timeTokenStart, timeTokenLength, currentTime);
 
         var payload = span[payloadStart..].TrimStart();
         if (payload.Length == 0)
@@ -228,6 +226,32 @@ public sealed class LogStore
         }
 
         return (time, level, messagePart.ToString());
+    }
+
+    private static string ExtractTime(ReadOnlySpan<char> span, int start, int length, string fallback)
+    {
+        if (length < 8)
+        {
+            return fallback;
+        }
+
+        var token = span.Slice(start, length);
+
+        // If token contains 'T' (e.g. "2026-03-25T14:30:45+08:00"), extract time after 'T'
+        var tIndex = token.IndexOf('T');
+        if (tIndex >= 0 && tIndex + 9 <= length)
+        {
+            return new string(token.Slice(tIndex + 1, 8));
+        }
+
+        // If first 8 chars look like a date (contain '-'), use fallback
+        var first8 = token[..8];
+        if (first8.IndexOf('-') >= 0)
+        {
+            return fallback;
+        }
+
+        return new string(first8);
     }
 
     private static string NormalizeSingBoxLevel(ReadOnlySpan<char> value)
