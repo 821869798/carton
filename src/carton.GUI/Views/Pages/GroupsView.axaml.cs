@@ -70,6 +70,37 @@ public partial class GroupsView : UserControl
         e.Handled = true;
     }
 
+    private void OnGroupTestDelayPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Control { DataContext: GroupItemViewModel group } ||
+            DataContext is not GroupsViewModel viewModel)
+        {
+            return;
+        }
+
+        if (viewModel.TestGroupCardCommand.CanExecute(group))
+        {
+            viewModel.TestGroupCardCommand.Execute(group);
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnProxyTestDelayPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Control { DataContext: OutboundItemViewModel item })
+        {
+            return;
+        }
+
+        if (item.TestDelayCommand != null && item.TestDelayCommand.CanExecute(null))
+        {
+            item.TestDelayCommand.Execute(null);
+        }
+
+        e.Handled = true;
+    }
+
     private void OnProxyPointerEntered(object? sender, PointerEventArgs e)
     {
         if (sender is Control { DataContext: OutboundItemViewModel item })

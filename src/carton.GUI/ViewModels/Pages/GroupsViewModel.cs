@@ -1750,14 +1750,18 @@ public partial class OutboundItemViewModel : ObservableObject
 
     public string DelayDisplay => IsTesting ? "..." : Delay > 0 ? $"{Delay}ms" : string.Empty;
 
+    public string DelayDisplayOrIcon => IsTesting ? "..." : Delay > 0 ? $"{Delay}ms" : "\u26A1";
+
     partial void OnDelayChanged(int value)
     {
         OnPropertyChanged(nameof(DelayDisplay));
+        OnPropertyChanged(nameof(DelayDisplayOrIcon));
     }
 
     partial void OnIsTestingChanged(bool value)
     {
         OnPropertyChanged(nameof(DelayDisplay));
+        OnPropertyChanged(nameof(DelayDisplayOrIcon));
     }
 }
 
