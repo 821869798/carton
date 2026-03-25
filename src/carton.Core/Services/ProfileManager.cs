@@ -88,14 +88,15 @@ public class ProfileManager : IProfileManager
             var maxId = GetMaxProfileId(data.Profiles);
             profile.Id = maxId + 1;
             profile.CreatedAt = DateTime.Now;
-            profile.RuntimeOptions = await ResolveRuntimeOptionsAsync(profile.Id, profile.RuntimeOptions);
-            data.Profiles.Add(profile);
-            await SaveDataUnlockedAsync(data);
 
             if (!string.IsNullOrEmpty(configContent))
             {
                 await _configManager.SaveConfigAsync(profile.Id, configContent, profile.Type);
             }
+
+            profile.RuntimeOptions = await ResolveRuntimeOptionsAsync(profile.Id, profile.RuntimeOptions);
+            data.Profiles.Add(profile);
+            await SaveDataUnlockedAsync(data);
 
             return CloneProfile(profile);
         }
