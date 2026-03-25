@@ -69,15 +69,10 @@
             <ListBox.ItemTemplate>
               <DataTemplate DataType="models:NavigationPage">
                 <StackPanel Orientation="Horizontal" Spacing="12" Margin="12,8">
-                  <Viewbox Width="20" Height="20">
-                    <Path Width="24"
-                          Height="24"
-                          Data="{Binding Converter={StaticResource NavigationIconConverter}}"
-                          Stretch="Uniform"
-                          Stroke="{Binding $parent[ListBoxItem].Foreground}"
-                          StrokeThickness="1.5"
-                          StrokeLineCap="Round"/>
-                  </Viewbox>
+                  <PathIcon Width="20"
+                            Height="20"
+                            Data="{Binding Converter={StaticResource NavigationIconConverter}}"
+                            Foreground="{Binding $parent[ListBoxItem].Foreground}"/>
                   <TextBlock Text="{Binding Converter={StaticResource NavigationTitleConverter}}"
                              VerticalAlignment="Center"/>
                 </StackPanel>
