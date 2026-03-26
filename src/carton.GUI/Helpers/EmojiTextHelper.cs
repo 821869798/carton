@@ -8,9 +8,17 @@ namespace carton.GUI.Helpers;
 
 public class EmojiTextHelper
 {
-    // Match common emojis, symbols, and flag sequences
+    // Match common emojis, symbols, and flag sequences.
+    // - Flag sequences: pairs of regional indicators (U+1F1E6-U+1F1FF)
+    // - \uD83C range: skip Enclosed Alphanumeric Supplement (U+1F100-U+1F16F = \uDD00-\uDD6F)
+    //   which contains text symbols like 🄻 that should NOT be rendered with the emoji font.
+    // - \uD83D-\uD83E: standard emoji ranges (Emoticons, Supplemental Symbols, etc.)
+    // - BMP symbols: Miscellaneous Symbols, Dingbats, etc.
     private static readonly Regex EmojiRegex = new Regex(
-        @"(\uD83C[\uDDE6-\uDDFF]){2}|[\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2600-\u27BF]\uFE0F?", 
+        @"(\uD83C[\uDDE6-\uDDFF]){2}|" +              // flag sequences
+        @"\uD83C[\uDC00-\uDCFF\uDD70-\uDDE5\uDE00-\uDFFF]|" + // \uD83C, excluding enclosed alphanumerics (\uDD00-\uDD6F)
+        @"[\uD83D-\uD83E][\uDC00-\uDFFF]|" +          // \uD83D-\uD83E full range
+        @"[\u2600-\u27BF]\uFE0F?",                     // BMP symbols
         RegexOptions.Compiled);
 
     public static readonly AttachedProperty<string> TextProperty =
