@@ -35,9 +35,13 @@ public class EmojiTextHelper
     {
         var text = GetText(textBlock);
         var prefix = GetPrefix(textBlock);
-        
+
         string fullText = (prefix ?? "") + (text ?? "");
-        
+
+        // Clear the plain Text value before rebuilding content so Text and Inlines
+        // do not render together during prefix/text update races.
+        textBlock.Text = string.Empty;
+
         if (textBlock.Inlines != null)
         {
             textBlock.Inlines.Clear();
