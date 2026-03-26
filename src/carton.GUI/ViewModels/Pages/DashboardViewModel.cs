@@ -27,6 +27,9 @@ namespace carton.ViewModels;
 
 public partial class DashboardViewModel : PageViewModelBase
 {
+    private const string TerminalProxyTypeCmd = "cmd";
+    private const string TerminalProxyTypePowerShell = "ps";
+    private const string TerminalProxyTypeLinux = "linux";
     private readonly ISingBoxManager? _singBoxManager;
     private readonly IKernelManager? _kernelManager;
     private readonly IProfileManager? _profileManager;
@@ -88,13 +91,19 @@ public partial class DashboardViewModel : PageViewModelBase
     private string _memoryUsage = "0 B";
 
     [RelayCommand]
-    private Task CopyCmdTerminalProxy() => CopyTerminalProxyAsync("cmd");
+    private Task CopyCmdTerminalProxy() => CopyTerminalProxyAsync(TerminalProxyTypeCmd);
 
     [RelayCommand]
-    private Task CopyPsTerminalProxy() => CopyTerminalProxyAsync("ps");
+    private Task CopyPsTerminalProxy() => CopyTerminalProxyAsync(TerminalProxyTypePowerShell);
 
     [RelayCommand]
-    private Task CopyLinuxTerminalProxy() => CopyTerminalProxyAsync("linux");
+    private Task CopyLinuxTerminalProxy() => CopyTerminalProxyAsync(TerminalProxyTypeLinux);
+
+    [RelayCommand]
+    private void OpenCmdTerminalProxy() => OpenTerminalProxy(TerminalProxyTypeCmd);
+
+    [RelayCommand]
+    private void OpenPsTerminalProxy() => OpenTerminalProxy(TerminalProxyTypePowerShell);
 
     [RelayCommand]
     private async Task ResetRuntimeOptionsToConfig()
@@ -141,27 +150,47 @@ public partial class DashboardViewModel : PageViewModelBase
 
     private async Task CopyTerminalProxyAsync(string type)
     {
-        if (!int.TryParse(InboundPortText, out var port)) port = 2028;
-        var host = "127.0.0.1";
-        var proxyUrl = $"http://{host}:{port}";
-
-        string command = type switch
+        if (!TryBuildTerminalProxyCommand(type, out var command, out var error))
         {
-            "cmd" => $"set http_proxy={proxyUrl} & set https_proxy={proxyUrl}",
-            "ps" => $"$Env:http_proxy=\"{proxyUrl}\"; $Env:https_proxy=\"{proxyUrl}\"",
-            "linux" => $"export http_proxy={proxyUrl} https_proxy={proxyUrl}",
-            _ => string.Empty
-        };
+            StartupStatus = error;
+            LogError(error);
+            return;
+        }
 
-        if (!string.IsNullOrEmpty(command))
+        var desktop = Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+        if (desktop?.MainWindow?.Clipboard is not { } clipboard)
         {
-            var desktop = Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
-            if (desktop?.MainWindow?.Clipboard is { } clipboard)
-            {
-                await clipboard.SetTextAsync(command);
-                StartupStatus = GetString("Dashboard.Status.CommandCopied", "Command copied to clipboard");
-                _ = Task.Delay(2000).ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(() => StartupStatus = string.Empty));
-            }
+            var message = GetString("Dashboard.Status.ClipboardUnavailable", "Clipboard is not available");
+            StartupStatus = message;
+            LogError(message);
+            return;
+        }
+
+        await clipboard.SetTextAsync(command);
+        ShowTransientStatus(GetString("Dashboard.Status.CommandCopied", "Command copied to clipboard"));
+        LogInfo($"Copied {type} proxy command");
+    }
+
+    private void OpenTerminalProxy(string type)
+    {
+        if (!TryCreateTerminalLaunch(type, out var startInfo, out var error))
+        {
+            StartupStatus = error;
+            LogError(error);
+            return;
+        }
+
+        try
+        {
+            Process.Start(startInfo);
+            ShowTransientStatus(GetString("Dashboard.Status.ProxyToolOpened", "Proxy tool opened"));
+            LogInfo($"Opened {type} proxy tool");
+        }
+        catch (Exception ex)
+        {
+            var message = GetString("Dashboard.Status.OpenProxyToolFailed", "Failed to open proxy tool");
+            StartupStatus = $"{message}: {ex.Message}";
+            LogError($"{message}: {type}: {ex.Message}");
         }
     }
 
@@ -648,6 +677,19 @@ public partial class DashboardViewModel : PageViewModelBase
     private void LogWarning(string message)
     {
         _logWriter?.Invoke($"[WARN] {message}");
+    }
+
+    private void ShowTransientStatus(string message, int durationMilliseconds = 2000)
+    {
+        StartupStatus = message;
+        _ = Task.Delay(durationMilliseconds).ContinueWith(_ =>
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (StartupStatus == message)
+                {
+                    StartupStatus = string.Empty;
+                }
+            }));
     }
 
     private async Task<string?> ShowLinuxPasswordDialogAsync()
@@ -1286,6 +1328,118 @@ public partial class DashboardViewModel : PageViewModelBase
         }
 
         return $"http://127.0.0.1:{port}/ui/?{string.Join("&", queryParts)}";
+    }
+
+    private bool TryBuildTerminalProxyCommand(string type, out string command, out string error)
+    {
+        command = string.Empty;
+        if (!TryGetTerminalProxyUrl(out var proxyUrl, out error))
+        {
+            return false;
+        }
+
+        command = type switch
+        {
+            TerminalProxyTypeCmd => BuildCmdProxyCommand(proxyUrl),
+            TerminalProxyTypePowerShell => BuildPowerShellProxyCommand(proxyUrl),
+            TerminalProxyTypeLinux => BuildLinuxProxyCommand(proxyUrl),
+            _ => string.Empty
+        };
+
+        if (!string.IsNullOrWhiteSpace(command))
+        {
+            return true;
+        }
+
+        error = GetString("Dashboard.Status.OpenProxyToolFailed", "Failed to open proxy tool");
+        return false;
+    }
+
+    private bool TryCreateTerminalLaunch(string type, out ProcessStartInfo startInfo, out string error)
+    {
+        startInfo = new ProcessStartInfo();
+        if (!TryGetTerminalProxyUrl(out var proxyUrl, out error))
+        {
+            return false;
+        }
+
+        var userHomeDirectory = GetUserHomeDirectory();
+
+        switch (type)
+        {
+            case TerminalProxyTypeCmd:
+                startInfo = new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/K {BuildCmdProxyCommand(proxyUrl)}",
+                    UseShellExecute = true,
+                    WorkingDirectory = userHomeDirectory
+                };
+                return true;
+            case TerminalProxyTypePowerShell:
+                startInfo = new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = $"-NoExit -EncodedCommand {BuildEncodedPowerShellCommand(proxyUrl)}",
+                    UseShellExecute = true,
+                    WorkingDirectory = userHomeDirectory
+                };
+                return true;
+            default:
+                error = GetString("Dashboard.Status.OpenProxyToolFailed", "Failed to open proxy tool");
+                return false;
+        }
+    }
+
+    private bool TryGetTerminalProxyUrl(out string proxyUrl, out string error)
+    {
+        proxyUrl = string.Empty;
+        if (!TryGetValidatedPort(out var port, out error))
+        {
+            return false;
+        }
+
+        proxyUrl = $"http://127.0.0.1:{port}";
+        error = string.Empty;
+        return true;
+    }
+
+    private static string BuildCmdProxyCommand(string proxyUrl)
+    {
+        return $"set \"http_proxy={proxyUrl}\" && set \"https_proxy={proxyUrl}\" && set \"HTTP_PROXY={proxyUrl}\" && set \"HTTPS_PROXY={proxyUrl}\"";
+    }
+
+    private static string BuildPowerShellProxyCommand(string proxyUrl)
+    {
+        var escapedProxyUrl = EscapeForPowerShellSingleQuoted(proxyUrl);
+        return $"$Env:http_proxy='{escapedProxyUrl}'; $Env:https_proxy='{escapedProxyUrl}'; $Env:HTTP_PROXY='{escapedProxyUrl}'; $Env:HTTPS_PROXY='{escapedProxyUrl}'";
+    }
+
+    private static string BuildLinuxProxyCommand(string proxyUrl)
+    {
+        var escapedProxyUrl = EscapeForShellSingleQuoted(proxyUrl);
+        return $"export http_proxy='{escapedProxyUrl}' https_proxy='{escapedProxyUrl}' HTTP_PROXY='{escapedProxyUrl}' HTTPS_PROXY='{escapedProxyUrl}'";
+    }
+
+    private static string BuildEncodedPowerShellCommand(string proxyUrl)
+    {
+        var command = BuildPowerShellProxyCommand(proxyUrl);
+        return Convert.ToBase64String(Encoding.Unicode.GetBytes(command));
+    }
+
+    private static string GetUserHomeDirectory()
+    {
+        return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    }
+
+    private static string EscapeForPowerShellSingleQuoted(string value)
+    {
+        return value.Replace("'", "''");
+    }
+
+    private static string EscapeForShellSingleQuoted(string value)
+    {
+        return value.Replace("'", "'\"'\"'");
     }
 
     private bool TryGetValidatedPort(out int port, out string error)

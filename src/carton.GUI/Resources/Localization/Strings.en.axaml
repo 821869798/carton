@@ -98,9 +98,14 @@
 	<x:String x:Key="Dashboard.StatusLabel">Status</x:String>
 	<x:String x:Key="Dashboard.CurrentProfileLabel">Current Profile</x:String>
 	<x:String x:Key="Dashboard.Status.CommandCopied">Command copied to clipboard</x:String>
+	<x:String x:Key="Dashboard.Status.ProxyToolOpened">Proxy tool opened</x:String>
+	<x:String x:Key="Dashboard.Status.OpenProxyToolFailed">Failed to open proxy tool</x:String>
+	<x:String x:Key="Dashboard.Status.ClipboardUnavailable">Clipboard is not available</x:String>
 	<x:String x:Key="Dashboard.Button.CopyCmdProxy">CMD Proxy</x:String>
 	<x:String x:Key="Dashboard.Button.CopyPsProxy">PS Proxy</x:String>
 	<x:String x:Key="Dashboard.Button.CopyLinuxProxy">Terminal Proxy</x:String>
+	<x:String x:Key="Dashboard.Menu.CopyCommand">Copy Command</x:String>
+	<x:String x:Key="Dashboard.Menu.OpenTool">Open Tool</x:String>
   <x:String x:Key="Dashboard.Button.OpenWebUi">Open WebUI</x:String>
   <x:String x:Key="Dashboard.Status.OpenWebUiFailed">Failed to open WebUI</x:String>
   <x:String x:Key="Dashboard.Status.SystemProxyToggleFailed">Failed to toggle system proxy</x:String>

@@ -97,9 +97,14 @@
 	<x:String x:Key="Dashboard.StatusLabel">状态</x:String>
 	<x:String x:Key="Dashboard.CurrentProfileLabel">当前配置</x:String>
 	<x:String x:Key="Dashboard.Status.CommandCopied">命令已复制到剪贴板</x:String>
+	<x:String x:Key="Dashboard.Status.ProxyToolOpened">已打开代理工具</x:String>
+	<x:String x:Key="Dashboard.Status.OpenProxyToolFailed">打开代理工具失败</x:String>
+	<x:String x:Key="Dashboard.Status.ClipboardUnavailable">剪贴板不可用</x:String>
 	<x:String x:Key="Dashboard.Button.CopyCmdProxy">CMD 代理</x:String>
 	<x:String x:Key="Dashboard.Button.CopyPsProxy">PS 代理</x:String>
 	<x:String x:Key="Dashboard.Button.CopyLinuxProxy">终端代理</x:String>
+	<x:String x:Key="Dashboard.Menu.CopyCommand">拷贝命令</x:String>
+	<x:String x:Key="Dashboard.Menu.OpenTool">打开工具</x:String>
 	<x:String x:Key="Dashboard.Button.OpenWebUi">访问 WebUI</x:String>
 	<x:String x:Key="Dashboard.Status.OpenWebUiFailed">打开 WebUI 失败</x:String>
   <x:String x:Key="Dashboard.Status.SystemProxyToggleFailed">切换系统代理失败</x:String>
