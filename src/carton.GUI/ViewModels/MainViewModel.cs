@@ -219,6 +219,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         await _singBoxManager.SyncRunningStateAsync();
+        await RecoverStaleSystemProxyAsync();
 
         if (_autoStartOnLaunch && !_singBoxManager.IsRunning)
         {
@@ -233,6 +234,37 @@ public partial class MainViewModel : ViewModelBase
             {
                 CurrentProfileName = profile.Name;
             }
+        }
+    }
+
+    private async Task RecoverStaleSystemProxyAsync()
+    {
+        if (_singBoxManager.IsRunning)
+        {
+            return;
+        }
+
+        try
+        {
+            var selectedId = await _profileManager.GetSelectedProfileIdAsync();
+            if (selectedId <= 0)
+            {
+                return;
+            }
+
+            var runtimeOptions = await _profileManager.GetRuntimeOptionsAsync(selectedId);
+            var port = runtimeOptions.InboundPort is >= 1 and <= 65535
+                ? runtimeOptions.InboundPort
+                : 2028;
+
+            if (SystemProxyHelper.TryRecoverStaleSystemProxy(port))
+            {
+                _logStore.AddLog($"[INFO] Cleared stale system proxy left by a previous carton session on port {port}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logStore.AddLog($"[WARN] Failed to recover stale system proxy: {ex.Message}");
         }
     }
 

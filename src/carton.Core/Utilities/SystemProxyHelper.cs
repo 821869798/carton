@@ -1,5 +1,6 @@
 using Microsoft.Win32;
 using System.Diagnostics;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
@@ -14,6 +15,7 @@ public static class SystemProxyHelper
 {
     private const int INTERNET_OPTION_SETTINGS_CHANGED = 39;
     private const int INTERNET_OPTION_REFRESH = 37;
+    private const string ProxySessionMarkerFileName = "system-proxy-session.marker";
 
     private const string InternetSettingsKey =
         @"Software\Microsoft\Windows\CurrentVersion\Internet Settings";
@@ -41,6 +43,8 @@ public static class SystemProxyHelper
         {
             SetLinuxProxy(host, port);
         }
+
+        WriteProxySessionMarker(host, port);
     }
 
     public static void ClearSystemProxy()
@@ -52,6 +56,45 @@ public static class SystemProxyHelper
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             ClearLinuxProxy();
+        }
+
+        DeleteProxySessionMarker();
+    }
+
+    public static bool TryRecoverStaleSystemProxy(int expectedPort)
+    {
+        if (expectedPort is < 1 or > 65535)
+        {
+            return false;
+        }
+
+        if (!TryReadProxySessionMarker(out var markerHost, out var markerPort))
+        {
+            return false;
+        }
+
+        try
+        {
+            var state = GetCurrentSystemProxyState();
+            if (!state.IsEnabled)
+            {
+                return false;
+            }
+
+            if (markerPort != expectedPort ||
+                state.Port != expectedPort ||
+                !IsLoopbackHost(markerHost) ||
+                !IsLoopbackHost(state.Host))
+            {
+                return false;
+            }
+
+            ClearSystemProxy();
+            return true;
+        }
+        finally
+        {
+            DeleteProxySessionMarker();
         }
     }
 
@@ -242,4 +285,189 @@ public static class SystemProxyHelper
             return null;
         }
     }
+
+    private static SystemProxyState GetCurrentSystemProxyState()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return GetWindowsProxyState();
+        }
+
+        return SystemProxyState.Disabled;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static SystemProxyState GetWindowsProxyState()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(InternetSettingsKey, writable: false);
+            if (key == null)
+            {
+                return SystemProxyState.Disabled;
+            }
+
+            var proxyEnabled = key.GetValue("ProxyEnable") is int enabledValue && enabledValue != 0;
+            if (!proxyEnabled)
+            {
+                return SystemProxyState.Disabled;
+            }
+
+            var proxyServer = key.GetValue("ProxyServer") as string;
+            if (TryParseProxyEndpoint(proxyServer, out var host, out var port))
+            {
+                return new SystemProxyState(true, host, port);
+            }
+
+            return new SystemProxyState(true, null, null);
+        }
+        catch
+        {
+            return SystemProxyState.Disabled;
+        }
+    }
+
+    private static bool TryParseProxyEndpoint(string? proxyServer, out string? host, out int port)
+    {
+        host = null;
+        port = 0;
+
+        if (string.IsNullOrWhiteSpace(proxyServer))
+        {
+            return false;
+        }
+
+        foreach (var candidate in proxyServer.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var value = candidate;
+            var separatorIndex = value.IndexOf('=');
+            if (separatorIndex >= 0 && separatorIndex < value.Length - 1)
+            {
+                value = value[(separatorIndex + 1)..];
+            }
+
+            if (TryParseHostAndPort(value, out host, out port))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryParseHostAndPort(string value, out string? host, out int port)
+    {
+        host = null;
+        port = 0;
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var candidate = value.Contains("://", StringComparison.Ordinal)
+            ? value
+            : $"http://{value}";
+
+        if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri) ||
+            string.IsNullOrWhiteSpace(uri.Host) ||
+            uri.Port is < 1 or > 65535)
+        {
+            return false;
+        }
+
+        host = uri.Host;
+        port = uri.Port;
+        return true;
+    }
+
+    private static bool IsLoopbackHost(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return false;
+        }
+
+        if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address);
+    }
+
+    private static string GetProxySessionMarkerPath()
+    {
+        var dataDirectory = Path.Combine(PathHelper.GetAppDataPath(), "data");
+        Directory.CreateDirectory(dataDirectory);
+        return Path.Combine(dataDirectory, ProxySessionMarkerFileName);
+    }
+
+    private static void WriteProxySessionMarker(string host, int port)
+    {
+        try
+        {
+            var markerPath = GetProxySessionMarkerPath();
+            File.WriteAllLines(markerPath,
+            [
+                host,
+                port.ToString()
+            ]);
+        }
+        catch
+        {
+        }
+    }
+
+    private static bool TryReadProxySessionMarker(out string? host, out int port)
+    {
+        host = null;
+        port = 0;
+
+        try
+        {
+            var markerPath = GetProxySessionMarkerPath();
+            if (!File.Exists(markerPath))
+            {
+                return false;
+            }
+
+            var lines = File.ReadAllLines(markerPath);
+            if (lines.Length < 2 ||
+                string.IsNullOrWhiteSpace(lines[0]) ||
+                !int.TryParse(lines[1], out port) ||
+                port is < 1 or > 65535)
+            {
+                return false;
+            }
+
+            host = lines[0].Trim();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void DeleteProxySessionMarker()
+    {
+        try
+        {
+            var markerPath = GetProxySessionMarkerPath();
+            if (File.Exists(markerPath))
+            {
+                File.Delete(markerPath);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private readonly record struct SystemProxyState(bool IsEnabled, string? Host, int? Port)
+    {
+        public static SystemProxyState Disabled { get; } = new(false, null, null);
+    }
+
 }
