@@ -9,7 +9,7 @@
         x:Class="carton.Views.MainWindow"
         x:Name="MainWindowRoot"
         x:DataType="vm:MainViewModel"
-        Title=""
+        Title="{DynamicResource App.Name}"
         Width="900" Height="640"
         MinWidth="700" MinHeight="400"
         WindowStartupLocation="CenterScreen"
@@ -21,17 +21,7 @@
 
   <Grid RowDefinitions="Auto,*">
     <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
-      <Grid ColumnDefinitions="Auto,*,Auto" Margin="12,8">
-        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-          <Ellipse Width="10" Height="10"
-                   Fill="{Binding IsConnected, Converter={StaticResource ConnectionStatusConverter}}"
-                   VerticalAlignment="Center"/>
-          <TextBlock Text="{Binding ConnectionStatus}"
-                     FontSize="12"
-                     VerticalAlignment="Center"
-                     Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
-        </StackPanel>
-
+      <Grid ColumnDefinitions="*,Auto,*" Margin="12,8">
         <TextBlock Grid.Column="1"
                    Text="{Binding CurrentPage.Title}"
                    HorizontalAlignment="Center"
@@ -39,7 +29,10 @@
                    FontSize="14"
                    FontWeight="Medium"/>
 
-        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+        <StackPanel Grid.Column="2"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    HorizontalAlignment="Right">
           <Button Content="{DynamicResource MainWindow.Button.Start}" Command="{Binding ToggleConnectionCommand}"
                   Classes="accent"
                   IsVisible="{Binding ShowStartButton}"/>
@@ -64,10 +57,19 @@
               <Image Width="52"
                      Height="52"
                      Source="/Assets/carton_icon.png"/>
-              <TextBlock Text="{DynamicResource App.Name}"
-                         FontSize="16"
-                         FontWeight="SemiBold"
-                         HorizontalAlignment="Center"/>
+              <StackPanel Orientation="Horizontal"
+                          Spacing="8"
+                          HorizontalAlignment="Center"
+                          Margin="-10,0,0,0">
+                <Ellipse Width="10"
+                         Height="10"
+                         Fill="{Binding IsConnected, Converter={StaticResource ConnectionStatusConverter}}"
+                         VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding ConnectionStatus}"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+              </StackPanel>
             </StackPanel>
 
             <Grid Grid.Row="1"
