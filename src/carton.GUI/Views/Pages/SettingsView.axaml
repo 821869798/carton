@@ -78,9 +78,18 @@
 
       <Border Classes="card" Padding="16">
         <StackPanel Spacing="12">
-          <CheckBox Content="{DynamicResource Settings.General.StartAtLogin}" IsChecked="{Binding StartAtLogin}"/>
-          <CheckBox Content="{DynamicResource Settings.General.AutoStartOnLaunch}" IsChecked="{Binding AutoStartOnLaunch}"/>
-          <CheckBox Content="{DynamicResource Settings.General.AutoDisconnectConnectionsOnNodeSwitch}" IsChecked="{Binding AutoDisconnectConnectionsOnNodeSwitch}"/>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <TextBlock Grid.Column="0" Text="{DynamicResource Settings.General.StartAtLogin}" VerticalAlignment="Center"/>
+            <ToggleSwitch Grid.Column="1" Classes="OnlySwitch" IsChecked="{Binding StartAtLogin}"/>
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <TextBlock Grid.Column="0" Text="{DynamicResource Settings.General.AutoStartOnLaunch}" VerticalAlignment="Center"/>
+            <ToggleSwitch Grid.Column="1" Classes="OnlySwitch" IsChecked="{Binding AutoStartOnLaunch}"/>
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <TextBlock Grid.Column="0" Text="{DynamicResource Settings.General.AutoDisconnectConnectionsOnNodeSwitch}" VerticalAlignment="Center"/>
+            <ToggleSwitch Grid.Column="1" Classes="OnlySwitch" IsChecked="{Binding AutoDisconnectConnectionsOnNodeSwitch}"/>
+          </Grid>
           <Grid ColumnDefinitions="*,Auto"
                 ColumnSpacing="12"
                 IsVisible="{Binding IsWindows}">
@@ -123,8 +132,10 @@
             </ComboBox>
           </Grid>
 
-          <CheckBox Content="{DynamicResource Settings.Update.AutoCheck}"
-                    IsChecked="{Binding AutoCheckAppUpdates}"/>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <TextBlock Grid.Column="0" Text="{DynamicResource Settings.Update.AutoCheck}" VerticalAlignment="Center"/>
+            <ToggleSwitch Grid.Column="1" Classes="OnlySwitch" IsChecked="{Binding AutoCheckAppUpdates}"/>
+          </Grid>
 
           <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
             <TextBlock Grid.Column="0" Text="{DynamicResource Settings.Update.CurrentVersion}" VerticalAlignment="Center"/>
@@ -200,9 +211,12 @@
 
       <Border Classes="card" Padding="16">
         <StackPanel Spacing="12">
-          <CheckBox Content="{DynamicResource Settings.Data.StoreInAppDir}" 
-                    IsChecked="{Binding IsDataInExeDirectory}"
-                    IsVisible="{Binding IsPortableApp}" />
+          <Grid ColumnDefinitions="*,Auto"
+                ColumnSpacing="12"
+                IsVisible="{Binding IsPortableApp}">
+            <TextBlock Grid.Column="0" Text="{DynamicResource Settings.Data.StoreInAppDir}" VerticalAlignment="Center"/>
+            <ToggleSwitch Grid.Column="1" Classes="OnlySwitch" IsChecked="{Binding IsDataInExeDirectory}" />
+          </Grid>
           <Button Content="{DynamicResource Settings.Data.OpenFolder}" Command="{Binding OpenDataFolderCommand}"
                   HorizontalAlignment="Left"/>
           <Button Content="{DynamicResource Settings.Data.Backup.Export}" Command="{Binding ExportBackupCommand}"

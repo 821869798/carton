@@ -18,6 +18,9 @@ namespace carton.ViewModels;
 public partial class MainViewModel : ViewModelBase
 {
     private static readonly TimeSpan TransientPageUnloadDelay = TimeSpan.FromMinutes(1);
+    private const double NavigationItemHeight = 40;
+    private const double NavigationItemVerticalMargin = 2;
+    private const double NavigationIndicatorHeight = 18;
     private readonly ISingBoxManager _singBoxManager;
     private readonly IProfileManager _profileManager;
     private readonly IConfigManager _configManager;
@@ -42,6 +45,9 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _isPaneOpen = true;
+
+    [ObservableProperty]
+    private double _navigationIndicatorOffset;
 
     [ObservableProperty]
     private bool _isConnected;
@@ -173,6 +179,7 @@ public partial class MainViewModel : ViewModelBase
         _transientPageUnloadTimer.Start();
 
         _currentPage = DashboardViewModel;
+        UpdateNavigationIndicatorOffset();
         _logStore.AddLog("[INFO] Log pipeline initialized");
         ConnectionStatus = _localizationService["Status.Disconnected"];
 
@@ -322,6 +329,7 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnSelectedPageChanged(NavigationPage value)
     {
+        UpdateNavigationIndicatorOffset();
         var previousPage = CurrentPage;
 
         if (previousPage == _logsViewModel)
@@ -388,6 +396,21 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsSettingsPage));
         OnPropertyChanged(nameof(IsTransientPage));
         OnPropertyChanged(nameof(ActiveTransientPage));
+    }
+
+    private void UpdateNavigationIndicatorOffset()
+    {
+        var index = NavigationPages.IndexOf(SelectedPage);
+        if (index < 0)
+        {
+            NavigationIndicatorOffset = 0;
+            return;
+        }
+
+        var stride = NavigationItemHeight + NavigationItemVerticalMargin * 2;
+        NavigationIndicatorOffset = index * stride
+            + NavigationItemVerticalMargin
+            + (NavigationItemHeight - NavigationIndicatorHeight) / 2;
     }
 
     public void SetWindowVisible(bool isVisible)

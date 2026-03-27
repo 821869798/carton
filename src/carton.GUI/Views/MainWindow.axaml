@@ -20,6 +20,51 @@
     <vm:MainViewModel/>
   </Design.DataContext>
 
+  <Window.Styles>
+    <Style Selector="ListBox.navPane">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+    </Style>
+
+    <Style Selector="ListBox.navPane > ListBoxItem">
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Margin" Value="6,2"/>
+      <Setter Property="Height" Value="40"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="NavItemBackground"
+                  Background="{TemplateBinding Background}"
+                  CornerRadius="10">
+            <ContentPresenter Margin="12,0,12,0"
+                              Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+
+    <Style Selector="ListBox.navPane > ListBoxItem:pointerover /template/ Border#NavItemBackground">
+      <Setter Property="Background" Value="#0F808080"/>
+    </Style>
+
+    <Style Selector="ListBox.navPane > ListBoxItem:selected /template/ Border#NavItemBackground">
+      <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundBaseLowBrush}"/>
+    </Style>
+
+    <Style Selector="ListBox.navPane > ListBoxItem:selected">
+      <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+    </Style>
+  </Window.Styles>
+
   <Grid RowDefinitions="Auto,*">
     <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
       <Grid ColumnDefinitions="Auto,*,Auto" Margin="12,8">
@@ -57,28 +102,68 @@
     <SplitView Grid.Row="1"
                IsPaneOpen="{Binding IsPaneOpen}"
                DisplayMode="Inline"
-               OpenPaneLength="200"
-               CompactPaneLength="50">
+               OpenPaneLength="240"
+               CompactPaneLength="240">
       <SplitView.Pane>
         <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
-          <ListBox ItemsSource="{Binding NavigationPages}"
-                   SelectedItem="{Binding SelectedPage}"
-                   Background="Transparent"
-                   BorderThickness="0"
-                   Padding="0">
-            <ListBox.ItemTemplate>
-              <DataTemplate DataType="models:NavigationPage">
-                <StackPanel Orientation="Horizontal" Spacing="12" Margin="12,8">
-                  <PathIcon Width="20"
-                            Height="20"
-                            Data="{Binding Converter={StaticResource NavigationIconConverter}}"
-                            Foreground="{Binding $parent[ListBoxItem].Foreground}"/>
-                  <TextBlock Text="{Binding Converter={StaticResource NavigationTitleConverter}}"
-                             VerticalAlignment="Center"/>
-                </StackPanel>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
+          <Grid RowDefinitions="Auto,*">
+            <StackPanel Grid.Row="0"
+                        Margin="0,28,0,24"
+                        HorizontalAlignment="Center"
+                        Spacing="12">
+              <Image Width="52"
+                     Height="52"
+                     Source="/Assets/carton_icon.png"/>
+              <TextBlock Text="{DynamicResource App.Name}"
+                         FontSize="16"
+                         FontWeight="SemiBold"
+                         HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <Grid Grid.Row="1"
+                  Margin="6,4,0,12"
+                  ColumnDefinitions="8,*">
+              <Canvas Grid.Column="0"
+                      Width="8"
+                      IsHitTestVisible="False">
+                <Border Width="3"
+                        Height="18"
+                        Background="{DynamicResource SystemAccentColor}"
+                        CornerRadius="2"
+                        HorizontalAlignment="Left"
+                        Margin="{Binding NavigationIndicatorOffset, Converter={StaticResource NavigationIndicatorMarginConverter}}">
+                  <Border.Transitions>
+                    <Transitions>
+                      <ThicknessTransition Property="Margin" Duration="0:0:0.18"/>
+                    </Transitions>
+                  </Border.Transitions>
+                </Border>
+              </Canvas>
+
+              <ListBox Grid.Column="1"
+                       Classes="navPane"
+                       ItemsSource="{Binding NavigationPages}"
+                       SelectedItem="{Binding SelectedPage}">
+                <ListBox.ItemTemplate>
+                  <DataTemplate DataType="models:NavigationPage">
+                    <Grid ColumnDefinitions="20,*"
+                          ColumnSpacing="12"
+                          VerticalAlignment="Center">
+                      <PathIcon Grid.Column="0"
+                                Width="18"
+                                Height="18"
+                                Data="{Binding Converter={StaticResource NavigationIconConverter}}"
+                                Foreground="{Binding $parent[ListBoxItem].Foreground}"/>
+                      <TextBlock Grid.Column="1"
+                                 Text="{Binding Converter={StaticResource NavigationTitleConverter}}"
+                                 VerticalAlignment="Center"
+                                 Foreground="{Binding $parent[ListBoxItem].Foreground}"/>
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </Grid>
+          </Grid>
         </Border>
       </SplitView.Pane>
 

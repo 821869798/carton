@@ -216,11 +216,12 @@
 									 Watermark="{DynamicResource Profiles.Form.UrlWatermark}"/>
 						</Grid>
 
-						<Grid ColumnDefinitions="100,*" ColumnSpacing="12"
+						<Grid ColumnDefinitions="100,*,Auto" ColumnSpacing="12"
 							  IsVisible="{Binding IsRemoteProfile}">
 							<TextBlock Grid.Column="0" Text="{DynamicResource Profiles.Form.AutoUpdateLabel}" VerticalAlignment="Center"/>
-							<CheckBox Grid.Column="1"
-									  IsChecked="{Binding NewAutoUpdate}"/>
+							<ToggleSwitch Grid.Column="2"
+										  Classes="OnlySwitch"
+										  IsChecked="{Binding NewAutoUpdate}"/>
 						</Grid>
 
 						<Grid ColumnDefinitions="100,*" ColumnSpacing="12"

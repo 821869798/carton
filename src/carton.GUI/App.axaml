@@ -13,6 +13,7 @@
     <local:ConnectionStatusConverter x:Key="ConnectionStatusConverter"/>
     <local:NavigationIconConverter x:Key="NavigationIconConverter"/>
     <local:NavigationTitleConverter x:Key="NavigationTitleConverter"/>
+    <local:NavigationIndicatorMarginConverter x:Key="NavigationIndicatorMarginConverter"/>
     <local:ResponsiveItemWidthConverter x:Key="ResponsiveItemWidthConverter"/>
     <local:LatencyForegroundConverter x:Key="LatencyForegroundConverter"/>
 
@@ -48,6 +49,39 @@
 
     <Style Selector="ComboBox">
       <Setter Property="CornerRadius" Value="4"/>
+    </Style>
+
+    <Style Selector="ToggleSwitch">
+      <Setter Property="MinWidth" Value="0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style Selector="ToggleSwitch.OnlySwitch">
+      <Setter Property="Content" Value=""/>
+      <Setter Property="OnContent" Value=""/>
+      <Setter Property="OffContent" Value=""/>
+      <Setter Property="Width" Value="40"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="HorizontalAlignment" Value="Right"/>
+      <Setter Property="RenderTransform" Value="translateY(-2px)"/>
+    </Style>
+
+    <Style Selector="ToggleSwitch.OnlySwitch /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Height" Value="0"/>
+      <Setter Property="IsVisible" Value="False"/>
+      <Setter Property="Margin" Value="0"/>
+    </Style>
+
+    <Style Selector="ToggleSwitch.OnlySwitch /template/ ContentPresenter#PART_OffContentPresenter">
+      <Setter Property="Height" Value="0"/>
+      <Setter Property="IsVisible" Value="False"/>
+      <Setter Property="Margin" Value="0"/>
+    </Style>
+
+    <Style Selector="ToggleSwitch.OnlySwitch /template/ ContentPresenter#PART_OnContentPresenter">
+      <Setter Property="Height" Value="0"/>
+      <Setter Property="IsVisible" Value="False"/>
+      <Setter Property="Margin" Value="0"/>
     </Style>
   </Application.Styles>
 

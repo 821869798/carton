@@ -191,9 +191,9 @@
                   <TextBlock Grid.Column="0"
                              Text="{DynamicResource Dashboard.Option.SystemProxy}"
                              VerticalAlignment="Center"/>
-                  <CheckBox Grid.Column="1"
-                            IsChecked="{Binding EnableSystemProxy}"
-                            VerticalAlignment="Center"/>
+                  <ToggleSwitch Grid.Column="1"
+                                Classes="OnlySwitch"
+                                IsChecked="{Binding EnableSystemProxy}"/>
                 </Grid>
 
                 <Border Height="1"
@@ -203,10 +203,10 @@
                   <TextBlock Grid.Column="0"
                              Text="{DynamicResource Dashboard.Option.Tun}"
                              VerticalAlignment="Center"/>
-                    <CheckBox Grid.Column="1"
-                              IsChecked="{Binding EnableTunInbound}"
-                              IsEnabled="{Binding ShowStartupSelector}"
-                              VerticalAlignment="Center"/>
+                    <ToggleSwitch Grid.Column="1"
+                                  Classes="OnlySwitch"
+                                  IsChecked="{Binding EnableTunInbound}"
+                                  IsEnabled="{Binding ShowStartupSelector}"/>
                 </Grid>
               </StackPanel>
             </Border>

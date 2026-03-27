@@ -19,8 +19,12 @@
         <Button Content="{DynamicResource Logs.Button.CopyAll}"
                 Command="{Binding CopyAllLogsCommand}"
                 Margin="0,0,10,0"/>
-        <CheckBox Content="{DynamicResource Logs.CheckBox.AutoScrollToLatest}"
-                  IsChecked="{Binding IsAutoScrollToLatest}"/>
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <TextBlock Text="{DynamicResource Logs.CheckBox.AutoScrollToLatest}"
+                     VerticalAlignment="Center"/>
+          <ToggleSwitch Classes="OnlySwitch"
+                        IsChecked="{Binding IsAutoScrollToLatest}"/>
+        </StackPanel>
       </StackPanel>
 
       <Grid Grid.Row="1" Margin="0,10,0,0" ColumnDefinitions="Auto,Auto,*,Auto">

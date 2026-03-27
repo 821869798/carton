@@ -824,12 +824,27 @@ public partial class DashboardViewModel : PageViewModelBase
             Margin = new Avalonia.Thickness(0, 0, 0, 12)
         };
 
-        var allowLanCheckBox = new Avalonia.Controls.CheckBox
+        var allowLanToggle = new Avalonia.Controls.ToggleSwitch
         {
-            Content = GetString("Dashboard.Option.AllowLan", "Allow LAN Connections"),
             IsChecked = AllowLanConnections,
-            Margin = new Avalonia.Thickness(0, 0, 0, 16)
+            Width = 40,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right
         };
+        allowLanToggle.Classes.Add("OnlySwitch");
+
+        var allowLanRow = new Avalonia.Controls.Grid
+        {
+            Margin = new Avalonia.Thickness(0, 0, 0, 16),
+            ColumnDefinitions = new Avalonia.Controls.ColumnDefinitions("*,Auto")
+        };
+        allowLanRow.Children.Add(new Avalonia.Controls.TextBlock
+        {
+            Text = GetString("Dashboard.Option.AllowLan", "Allow LAN Connections"),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+        });
+        var allowLanToggleHost = allowLanToggle;
+        Avalonia.Controls.Grid.SetColumn(allowLanToggleHost, 1);
+        allowLanRow.Children.Add(allowLanToggleHost);
 
         var okBtn = new Avalonia.Controls.Button
         {
@@ -855,7 +870,7 @@ public partial class DashboardViewModel : PageViewModelBase
                 return;
             }
 
-            dialog.Close((port.ToString(), allowLanCheckBox.IsChecked == true));
+            dialog.Close((port.ToString(), allowLanToggle.IsChecked == true));
         };
 
         var buttons = new Avalonia.Controls.StackPanel
@@ -875,7 +890,7 @@ public partial class DashboardViewModel : PageViewModelBase
             {
                 prompt,
                 portBox,
-                allowLanCheckBox,
+                allowLanRow,
                 buttons
             }
         };
