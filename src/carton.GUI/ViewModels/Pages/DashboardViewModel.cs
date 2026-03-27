@@ -1,10 +1,10 @@
+using Avalonia.Threading;
 using carton.Core.Models;
 using carton.Core.Services;
 using carton.Core.Utilities;
 using carton.GUI.Models;
 using carton.GUI.Serialization;
 using carton.GUI.Services;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
@@ -12,14 +12,13 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -40,6 +39,7 @@ public partial class DashboardViewModel : PageViewModelBase
     private readonly ClashConfigCacheService _clashConfigCache;
     private HttpClient _clashHttpClient => HttpClientFactory.LocalApi;
     private string? _currentClashMode;
+    private bool _suppressSelectedClashModeOptionChange;
     private ProfileRuntimeOptions _runtimeOptions = new();
     private bool _suppressRuntimeOptionUpdates;
     private bool _suppressSystemProxyApply;
@@ -81,6 +81,21 @@ public partial class DashboardViewModel : PageViewModelBase
     public ObservableCollection<long> DownloadTrafficSamples { get; } = new();
 
     public int ClashModeColumnCount => Math.Max(1, ClashModeOptions.Count);
+    public bool UseClashModeDropdown => ClashModeOptions.Count > 5;
+    public bool ShowClashModeSegments => ClashModeOptions.Count > 0 && !UseClashModeDropdown;
+
+    [ObservableProperty]
+    private DashboardClashModeOptionViewModel? _selectedClashModeOption;
+
+    partial void OnSelectedClashModeOptionChanged(DashboardClashModeOptionViewModel? value)
+    {
+        if (_suppressSelectedClashModeOptionChange || value == null)
+        {
+            return;
+        }
+
+        _ = ChangeClashMode(value);
+    }
 
     [ObservableProperty]
     private DashboardProfileItemViewModel? _selectedStartupProfile;
@@ -1435,10 +1450,26 @@ public partial class DashboardViewModel : PageViewModelBase
     private void UpdateClashModeSelection(string? mode)
     {
         _currentClashMode = string.IsNullOrWhiteSpace(mode) ? null : mode;
+        DashboardClashModeOptionViewModel? selectedOption = null;
         foreach (var option in ClashModeOptions)
         {
             option.IsSelected = !string.IsNullOrWhiteSpace(mode) &&
                 string.Equals(option.Mode, mode, StringComparison.OrdinalIgnoreCase);
+
+            if (option.IsSelected)
+            {
+                selectedOption = option;
+            }
+        }
+
+        _suppressSelectedClashModeOptionChange = true;
+        try
+        {
+            SelectedClashModeOption = selectedOption;
+        }
+        finally
+        {
+            _suppressSelectedClashModeOptionChange = false;
         }
     }
 
@@ -1465,6 +1496,8 @@ public partial class DashboardViewModel : PageViewModelBase
         }
 
         OnPropertyChanged(nameof(ClashModeColumnCount));
+        OnPropertyChanged(nameof(UseClashModeDropdown));
+        OnPropertyChanged(nameof(ShowClashModeSegments));
     }
 
     private static string FormatBytes(long bytes) => FormatHelper.FormatBytes(bytes);

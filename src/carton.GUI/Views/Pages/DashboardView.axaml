@@ -73,6 +73,10 @@
       <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
     </Style>
 
+    <Style Selector="ComboBox.clashModeDropdown /template/ Popup#PART_Popup">
+      <Setter Property="Placement" Value="TopEdgeAlignedLeft"/>
+    </Style>
+
   </UserControl.Styles>
 
   <ScrollViewer>
@@ -424,7 +428,8 @@
                                  VerticalAlignment="Center"/>
                     </StackPanel>
 
-                    <Border Classes="clashModeTrack">
+                    <Border Classes="clashModeTrack"
+                            IsVisible="{Binding ShowClashModeSegments}">
                       <ItemsControl ItemsSource="{Binding ClashModeOptions}">
                         <ItemsControl.ItemsPanel>
                           <ItemsPanelTemplate>
@@ -444,6 +449,17 @@
                         </ItemsControl.ItemTemplate>
                       </ItemsControl>
                     </Border>
+
+                    <ComboBox Classes="clashModeDropdown"
+                              ItemsSource="{Binding ClashModeOptions}"
+                              SelectedItem="{Binding SelectedClashModeOption}"
+                              IsVisible="{Binding UseClashModeDropdown}">
+                      <ComboBox.ItemTemplate>
+                        <DataTemplate DataType="vm:DashboardClashModeOptionViewModel">
+                          <TextBlock Text="{Binding DisplayName}"/>
+                        </DataTemplate>
+                      </ComboBox.ItemTemplate>
+                    </ComboBox>
                   </StackPanel>
                 </Border>
               </StackPanel>
