@@ -91,6 +91,13 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _hasKernelDownloadFailed;
 
+    public MainViewModel? KernelDialogHost => ShowKernelDialog ? this : null;
+
+    partial void OnShowKernelDialogChanged(bool value)
+    {
+        OnPropertyChanged(nameof(KernelDialogHost));
+    }
+
     partial void OnSelectedKernelDownloadMirrorChanged(DownloadMirror value)
     {
         if (_suppressPreferenceUpdates)

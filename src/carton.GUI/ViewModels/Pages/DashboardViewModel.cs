@@ -22,7 +22,6 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Globalization;
 
 namespace carton.ViewModels;
 
@@ -31,10 +30,7 @@ public partial class DashboardViewModel : PageViewModelBase
     private const string TerminalProxyTypeCmd = "cmd";
     private const string TerminalProxyTypePowerShell = "ps";
     private const string TerminalProxyTypeLinux = "linux";
-    private const int TrafficSparklineSampleCount = 24;
-    private const double TrafficSparklineWidth = 120;
-    private const double TrafficSparklineHeight = 60;
-    private const double TrafficSparklinePadding = 4;
+    private const int TrafficSparklineSampleCount = 60;
     private readonly ISingBoxManager? _singBoxManager;
     private readonly IKernelManager? _kernelManager;
     private readonly IProfileManager? _profileManager;
@@ -48,8 +44,6 @@ public partial class DashboardViewModel : PageViewModelBase
     private bool _suppressRuntimeOptionUpdates;
     private bool _suppressSystemProxyApply;
     private readonly DispatcherTimer _sessionDurationTimer;
-    private readonly List<long> _uploadTrafficHistory = new();
-    private readonly List<long> _downloadTrafficHistory = new();
     private bool _isOnPage = true;
     private bool _isWindowVisible = true;
     private bool _isLiveRefreshActive;
@@ -77,24 +71,14 @@ public partial class DashboardViewModel : PageViewModelBase
     private string _totalDownload = "0 B";
 
     [ObservableProperty]
-    private string _uploadTrafficLineGeometry = "M 0,56 L 120,56";
-
-    [ObservableProperty]
-    private string _uploadTrafficFillGeometry = "M 0,60 L 0,56 L 120,56 L 120,60 Z";
-
-    [ObservableProperty]
-    private string _downloadTrafficLineGeometry = "M 0,56 L 120,56";
-
-    [ObservableProperty]
-    private string _downloadTrafficFillGeometry = "M 0,60 L 0,56 L 120,56 L 120,60 Z";
-
-    [ObservableProperty]
     private string _currentProfile = "No Profile Selected";
 
     [ObservableProperty]
     private ObservableCollection<DashboardProfileItemViewModel> _availableProfiles = new();
 
     public ObservableCollection<DashboardClashModeOptionViewModel> ClashModeOptions { get; } = new();
+    public ObservableCollection<long> UploadTrafficSamples { get; } = new();
+    public ObservableCollection<long> DownloadTrafficSamples { get; } = new();
 
     public int ClashModeColumnCount => Math.Max(1, ClashModeOptions.Count);
 
@@ -292,6 +276,7 @@ public partial class DashboardViewModel : PageViewModelBase
 
     public bool ShowStartupSelector => !IsConnected;
     public bool ShowDashboardMetrics => IsConnected;
+    public DashboardViewModel? DashboardMetricsContent => ShowDashboardMetrics ? this : null;
     public ObservableCollection<string> LogLevelOptions => SupportedLogLevels;
     public bool ShowVerboseLogLevelHint => SingBoxLogLevelHelper.IsVerbose(SelectedLogLevel);
 
@@ -299,6 +284,7 @@ public partial class DashboardViewModel : PageViewModelBase
     {
         OnPropertyChanged(nameof(ShowStartupSelector));
         OnPropertyChanged(nameof(ShowDashboardMetrics));
+        OnPropertyChanged(nameof(DashboardMetricsContent));
     }
 
     public DashboardViewModel()
@@ -1375,82 +1361,23 @@ public partial class DashboardViewModel : PageViewModelBase
 
     private void UpdateTrafficHistory(long uploadSpeed, long downloadSpeed)
     {
-        AppendTrafficSample(_uploadTrafficHistory, uploadSpeed);
-        AppendTrafficSample(_downloadTrafficHistory, downloadSpeed);
-
-        var (uploadLine, uploadFill) = BuildSparklineGeometry(_uploadTrafficHistory);
-        UploadTrafficLineGeometry = uploadLine;
-        UploadTrafficFillGeometry = uploadFill;
-
-        var (downloadLine, downloadFill) = BuildSparklineGeometry(_downloadTrafficHistory);
-        DownloadTrafficLineGeometry = downloadLine;
-        DownloadTrafficFillGeometry = downloadFill;
+        AppendTrafficSample(UploadTrafficSamples, uploadSpeed);
+        AppendTrafficSample(DownloadTrafficSamples, downloadSpeed);
     }
 
     private void ResetTrafficHistory()
     {
-        _uploadTrafficHistory.Clear();
-        _downloadTrafficHistory.Clear();
-
-        var (line, fill) = BuildFlatSparklineGeometry();
-        UploadTrafficLineGeometry = line;
-        UploadTrafficFillGeometry = fill;
-        DownloadTrafficLineGeometry = line;
-        DownloadTrafficFillGeometry = fill;
+        UploadTrafficSamples.Clear();
+        DownloadTrafficSamples.Clear();
     }
 
-    private static void AppendTrafficSample(List<long> samples, long value)
+    private static void AppendTrafficSample(ObservableCollection<long> samples, long value)
     {
         samples.Add(Math.Max(0, value));
         if (samples.Count > TrafficSparklineSampleCount)
         {
             samples.RemoveAt(0);
         }
-    }
-
-    private static (string Line, string Fill) BuildSparklineGeometry(IReadOnlyList<long> samples)
-    {
-        if (samples.Count == 0)
-        {
-            return BuildFlatSparklineGeometry();
-        }
-
-        var maxValue = samples.Max();
-        if (maxValue <= 0)
-        {
-            return BuildFlatSparklineGeometry();
-        }
-
-        var width = TrafficSparklineWidth;
-        var height = TrafficSparklineHeight;
-        var baseline = height - TrafficSparklinePadding;
-        var drawableHeight = height - (TrafficSparklinePadding * 2);
-        var stepX = samples.Count == 1 ? 0 : width / (samples.Count - 1);
-
-        var lineBuilder = new StringBuilder();
-        var fillBuilder = new StringBuilder();
-        fillBuilder.AppendFormat(CultureInfo.InvariantCulture, "M 0,{0:0.##} ", baseline);
-
-        for (var i = 0; i < samples.Count; i++)
-        {
-            var x = stepX * i;
-            var normalized = samples[i] / (double)maxValue;
-            var y = baseline - (normalized * drawableHeight);
-
-            lineBuilder.AppendFormat(CultureInfo.InvariantCulture, "{0} {1:0.##},{2:0.##} ", i == 0 ? "M" : "L", x, y);
-            fillBuilder.AppendFormat(CultureInfo.InvariantCulture, "{0} {1:0.##},{2:0.##} ", i == 0 ? "L" : "L", x, y);
-        }
-
-        fillBuilder.AppendFormat(CultureInfo.InvariantCulture, "L {0:0.##},{1:0.##} Z", width, baseline);
-        return (lineBuilder.ToString().TrimEnd(), fillBuilder.ToString().TrimEnd());
-    }
-
-    private static (string Line, string Fill) BuildFlatSparklineGeometry()
-    {
-        var baseline = TrafficSparklineHeight - TrafficSparklinePadding;
-        var line = string.Format(CultureInfo.InvariantCulture, "M 0,{0:0.##} L {1:0.##},{0:0.##}", baseline, TrafficSparklineWidth);
-        var fill = string.Format(CultureInfo.InvariantCulture, "M 0,{0:0.##} L 0,{1:0.##} L {2:0.##},{1:0.##} L {2:0.##},{0:0.##} Z", TrafficSparklineHeight, baseline, TrafficSparklineWidth);
-        return (line, fill);
     }
 
     private async Task<ClashConfigSnapshot?> GetClashConfigFromApiAsync()

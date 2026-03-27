@@ -10,6 +10,13 @@ namespace carton.Core.Services;
 
 public partial class SingBoxManager
 {
+    private static readonly string[] TrafficUplinkPropertyNames = ["uplink", "up", "upload"];
+    private static readonly string[] TrafficDownlinkPropertyNames = ["downlink", "down", "download"];
+    private static readonly string[] MemoryPropertyNames = ["inuse", "inUse", "memory", "value"];
+    private const int MessageBufferTrimThreshold = 64 * 1024;
+    private const int MessageBufferInitialCapacity = 4 * 1024;
+    private const int MaxMonitorMessageBytes = 64 * 1024;
+
     public long? GetRunningProcessMemoryBytes()
     {
         try
@@ -57,6 +64,7 @@ public partial class SingBoxManager
         var buffer = ArrayPool<byte>.Shared.Rent(4096);
         var stream = new MemoryStream();
         ClientWebSocket? webSocket = null;
+        var skippingOversizedMessage = false;
         var wsUri = BuildWebSocketUri("traffic");
 
         try
@@ -77,7 +85,7 @@ public partial class SingBoxManager
                         }
                         using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                         await webSocket.ConnectAsync(wsUri, connectCts.Token);
-                        stream.SetLength(0);
+                        ResetMessageBuffer(stream);
                     }
 
                     var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
@@ -92,6 +100,25 @@ public partial class SingBoxManager
 
                     if (result.Count > 0)
                     {
+                        if (skippingOversizedMessage)
+                        {
+                            if (result.EndOfMessage)
+                            {
+                                skippingOversizedMessage = false;
+                                ResetMessageBuffer(stream);
+                            }
+
+                            continue;
+                        }
+
+                        if (stream.Length + result.Count > MaxMonitorMessageBytes)
+                        {
+                            LogManager($"[WARN] Traffic monitor payload exceeded {MaxMonitorMessageBytes} bytes and was discarded");
+                            skippingOversizedMessage = !result.EndOfMessage;
+                            ResetMessageBuffer(stream);
+                            continue;
+                        }
+
                         stream.Write(buffer, 0, result.Count);
                     }
 
@@ -102,7 +129,7 @@ public partial class SingBoxManager
 
                     if (result.MessageType != WebSocketMessageType.Text)
                     {
-                        stream.SetLength(0);
+                        ResetMessageBuffer(stream);
                         continue;
                     }
 
@@ -111,8 +138,8 @@ public partial class SingBoxManager
                         continue;
                     }
 
-                    var payload = Encoding.UTF8.GetString(stream.GetBuffer(), 0, (int)stream.Length);
-                    stream.SetLength(0);
+                    var payload = Encoding.UTF8.GetString(stream.GetBuffer().AsSpan(0, (int)stream.Length));
+                    ResetMessageBuffer(stream);
                     var traffic = TryParseTrafficSnapshot(payload);
                     if (traffic == null)
                     {
@@ -135,7 +162,7 @@ public partial class SingBoxManager
                         webSocket = null;
                     }
 
-                    stream.SetLength(0);
+                    ResetMessageBuffer(stream);
                     await Task.Delay(1000);
                 }
             }
@@ -159,6 +186,7 @@ public partial class SingBoxManager
         var buffer = ArrayPool<byte>.Shared.Rent(4096);
         var stream = new MemoryStream();
         ClientWebSocket? webSocket = null;
+        var skippingOversizedMessage = false;
         var wsUri = BuildWebSocketUri("memory");
 
         try
@@ -180,7 +208,7 @@ public partial class SingBoxManager
 
                         using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                         await webSocket.ConnectAsync(wsUri, connectCts.Token);
-                        stream.SetLength(0);
+                        ResetMessageBuffer(stream);
                     }
 
                     var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
@@ -195,6 +223,25 @@ public partial class SingBoxManager
 
                     if (result.Count > 0)
                     {
+                        if (skippingOversizedMessage)
+                        {
+                            if (result.EndOfMessage)
+                            {
+                                skippingOversizedMessage = false;
+                                ResetMessageBuffer(stream);
+                            }
+
+                            continue;
+                        }
+
+                        if (stream.Length + result.Count > MaxMonitorMessageBytes)
+                        {
+                            LogManager($"[WARN] Memory monitor payload exceeded {MaxMonitorMessageBytes} bytes and was discarded");
+                            skippingOversizedMessage = !result.EndOfMessage;
+                            ResetMessageBuffer(stream);
+                            continue;
+                        }
+
                         stream.Write(buffer, 0, result.Count);
                     }
 
@@ -205,7 +252,7 @@ public partial class SingBoxManager
 
                     if (result.MessageType != WebSocketMessageType.Text)
                     {
-                        stream.SetLength(0);
+                        ResetMessageBuffer(stream);
                         continue;
                     }
 
@@ -214,8 +261,8 @@ public partial class SingBoxManager
                         continue;
                     }
 
-                    var payload = Encoding.UTF8.GetString(stream.GetBuffer(), 0, (int)stream.Length);
-                    stream.SetLength(0);
+                    var payload = Encoding.UTF8.GetString(stream.GetBuffer().AsSpan(0, (int)stream.Length));
+                    ResetMessageBuffer(stream);
                     var memoryInUse = TryParseMemorySnapshot(payload);
                     if (!memoryInUse.HasValue)
                     {
@@ -235,7 +282,7 @@ public partial class SingBoxManager
                         webSocket = null;
                     }
 
-                    stream.SetLength(0);
+                    ResetMessageBuffer(stream);
                     await Task.Delay(1000);
                 }
             }
@@ -265,8 +312,8 @@ public partial class SingBoxManager
         {
             using var document = JsonDocument.Parse(payload);
             var root = document.RootElement;
-            var uplink = ReadTrafficValue(root, "uplink", "up", "upload");
-            var downlink = ReadTrafficValue(root, "downlink", "down", "download");
+            var uplink = ReadTrafficValue(root, TrafficUplinkPropertyNames);
+            var downlink = ReadTrafficValue(root, TrafficDownlinkPropertyNames);
             return new TrafficInfo
             {
                 Uplink = uplink,
@@ -291,14 +338,14 @@ public partial class SingBoxManager
         {
             using var document = JsonDocument.Parse(payload);
             var root = document.RootElement;
-            if (TryReadTrafficValue(root, new[] { "inuse", "inUse", "memory", "value" }, out var value))
+            if (TryReadTrafficValue(root, MemoryPropertyNames, out var value))
             {
                 return value;
             }
 
             if (root.ValueKind == JsonValueKind.Object &&
                 root.TryGetProperty("now", out var nowElement) &&
-                TryReadTrafficValue(nowElement, new[] { "inuse", "inUse", "memory", "value" }, out value))
+                TryReadTrafficValue(nowElement, MemoryPropertyNames, out value))
             {
                 return value;
             }
@@ -312,7 +359,7 @@ public partial class SingBoxManager
         }
     }
 
-    private static long ReadTrafficValue(JsonElement root, params string[] propertyNames)
+    private static long ReadTrafficValue(JsonElement root, IReadOnlyList<string> propertyNames)
     {
         if (TryReadTrafficValue(root, propertyNames, out var value))
         {
@@ -361,5 +408,16 @@ public partial class SingBoxManager
 
         value = 0;
         return false;
+    }
+
+    private static void ResetMessageBuffer(MemoryStream stream)
+    {
+        stream.SetLength(0);
+        if (stream.Capacity <= MessageBufferTrimThreshold)
+        {
+            return;
+        }
+
+        stream.Capacity = MessageBufferInitialCapacity;
     }
 }

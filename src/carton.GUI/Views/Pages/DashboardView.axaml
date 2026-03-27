@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="using:carton.Controls"
              xmlns:vm="using:carton.ViewModels"
              mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="400"
              x:Class="carton.Views.Pages.DashboardView"
@@ -260,238 +261,196 @@
         </StackPanel>
       </Border>
 
-      <StackPanel IsVisible="{Binding ShowDashboardMetrics}" Spacing="12">
-        <Border Classes="card" Padding="14,10">
-          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-              <TextBlock Text="{DynamicResource Dashboard.CurrentProfileLabel}"
-                         FontSize="12"
-                         Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                         VerticalAlignment="Center"/>
-              <TextBlock Text="{Binding CurrentProfile}"
-                         FontSize="16"
-                         FontWeight="SemiBold"
-                         VerticalAlignment="Center"/>
-            </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-              <Ellipse Width="10"
-                       Height="10"
-                       VerticalAlignment="Center"
-                       Fill="{Binding IsConnected, Converter={StaticResource ConnectionStatusConverter}}"/>
-              <TextBlock Text="{Binding StatusText}"
-                         FontSize="14"
-                         FontWeight="SemiBold"
-                         VerticalAlignment="Center"/>
-              <Button Command="{Binding StopConnectionCommand}"
-                      Classes="danger"
-                      Padding="10,4"
-                      CornerRadius="17">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Border Width="18"
-                          Height="18"
-                          CornerRadius="9"
-                          BorderThickness="1.5"
-                          BorderBrush="#F8FFFFFF"
-                          VerticalAlignment="Center">
-                    <Border Width="7"
-                            Height="7"
-                            CornerRadius="1.5"
-                            Background="#F8FFFFFF"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"/>
-                  </Border>
-                  <TextBlock Text="{Binding SessionStartTimeText}"
-                             FontWeight="SemiBold"
-                             VerticalAlignment="Center"/>
-                </StackPanel>
-              </Button>
-            </StackPanel>
-          </Grid>
-        </Border>
-
-        <StackPanel Spacing="16">
-          <Grid ColumnDefinitions="*,*,0.95*" ColumnSpacing="16">
-            <Border Classes="card sfmCard" Padding="16">
-              <StackPanel Spacing="12">
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                  <PathIcon Width="16"
-                            Height="16"
-                            Data="M12 5 V19 M7 10 L12 5 L17 10"
-                            VerticalAlignment="Center"/>
-                  <TextBlock Text="{DynamicResource Dashboard.Label.UploadSpeed}"
-                             FontSize="17"
-                             FontWeight="Bold"
-                             VerticalAlignment="Center"/>
-                </StackPanel>
-
-                <StackPanel Spacing="4">
-                  <TextBlock Text="{Binding UploadSpeed}"
-                             FontSize="24"
-                             FontWeight="SemiBold"/>
-                  <TextBlock Text="{Binding TotalUpload}"
-                             FontSize="13"
-                             Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
-                </StackPanel>
-
-                <Border Height="60"
-                        ClipToBounds="True">
-                  <Viewbox Stretch="Fill">
-                    <Canvas Width="120" Height="60">
-                      <Path Data="M 0,0 L 120,0"
-                            Stroke="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                            StrokeThickness="1"
-                            StrokeDashArray="5,5"/>
-                      <Path Data="M 0,20 L 120,20"
-                            Stroke="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                            StrokeThickness="1"
-                            StrokeDashArray="5,5"/>
-                      <Path Data="M 0,40 L 120,40"
-                            Stroke="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                            StrokeThickness="1"
-                            StrokeDashArray="5,5"/>
-                      <Path Data="M 0,60 L 120,60"
-                            Stroke="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                            StrokeThickness="1"
-                            StrokeDashArray="5,5"/>
-                      <Path Data="{Binding UploadTrafficFillGeometry}"
-                            Fill="{DynamicResource SystemAccentColor}"
-                            Opacity="0.12"/>
-                      <Path Data="{Binding UploadTrafficLineGeometry}"
-                            Stroke="{DynamicResource SystemAccentColor}"
-                            StrokeThickness="1.75"/>
-                    </Canvas>
-                  </Viewbox>
-                </Border>
-              </StackPanel>
-            </Border>
-
-            <Border Grid.Column="1" Classes="card sfmCard" Padding="16">
-              <StackPanel Spacing="12">
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                  <PathIcon Width="16"
-                            Height="16"
-                            Data="M12 19 V5 M7 14 L12 19 L17 14"
-                            VerticalAlignment="Center"/>
-                  <TextBlock Text="{DynamicResource Dashboard.Label.DownloadSpeed}"
-                             FontSize="17"
-                             FontWeight="Bold"
-                             VerticalAlignment="Center"/>
-                </StackPanel>
-
-                <StackPanel Spacing="4">
-                  <TextBlock Text="{Binding DownloadSpeed}"
-                             FontSize="24"
-                             FontWeight="SemiBold"/>
-                  <TextBlock Text="{Binding TotalDownload}"
-                             FontSize="13"
-                             Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
-                </StackPanel>
-
-                <Border Height="60"
-                        ClipToBounds="True">
-                  <Viewbox Stretch="Fill">
-                    <Canvas Width="120" Height="60">
-                      <Path Data="M 0,0 L 120,0"
-                            Stroke="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                            StrokeThickness="1"
-                            StrokeDashArray="5,5"/>
-                      <Path Data="M 0,20 L 120,20"
-                            Stroke="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                            StrokeThickness="1"
-                            StrokeDashArray="5,5"/>
-                      <Path Data="M 0,40 L 120,40"
-                            Stroke="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                            StrokeThickness="1"
-                            StrokeDashArray="5,5"/>
-                      <Path Data="M 0,60 L 120,60"
-                            Stroke="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                            StrokeThickness="1"
-                            StrokeDashArray="5,5"/>
-                      <Path Data="{Binding DownloadTrafficFillGeometry}"
-                            Fill="{DynamicResource SystemAccentColor}"
-                            Opacity="0.12"/>
-                      <Path Data="{Binding DownloadTrafficLineGeometry}"
-                            Stroke="{DynamicResource SystemAccentColor}"
-                            StrokeThickness="1.75"/>
-                    </Canvas>
-                  </Viewbox>
-                </Border>
-              </StackPanel>
-            </Border>
-
-            <Border Grid.Column="2" Classes="card sfmCard" Padding="16">
-              <StackPanel Spacing="12">
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                  <PathIcon Width="16"
-                            Height="16"
-                            Data="M3 6 H21 V18 H3 Z M7 10 H17 V14 H7 Z"
-                            VerticalAlignment="Center"/>
-                  <TextBlock Text="{DynamicResource Dashboard.KernelMemory.Title}"
-                             FontSize="17"
-                             FontWeight="Bold"
-                             VerticalAlignment="Center"/>
-                </StackPanel>
-
-                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                  <TextBlock Text="{DynamicResource Dashboard.KernelMemory.KernelVersion}"
-                             FontSize="12"
-                             Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
-                  <TextBlock Grid.Column="1"
-                             Text="{Binding KernelVersion}"
-                             FontSize="13"
-                             HorizontalAlignment="Right"/>
-                </Grid>
-
-                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                  <TextBlock Text="{DynamicResource Dashboard.KernelMemory.MemoryUsage}"
-                             FontSize="12"
-                             Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
-                  <TextBlock Grid.Column="1"
-                             Text="{Binding MemoryUsage}"
-                             FontSize="13"
-                             HorizontalAlignment="Right"/>
-                </Grid>
-              </StackPanel>
-            </Border>
-          </Grid>
-
-          <Border Classes="card sfmCard" Padding="16">
+      <ContentControl Content="{Binding DashboardMetricsContent}">
+        <ContentControl.DataTemplates>
+          <DataTemplate DataType="vm:DashboardViewModel">
             <StackPanel Spacing="12">
-              <StackPanel Orientation="Horizontal" Spacing="10">
-                <PathIcon Width="16"
-                          Height="16"
-                          Data="M4 4 H10 V10 H4 Z M14 4 H20 V10 H14 Z M4 14 H10 V20 H4 Z M14 14 H20 V20 H14 Z"
-                          VerticalAlignment="Center"/>
-                <TextBlock Text="{DynamicResource Dashboard.ClashMode}"
-                           FontSize="17"
-                           FontWeight="Bold"
-                           VerticalAlignment="Center"/>
-              </StackPanel>
-
-              <Border Classes="clashModeTrack">
-                <ItemsControl ItemsSource="{Binding ClashModeOptions}">
-                  <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                      <UniformGrid Rows="1"
-                                   Columns="{Binding ClashModeColumnCount}"/>
-                    </ItemsPanelTemplate>
-                  </ItemsControl.ItemsPanel>
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="vm:DashboardClashModeOptionViewModel">
-                      <RadioButton Classes="clashModeSegment"
-                                   Content="{Binding DisplayName}"
-                                   GroupName="clash-mode"
-                                   IsChecked="{Binding IsSelected}"
-                                   Command="{Binding $parent[ItemsControl].((vm:DashboardViewModel)DataContext).ChangeClashModeCommand}"
-                                   CommandParameter="{Binding}"/>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
+              <Border Classes="card" Padding="14,10">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                  <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{DynamicResource Dashboard.CurrentProfileLabel}"
+                               FontSize="12"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding CurrentProfile}"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+                  </StackPanel>
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <Ellipse Width="10"
+                             Height="10"
+                             VerticalAlignment="Center"
+                             Fill="{Binding IsConnected, Converter={StaticResource ConnectionStatusConverter}}"/>
+                    <TextBlock Text="{Binding StatusText}"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+                    <Button Command="{Binding StopConnectionCommand}"
+                            Classes="danger"
+                            Padding="10,4"
+                            CornerRadius="17">
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Border Width="18"
+                                Height="18"
+                                CornerRadius="9"
+                                BorderThickness="1.5"
+                                BorderBrush="#F8FFFFFF"
+                                VerticalAlignment="Center">
+                          <Border Width="7"
+                                  Height="7"
+                                  CornerRadius="1.5"
+                                  Background="#F8FFFFFF"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Text="{Binding SessionStartTimeText}"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                      </StackPanel>
+                    </Button>
+                  </StackPanel>
+                </Grid>
               </Border>
+
+              <StackPanel Spacing="16">
+                <Grid ColumnDefinitions="*,*,0.95*" ColumnSpacing="16">
+                  <Border Classes="card sfmCard" Padding="16">
+                    <StackPanel Spacing="12">
+                      <StackPanel Orientation="Horizontal" Spacing="10">
+                        <PathIcon Width="16"
+                                  Height="16"
+                                  Data="M12 5 V19 M7 10 L12 5 L17 10"
+                                  VerticalAlignment="Center"/>
+                        <TextBlock Text="{DynamicResource Dashboard.Label.UploadSpeed}"
+                                   FontSize="17"
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center"/>
+                      </StackPanel>
+
+                      <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding UploadSpeed}"
+                                   FontSize="24"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding TotalUpload}"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                      </StackPanel>
+
+                      <controls:SparklineChart Height="60"
+                                               Samples="{Binding UploadTrafficSamples}"
+                                               GridBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                                               FillBrush="{DynamicResource SystemAccentColor}"
+                                               LineBrush="{DynamicResource SystemAccentColor}"/>
+                    </StackPanel>
+                  </Border>
+
+                  <Border Grid.Column="1" Classes="card sfmCard" Padding="16">
+                    <StackPanel Spacing="12">
+                      <StackPanel Orientation="Horizontal" Spacing="10">
+                        <PathIcon Width="16"
+                                  Height="16"
+                                  Data="M12 19 V5 M7 14 L12 19 L17 14"
+                                  VerticalAlignment="Center"/>
+                        <TextBlock Text="{DynamicResource Dashboard.Label.DownloadSpeed}"
+                                   FontSize="17"
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center"/>
+                      </StackPanel>
+
+                      <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding DownloadSpeed}"
+                                   FontSize="24"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding TotalDownload}"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                      </StackPanel>
+
+                      <controls:SparklineChart Height="60"
+                                               Samples="{Binding DownloadTrafficSamples}"
+                                               GridBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                                               FillBrush="{DynamicResource SystemAccentColor}"
+                                               LineBrush="{DynamicResource SystemAccentColor}"/>
+                    </StackPanel>
+                  </Border>
+
+                  <Border Grid.Column="2" Classes="card sfmCard" Padding="16">
+                    <StackPanel Spacing="12">
+                      <StackPanel Orientation="Horizontal" Spacing="10">
+                        <PathIcon Width="16"
+                                  Height="16"
+                                  Data="M3 6 H21 V18 H3 Z M7 10 H17 V14 H7 Z"
+                                  VerticalAlignment="Center"/>
+                        <TextBlock Text="{DynamicResource Dashboard.KernelMemory.Title}"
+                                   FontSize="17"
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center"/>
+                      </StackPanel>
+
+                      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <TextBlock Text="{DynamicResource Dashboard.KernelMemory.KernelVersion}"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding KernelVersion}"
+                                   FontSize="13"
+                                   HorizontalAlignment="Right"/>
+                      </Grid>
+
+                      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <TextBlock Text="{DynamicResource Dashboard.KernelMemory.MemoryUsage}"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding MemoryUsage}"
+                                   FontSize="13"
+                                   HorizontalAlignment="Right"/>
+                      </Grid>
+                    </StackPanel>
+                  </Border>
+                </Grid>
+
+                <Border Classes="card sfmCard" Padding="16">
+                  <StackPanel Spacing="12">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                      <PathIcon Width="16"
+                                Height="16"
+                                Data="M4 4 H10 V10 H4 Z M14 4 H20 V10 H14 Z M4 14 H10 V20 H4 Z M14 14 H20 V20 H14 Z"
+                                VerticalAlignment="Center"/>
+                      <TextBlock Text="{DynamicResource Dashboard.ClashMode}"
+                                 FontSize="17"
+                                 FontWeight="Bold"
+                                 VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <Border Classes="clashModeTrack">
+                      <ItemsControl ItemsSource="{Binding ClashModeOptions}">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <UniformGrid Rows="1"
+                                         Columns="{Binding ClashModeColumnCount}"/>
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="vm:DashboardClashModeOptionViewModel">
+                            <RadioButton Classes="clashModeSegment"
+                                         Content="{Binding DisplayName}"
+                                         GroupName="clash-mode"
+                                         IsChecked="{Binding IsSelected}"
+                                         Command="{Binding $parent[ItemsControl].((vm:DashboardViewModel)DataContext).ChangeClashModeCommand}"
+                                         CommandParameter="{Binding}"/>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Border>
+                  </StackPanel>
+                </Border>
+              </StackPanel>
             </StackPanel>
-          </Border>
-        </StackPanel>
-      </StackPanel>
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
     </StackPanel>
   </ScrollViewer>
 
