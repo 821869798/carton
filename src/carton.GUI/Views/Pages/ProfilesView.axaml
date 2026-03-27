@@ -31,17 +31,42 @@
 			<Setter Property="Background" Value="Transparent"/>
 			<Setter Property="BorderBrush" Value="Transparent"/>
 		</Style>
-		<Style Selector="Button.profile-row:pressed">
+ 		<Style Selector="Button.profile-row:pressed">
+ 			<Setter Property="Background" Value="Transparent"/>
+ 			<Setter Property="BorderBrush" Value="Transparent"/>
+ 		</Style>
+		<Style Selector="Button.iconButton">
+			<Setter Property="Width" Value="30"/>
+			<Setter Property="Height" Value="30"/>
+			<Setter Property="Padding" Value="0"/>
+			<Setter Property="CornerRadius" Value="15"/>
 			<Setter Property="Background" Value="Transparent"/>
-			<Setter Property="BorderBrush" Value="Transparent"/>
+			<Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"/>
+			<Setter Property="BorderThickness" Value="1"/>
+			<Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
 		</Style>
-	</UserControl.Styles>
+		<Style Selector="Button.iconButton:pointerover">
+			<Setter Property="Background" Value="{DynamicResource SystemControlBackgroundBaseLowBrush}"/>
+			<Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+		</Style>
+		<Style Selector="Button.iconButton:pressed">
+			<Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+		</Style>
+ 	</UserControl.Styles>
 
 	<Grid RowDefinitions="Auto,Auto,*">
 		<Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="10">
 			<Grid ColumnDefinitions="Auto,*">
-				<Button Grid.Column="0" Content="{DynamicResource Profiles.Button.Back}" Command="{Binding CancelCreateCommand}"
-						IsVisible="{Binding IsProfileFormMode}" Margin="0,0,10,0"/>
+				<Button Grid.Column="0"
+						Classes="iconButton"
+						Command="{Binding CancelCreateCommand}"
+						IsVisible="{Binding IsProfileFormMode}"
+						Margin="0,0,10,0"
+						ToolTip.Tip="{DynamicResource Profiles.Button.Back}">
+					<PathIcon Width="14"
+							  Height="14"
+							  Data="M14.71 6.71L13.29 5.29L6.59 12L13.29 18.71L14.71 17.29L9.41 12L14.71 6.71Z"/>
+				</Button>
 				<TextBlock Grid.Column="1"
 						   Text="{DynamicResource Profiles.Header.Title}"
 						   FontSize="24"
@@ -71,9 +96,16 @@
 						CornerRadius="8"
 						Padding="12">
 					<StackPanel Spacing="0">
-						<Button Content="{DynamicResource Profiles.Button.NewProfile}"
-								HorizontalContentAlignment="Left"
-								Command="{Binding ShowCreateProfileDialogCommand}"/>
+						<Grid ColumnDefinitions="*,Auto">
+							<Button Grid.Column="1"
+									Classes="iconButton"
+									Command="{Binding ShowCreateProfileDialogCommand}"
+									ToolTip.Tip="{DynamicResource Profiles.Button.NewProfile}">
+								<PathIcon Width="14"
+										  Height="14"
+										  Data="M19 11H13V5H11V11H5V13H11V19H13V13H19V11Z"/>
+							</Button>
+						</Grid>
 						<Separator Margin="0,8"/>
 
 						<ItemsControl ItemsSource="{Binding Profiles}">
@@ -105,21 +137,23 @@
 											</Button>
 
 											<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-												<Button Content="{DynamicResource Profiles.Button.Update}"
-														MinWidth="42"
-														Padding="8,4"
-														HorizontalContentAlignment="Center"
-														VerticalContentAlignment="Center"
+												<Button Classes="iconButton"
 														Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).UpdateProfileCommand}"
 														CommandParameter="{Binding}"
-														IsVisible="{Binding IsRemoteType}"/>
-												<Button Content="{DynamicResource Profiles.Button.Delete}"
-														MinWidth="42"
-														Padding="8,4"
-														HorizontalContentAlignment="Center"
-														VerticalContentAlignment="Center"
+														IsVisible="{Binding IsRemoteType}"
+														ToolTip.Tip="{DynamicResource Profiles.Button.Update}">
+													<PathIcon Width="14"
+															  Height="14"
+															  Data="M12 5 V1 L7 6 L12 11 V7 C15.3 7 18 9.7 18 13 C18 16.3 15.3 19 12 19 C8.7 19 6 16.3 6 13 H4 C4 17.4 7.6 21 12 21 C16.4 21 20 17.4 20 13 C20 8.6 16.4 5 12 5 Z"/>
+												</Button>
+												<Button Classes="iconButton"
 														Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).DeleteProfileCommand}"
-														CommandParameter="{Binding}"/>
+														CommandParameter="{Binding}"
+														ToolTip.Tip="{DynamicResource Profiles.Button.Delete}">
+													<PathIcon Width="14"
+															  Height="14"
+															  Data="M9 3V4H4V6H5V19A2 2 0 0 0 7 21H17A2 2 0 0 0 19 19V6H20V4H15V3H9M7 6H17V19H7V6M9 8V17H11V8H9M13 8V17H15V8H13Z"/>
+												</Button>
 											</StackPanel>
 										</Grid>
 									</Border>
