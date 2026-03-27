@@ -6,7 +6,7 @@
 
 **Download based on your OS:**
 
-如果不确定下载哪个版本，Windows 用户优先选择 `win-x64` 安装版，Linux 用户优先选择 `linux-x64` AppImage 版。
+如果不确定下载哪个版本，Windows 用户优先选择 <a href="__BASE_URL__/__APP_NAME__-__VERSION__-win-x64-Setup.exe"><code>win-x64</code> 安装版</a>，Linux 用户优先选择 <a href="__BASE_URL__/__APP_NAME__-__VERSION__-linux-x64.AppImage"><code>linux-x64</code> AppImage 版</a>。
 
 <table>
   <thead align="left">
