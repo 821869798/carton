@@ -186,9 +186,16 @@
             <TextBlock Grid.Column="0" Text="{DynamicResource Settings.Appearance.Theme}" VerticalAlignment="Center"/>
             <ComboBox Grid.Column="1"
                       ItemsSource="{Binding Themes}"
-                      SelectedItem="{Binding SelectedTheme}"
+                      SelectedValue="{Binding SelectedTheme}"
+                      SelectedValueBinding="{Binding Theme}"
                       HorizontalAlignment="Left"
-                      MinWidth="150"/>
+                      MinWidth="150">
+              <ComboBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding DisplayName}"/>
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
           </Grid>
           <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
             <TextBlock Grid.Column="0" Text="{DynamicResource Settings.Appearance.Language}" VerticalAlignment="Center"/>

@@ -160,7 +160,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     [ObservableProperty]
     private string _currentAppVersion = string.Empty;
 
-    public ObservableCollection<AppTheme> Themes { get; } = new(Enum.GetValues<AppTheme>());
+    public ObservableCollection<ThemeOptionViewModel> Themes { get; } = new();
     public ObservableCollection<DownloadMirror> KernelDownloadMirrors { get; } = new(Enum.GetValues<DownloadMirror>());
     public ObservableCollection<LanguageOptionViewModel> Languages { get; } = new();
     public ObservableCollection<UpdateChannelOptionViewModel> UpdateChannels { get; } = new();
@@ -171,6 +171,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     {
         Title = "Settings";
         Icon = "Settings";
+        InitializeThemes();
         InitializeUpdateChannels();
     }
 
@@ -217,6 +218,28 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         if (_currentPreferences.AutoCheckAppUpdates)
         {
             _ = CheckAppUpdate();
+        }
+    }
+
+    private void InitializeThemes()
+    {
+        Themes.Clear();
+        Themes.Add(new ThemeOptionViewModel(AppTheme.System, GetThemeDisplayName(AppTheme.System)));
+        Themes.Add(new ThemeOptionViewModel(AppTheme.Light, GetThemeDisplayName(AppTheme.Light)));
+        Themes.Add(new ThemeOptionViewModel(AppTheme.Dark, GetThemeDisplayName(AppTheme.Dark)));
+    }
+
+    private void RefreshThemeDisplayNames()
+    {
+        if (Themes.Count == 0)
+        {
+            InitializeThemes();
+            return;
+        }
+
+        foreach (var option in Themes)
+        {
+            option.DisplayName = GetThemeDisplayName(option.Theme);
         }
     }
 
@@ -284,6 +307,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
             KernelVersion = GetString("Settings.Kernel.NotInstalled", "Not installed");
         }
 
+        RefreshThemeDisplayNames();
         RefreshUpdateChannelDisplayNames();
     }
 
@@ -1138,6 +1162,16 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
             : GetString("Settings.Update.Channel.ReleaseLabel", "Release (stable)");
     }
 
+    private string GetThemeDisplayName(AppTheme theme)
+    {
+        return theme switch
+        {
+            AppTheme.Light => GetString("Settings.Appearance.Theme.Light", "Light"),
+            AppTheme.Dark => GetString("Settings.Appearance.Theme.Dark", "Dark"),
+            _ => GetString("Settings.Appearance.Theme.System", "Follow system")
+        };
+    }
+
     private static string NormalizeUpdateChannel(string? channel)
     {
         if (string.Equals(channel, "beta", StringComparison.OrdinalIgnoreCase))
@@ -1695,4 +1729,20 @@ public partial class UpdateChannelOptionViewModel : ObservableObject
         Channel = channel;
         _displayName = displayName;
     }
+}
+
+public partial class ThemeOptionViewModel : ObservableObject
+{
+    public AppTheme Theme { get; }
+
+    [ObservableProperty]
+    private string _displayName;
+
+    public ThemeOptionViewModel(AppTheme theme, string displayName)
+    {
+        Theme = theme;
+        _displayName = displayName;
+    }
+
+    public override string ToString() => DisplayName;
 }

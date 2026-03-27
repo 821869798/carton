@@ -201,6 +201,9 @@
 
 	<x:String x:Key="Settings.Section.Appearance">Appearance</x:String>
 	<x:String x:Key="Settings.Appearance.Theme">Theme</x:String>
+	<x:String x:Key="Settings.Appearance.Theme.System">Follow system</x:String>
+	<x:String x:Key="Settings.Appearance.Theme.Light">Light</x:String>
+	<x:String x:Key="Settings.Appearance.Theme.Dark">Dark</x:String>
 	<x:String x:Key="Settings.Appearance.Language">Language</x:String>
 
 	<x:String x:Key="Settings.Section.Data">Data</x:String>

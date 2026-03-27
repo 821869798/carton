@@ -197,6 +197,9 @@
 
 	<x:String x:Key="Settings.Section.Appearance">外观</x:String>
 	<x:String x:Key="Settings.Appearance.Theme">主题</x:String>
+	<x:String x:Key="Settings.Appearance.Theme.System">跟随系统</x:String>
+	<x:String x:Key="Settings.Appearance.Theme.Light">亮色</x:String>
+	<x:String x:Key="Settings.Appearance.Theme.Dark">暗色</x:String>
 	<x:String x:Key="Settings.Appearance.Language">语言</x:String>
 
 	<x:String x:Key="Settings.Section.Data">数据</x:String>
