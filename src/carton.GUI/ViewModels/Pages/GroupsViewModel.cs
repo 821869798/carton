@@ -556,7 +556,7 @@ public partial class GroupsViewModel : PageViewModelBase
 
     private bool ShouldAutoDisconnectConnectionsOnNodeSwitch()
     {
-        return _preferencesService?.Load().AutoDisconnectConnectionsOnNodeSwitch ?? true;
+        return _preferencesService?.Load().AutoDisconnectConnectionsOnNodeSwitch ?? false;
     }
 
     private async Task RefreshGroupSelectionAsync(string groupTag)

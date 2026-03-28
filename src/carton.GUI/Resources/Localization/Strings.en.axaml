@@ -164,7 +164,7 @@
 	<x:String x:Key="Settings.Section.General">General</x:String>
 	<x:String x:Key="Settings.General.StartAtLogin">Start at Login</x:String>
 	<x:String x:Key="Settings.General.AutoStartOnLaunch">Auto start Carton when opened</x:String>
-	<x:String x:Key="Settings.General.AutoDisconnectConnectionsOnNodeSwitch">Auto disconnect connections on node switch</x:String>
+	<x:String x:Key="Settings.General.AutoDisconnectConnectionsOnNodeSwitch">Auto disconnect connections on node switch (extra API interrupt)</x:String>
 	<x:String x:Key="Settings.General.UwpLoopback.Title">UWP Proxy Loopback</x:String>
 	<x:String x:Key="Settings.General.UwpLoopback.Description">Launch the loopback unlock tool so UWP apps can access the local proxy.</x:String>
 	<x:String x:Key="Settings.General.UwpLoopback.Action">Open Tool</x:String>

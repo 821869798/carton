@@ -160,7 +160,7 @@
 	<x:String x:Key="Settings.Section.General">通用</x:String>
 	<x:String x:Key="Settings.General.StartAtLogin">开机启动</x:String>
 	<x:String x:Key="Settings.General.AutoStartOnLaunch">打开 Carton 时自动启动</x:String>
-	<x:String x:Key="Settings.General.AutoDisconnectConnectionsOnNodeSwitch">切换节点时自动断开连接</x:String>
+	<x:String x:Key="Settings.General.AutoDisconnectConnectionsOnNodeSwitch">切换节点时自动断开连接 (额外请求api打断)</x:String>
 	<x:String x:Key="Settings.General.UwpLoopback.Title">UWP 代理回环</x:String>
 	<x:String x:Key="Settings.General.UwpLoopback.Description">启动回环解锁工具，让 UWP 应用可以访问本地代理。</x:String>
 	<x:String x:Key="Settings.General.UwpLoopback.Action">打开工具</x:String>
