@@ -67,7 +67,7 @@ public static class HttpClientFactory
         {
             Timeout = TimeSpan.FromSeconds(15)
         };
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", $"carton/{_appVersion} sing-box/1.13.0");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", $"carton/{_appVersion} (sing-box 1.13.0; sing-box/1.13.0)");
         return client;
     }
 }
