@@ -19,7 +19,8 @@ public partial class MainViewModel : ViewModelBase
 {
     private static readonly TimeSpan TransientPageUnloadDelay = TimeSpan.FromMinutes(1);
     private const double NavigationItemHeight = 40;
-    private const double NavigationItemVerticalMargin = 4;
+    // Keep this in sync with ListBox.navPane > ListBoxItem Margin in App.axaml.
+    private const double NavigationItemVerticalMargin = 3;
     private const double NavigationIndicatorHeight = 18;
     private readonly ISingBoxManager _singBoxManager;
     private readonly IProfileManager _profileManager;
