@@ -16,6 +16,7 @@
     <local:NavigationIndicatorMarginConverter x:Key="NavigationIndicatorMarginConverter"/>
     <local:ResponsiveItemWidthConverter x:Key="ResponsiveItemWidthConverter"/>
     <local:LatencyForegroundConverter x:Key="LatencyForegroundConverter"/>
+    <local:KernelDownloadMirrorDisplayConverter x:Key="KernelDownloadMirrorDisplayConverter"/>
 
     <DataTemplate x:Key="PageTemplate" DataType="vm:PageViewModelBase">
       <ContentControl Content="{Binding}"/>

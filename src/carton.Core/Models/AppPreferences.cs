@@ -16,7 +16,8 @@ public enum DownloadMirror
 {
     GitHub,
     GhProxy,
-    Ref1nd
+    Ref1ndStable,
+    Ref1ndTest
 }
 
 public enum AppTheme

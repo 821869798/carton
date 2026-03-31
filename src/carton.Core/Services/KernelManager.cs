@@ -256,12 +256,12 @@ public class KernelManager : IKernelManager
     ///   Linux   amd64  → sing-box-ref1nd-stable-linux-amd64-v3.tar.gz
     ///   Linux   arm64  → sing-box-ref1nd-stable-linux-arm64.tar.gz
     /// </summary>
-    private async Task<bool> DownloadAndInstallFromRef1ndAsync()
+    private async Task<bool> DownloadAndInstallFromRef1ndAsync(DownloadMirror mirror)
     {
         try
         {
             var platform = PlatformInfo.Current;
-            var fileName = GetRef1ndFileName(platform);
+            var fileName = GetRef1ndFileName(platform, mirror);
             if (fileName == null)
             {
                 StatusChanged?.Invoke(this, $"ref1nd channel does not support platform: {platform.OS}-{platform.Arch}");
@@ -269,7 +269,7 @@ public class KernelManager : IKernelManager
             }
 
             var downloadUrl = $"{Ref1ndBaseUrl}/{fileName}";
-            StatusChanged?.Invoke(this, $"Downloading ref1nd sing-box...");
+            StatusChanged?.Invoke(this, $"Downloading ref1nd sing-box ({GetRef1ndChannelLabel(mirror)})...");
 
             var isWindowsDirect = platform.OS == "windows";
             var tempExt = isWindowsDirect ? ".exe" : ".tar.gz";
@@ -321,7 +321,7 @@ public class KernelManager : IKernelManager
             }
 
             await GetInstalledKernelInfoAsync();
-            StatusChanged?.Invoke(this, "Successfully installed sing-box (ref1nd)");
+            StatusChanged?.Invoke(this, $"Successfully installed sing-box (ref1nd {GetRef1ndChannelLabel(mirror)})");
             return true;
         }
         catch (Exception ex)
@@ -335,10 +335,10 @@ public class KernelManager : IKernelManager
     {
         try
         {
-            if (mirror == DownloadMirror.Ref1nd)
+            if (mirror is DownloadMirror.Ref1ndStable or DownloadMirror.Ref1ndTest)
             {
                 var platform = PlatformInfo.Current;
-                var fileName = GetRef1ndFileName(platform);
+                var fileName = GetRef1ndFileName(platform, mirror);
                 if (fileName == null)
                 {
                     StatusChanged?.Invoke(this, $"ref1nd channel does not support platform: {platform.OS}-{platform.Arch}");
@@ -346,17 +346,18 @@ public class KernelManager : IKernelManager
                 }
 
                 var downloadUrl = $"{Ref1ndBaseUrl}/{fileName}";
-                StatusChanged?.Invoke(this, "Downloading ref1nd sing-box...");
+                var channelLabel = GetRef1ndChannelLabel(mirror);
+                StatusChanged?.Invoke(this, $"Downloading ref1nd sing-box ({channelLabel})...");
 
                 var tempExt = platform.OS == "windows" ? ".exe" : ".tar.gz";
                 var tempFile = Path.Combine(Path.GetTempPath(), $"sing-box-ref1nd-{Guid.NewGuid():N}{tempExt}");
                 await DownloadFileAsync(downloadUrl, tempFile);
-                StatusChanged?.Invoke(this, "Downloaded ref1nd sing-box");
+                StatusChanged?.Invoke(this, $"Downloaded ref1nd sing-box ({channelLabel})");
 
                 return new KernelPackageDownloadResult
                 {
                     TempFilePath = tempFile,
-                    VersionLabel = "(ref1nd)"
+                    VersionLabel = $"(ref1nd {channelLabel})"
                 };
             }
 
@@ -449,17 +450,21 @@ public class KernelManager : IKernelManager
     /// <summary>
     /// Returns the ref1nd asset filename for the current platform, or null if unsupported.
     /// </summary>
-    private static string? GetRef1ndFileName(PlatformInfo platform)
+    private static string? GetRef1ndFileName(PlatformInfo platform, DownloadMirror mirror)
     {
+        var channelLabel = GetRef1ndChannelLabel(mirror);
         return (platform.OS, platform.Arch) switch
         {
-            ("windows", "amd64") => "sing-box-ref1nd-stable-windows-amd64-v3.exe",
-            ("windows", "arm64") => "sing-box-ref1nd-stable-windows-arm64.exe",
-            ("linux", "amd64") => "sing-box-ref1nd-stable-linux-amd64-v3.tar.gz",
-            ("linux", "arm64") => "sing-box-ref1nd-stable-linux-arm64.tar.gz",
+            ("windows", "amd64") => $"sing-box-ref1nd-{channelLabel}-windows-amd64-v3.exe",
+            ("windows", "arm64") => $"sing-box-ref1nd-{channelLabel}-windows-arm64.exe",
+            ("linux", "amd64") => $"sing-box-ref1nd-{channelLabel}-linux-amd64-v3.tar.gz",
+            ("linux", "arm64") => $"sing-box-ref1nd-{channelLabel}-linux-arm64.tar.gz",
             _ => null
         };
     }
+
+    private static string GetRef1ndChannelLabel(DownloadMirror mirror)
+        => mirror == DownloadMirror.Ref1ndTest ? "test" : "stable";
 
     /// <summary>
     /// Kills any running sing-box processes that match our managed binary path.

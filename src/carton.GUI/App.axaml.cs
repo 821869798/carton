@@ -267,3 +267,29 @@ public class LatencyForegroundConverter : Avalonia.Data.Converters.IValueConvert
         throw new NotImplementedException();
     }
 }
+
+public class KernelDownloadMirrorDisplayConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not DownloadMirror mirror)
+        {
+            return value?.ToString() ?? string.Empty;
+        }
+
+        var localization = LocalizationService.Instance;
+        return mirror switch
+        {
+            DownloadMirror.GitHub => localization["Settings.Kernel.Mirror.GitHub"],
+            DownloadMirror.GhProxy => localization["Settings.Kernel.Mirror.GhProxy"],
+            DownloadMirror.Ref1ndStable => localization["Settings.Kernel.Mirror.Ref1ndStable"],
+            DownloadMirror.Ref1ndTest => localization["Settings.Kernel.Mirror.Ref1ndTest"],
+            _ => mirror.ToString()
+        };
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}

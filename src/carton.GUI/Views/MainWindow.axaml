@@ -159,7 +159,13 @@
                               ItemsSource="{Binding KernelDownloadMirrors}"
                               SelectedItem="{Binding SelectedKernelDownloadMirror}"
                               MinWidth="150"
-                              IsEnabled="{Binding !IsDownloadingKernel}"/>
+                              IsEnabled="{Binding !IsDownloadingKernel}">
+                      <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock Text="{Binding Converter={StaticResource KernelDownloadMirrorDisplayConverter}}"/>
+                        </DataTemplate>
+                      </ComboBox.ItemTemplate>
+                    </ComboBox>
                   </Grid>
 
                   <ProgressBar IsIndeterminate="False"

@@ -153,6 +153,10 @@
 	<x:String x:Key="Settings.Kernel.NotInstalled">未安装</x:String>
 	<x:String x:Key="Settings.Kernel.StartingDownload">开始下载...</x:String>
 	<x:String x:Key="Settings.Kernel.Mirror">下载镜像</x:String>
+	<x:String x:Key="Settings.Kernel.Mirror.GitHub">GitHub</x:String>
+	<x:String x:Key="Settings.Kernel.Mirror.GhProxy">GhProxy</x:String>
+	<x:String x:Key="Settings.Kernel.Mirror.Ref1ndStable">Ref1nd稳定版</x:String>
+	<x:String x:Key="Settings.Kernel.Mirror.Ref1ndTest">Ref1nd测试版</x:String>
 	<x:String x:Key="Settings.Kernel.InstallCustom">自定义安装</x:String>
 	<x:String x:Key="Settings.Kernel.SelectCustomExe">选择自定义内核</x:String>
 	<x:String x:Key="Settings.Kernel.InstallingCustom">正在安装内核...</x:String>
