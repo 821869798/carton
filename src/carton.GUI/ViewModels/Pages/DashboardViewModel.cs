@@ -221,7 +221,9 @@ public partial class DashboardViewModel : PageViewModelBase
         }
 
         await clipboard.SetTextAsync(command);
-        ShowTransientStatus(GetString("Dashboard.Status.CommandCopied", "Command copied to clipboard"));
+        var copiedMessage = GetString("Dashboard.Status.CommandCopied", "Command copied to clipboard");
+        ShowTransientStatus(copiedMessage);
+        _toastWriter?.Invoke(copiedMessage, 2200);
         LogInfo($"Copied {type} proxy command");
     }
 
@@ -320,6 +322,9 @@ public partial class DashboardViewModel : PageViewModelBase
     public bool HasAvailableProfiles => AvailableProfiles.Count > 0;
     public bool HasSelectedProfile => SelectedStartupProfile != null;
     public bool CanToggleConnection => IsConnected || HasSelectedProfile;
+    public string ConnectionToggleToolTip => IsConnected
+        ? GetString("MainWindow.Button.StopKernel", "Stop Kernel")
+        : GetString("MainWindow.Button.StartKernel", "Start Kernel");
 
     partial void OnSelectedStartupProfileChanged(DashboardProfileItemViewModel? value)
     {
@@ -334,6 +339,7 @@ public partial class DashboardViewModel : PageViewModelBase
         OnPropertyChanged(nameof(DashboardMetricsContent));
         OnPropertyChanged(nameof(HasSelectedProfile));
         OnPropertyChanged(nameof(CanToggleConnection));
+        OnPropertyChanged(nameof(ConnectionToggleToolTip));
     }
 
     public DashboardViewModel()
@@ -351,6 +357,7 @@ public partial class DashboardViewModel : PageViewModelBase
         _localizationService.LanguageChanged += (_, _) =>
         {
             UpdateSessionStartTime();
+            OnPropertyChanged(nameof(ConnectionToggleToolTip));
             _ = RefreshKernelVersionAsync();
         };
         _ = RefreshKernelVersionAsync();

@@ -14,6 +14,8 @@
 
 	<x:String x:Key="MainWindow.Button.Start">Start</x:String>
 	<x:String x:Key="MainWindow.Button.Stop">Stop</x:String>
+  <x:String x:Key="MainWindow.Button.StartKernel">Start Kernel</x:String>
+  <x:String x:Key="MainWindow.Button.StopKernel">Stop Kernel</x:String>
 	<x:String x:Key="MainWindow.KernelDialog.Title">Kernel Not Found</x:String>
 	<x:String x:Key="MainWindow.KernelDialog.DescriptionLine1">sing-box kernel is required to run this application.</x:String>
 	<x:String x:Key="MainWindow.KernelDialog.LatestVersionPrefix">Latest version: </x:String>
@@ -75,7 +77,6 @@
   <x:String x:Key="Profiles.Form.CancelButton">Cancel</x:String>
   <x:String x:Key="Profiles.Form.Title.New">New Profile</x:String>
   <x:String x:Key="Profiles.Form.Title.Edit">Edit Profile</x:String>
-  <x:String x:Key="Profiles.Form.DefaultNamePrefix">New Profile</x:String>
   <x:String x:Key="Profiles.Status.Updating">Updating...</x:String>
   <x:String x:Key="Profiles.Status.UpdateSucceeded">Update successful</x:String>
   <x:String x:Key="Profiles.Status.UpdateSucceededViaProxy">Update successful via mixed proxy</x:String>
@@ -91,25 +92,17 @@
   <x:String x:Key="Dashboard.Option.Tun">Virtual Adapter (TUN)</x:String>
   <x:String x:Key="Dashboard.Button.ResetToConfig">Reset to Config</x:String>
   <x:String x:Key="Dashboard.Port.Edit">Edit Port</x:String>
-  <x:String x:Key="Dashboard.Port.Save">Save Port</x:String>
   <x:String x:Key="Dashboard.LogLevel.HighVolumeHint">Current log volume is high. Warn or above is recommended.</x:String>
-	<x:String x:Key="Dashboard.StartupPrompt">Select a profile before starting</x:String>
   <x:String x:Key="Dashboard.ClashMode">Clash Outbound Mode</x:String>
-	<x:String x:Key="Dashboard.TrafficStats">Traffic Statistics</x:String>
 	<x:String x:Key="Dashboard.Label.UploadSpeed">Upload Speed</x:String>
 	<x:String x:Key="Dashboard.Label.DownloadSpeed">Download Speed</x:String>
-	<x:String x:Key="Dashboard.Label.TotalUpload">Total Upload</x:String>
-	<x:String x:Key="Dashboard.Label.TotalDownload">Total Download</x:String>
-	<x:String x:Key="Dashboard.StatusLabel">Status</x:String>
-	<x:String x:Key="Dashboard.CurrentProfileLabel">Current Profile</x:String>
 	<x:String x:Key="Dashboard.Status.CommandCopied">Command copied to clipboard</x:String>
 	<x:String x:Key="Dashboard.Status.ProxyToolOpened">Proxy tool opened</x:String>
 	<x:String x:Key="Dashboard.Status.OpenProxyToolFailed">Failed to open proxy tool</x:String>
 	<x:String x:Key="Dashboard.Status.ClipboardUnavailable">Clipboard is not available</x:String>
-	<x:String x:Key="Dashboard.Button.CopyCmdProxy">CMD Proxy</x:String>
-	<x:String x:Key="Dashboard.Button.CopyPsProxy">PS Proxy</x:String>
-	<x:String x:Key="Dashboard.Button.CopyLinuxProxy">Terminal Proxy</x:String>
-	<x:String x:Key="Dashboard.Menu.CopyCommand">Copy Command</x:String>
+  <x:String x:Key="Dashboard.Button.CopyCmdProxy">Copy CMD Proxy Command</x:String>
+  <x:String x:Key="Dashboard.Button.CopyPsProxy">Copy PowerShell Proxy Command</x:String>
+  <x:String x:Key="Dashboard.Button.CopyLinuxProxy">Copy Terminal Proxy Command</x:String>
 	<x:String x:Key="Dashboard.Menu.OpenTool">Open Tool</x:String>
 	<x:String x:Key="Dashboard.Menu.OpenCmd">Open CMD</x:String>
 	<x:String x:Key="Dashboard.Menu.OpenPs">Open PowerShell</x:String>

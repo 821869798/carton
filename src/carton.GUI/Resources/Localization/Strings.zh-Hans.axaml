@@ -14,6 +14,8 @@
 
 	<x:String x:Key="MainWindow.Button.Start">启动</x:String>
 	<x:String x:Key="MainWindow.Button.Stop">停止</x:String>
+  <x:String x:Key="MainWindow.Button.StartKernel">启动内核</x:String>
+  <x:String x:Key="MainWindow.Button.StopKernel">停止内核</x:String>
 	<x:String x:Key="MainWindow.KernelDialog.Title">未找到内核</x:String>
 	<x:String x:Key="MainWindow.KernelDialog.DescriptionLine1">运行本应用需要安装 sing-box 内核。</x:String>
 	<x:String x:Key="MainWindow.KernelDialog.LatestVersionPrefix">最新版本：</x:String>
@@ -75,7 +77,6 @@
   <x:String x:Key="Profiles.Form.CancelButton">取消</x:String>
   <x:String x:Key="Profiles.Form.Title.New">新配置</x:String>
   <x:String x:Key="Profiles.Form.Title.Edit">编辑配置</x:String>
-  <x:String x:Key="Profiles.Form.DefaultNamePrefix">新配置</x:String>
 
   <x:String x:Key="Dashboard.Section.Configuration">配置</x:String>
 	<x:String x:Key="Dashboard.Field.Port">Mixed 端口</x:String>
@@ -85,25 +86,17 @@
 	<x:String x:Key="Dashboard.Option.Tun">虚拟网卡 (TUN)</x:String>
 	<x:String x:Key="Dashboard.Button.ResetToConfig">重置为配置值</x:String>
 	<x:String x:Key="Dashboard.Port.Edit">编辑端口</x:String>
-	<x:String x:Key="Dashboard.Port.Save">保存端口</x:String>
   <x:String x:Key="Dashboard.LogLevel.HighVolumeHint">当前日志较多，推荐 warn 及以上</x:String>
-	<x:String x:Key="Dashboard.StartupPrompt">启动前请选择一个配置</x:String>
 	<x:String x:Key="Dashboard.ClashMode">Clash 出站模式</x:String>
-	<x:String x:Key="Dashboard.TrafficStats">流量统计</x:String>
 	<x:String x:Key="Dashboard.Label.UploadSpeed">上传速度</x:String>
 	<x:String x:Key="Dashboard.Label.DownloadSpeed">下载速度</x:String>
-	<x:String x:Key="Dashboard.Label.TotalUpload">累计上传</x:String>
-	<x:String x:Key="Dashboard.Label.TotalDownload">累计下载</x:String>
-	<x:String x:Key="Dashboard.StatusLabel">状态</x:String>
-	<x:String x:Key="Dashboard.CurrentProfileLabel">当前配置</x:String>
 	<x:String x:Key="Dashboard.Status.CommandCopied">命令已复制到剪贴板</x:String>
 	<x:String x:Key="Dashboard.Status.ProxyToolOpened">已打开代理工具</x:String>
 	<x:String x:Key="Dashboard.Status.OpenProxyToolFailed">打开代理工具失败</x:String>
 	<x:String x:Key="Dashboard.Status.ClipboardUnavailable">剪贴板不可用</x:String>
-	<x:String x:Key="Dashboard.Button.CopyCmdProxy">CMD 代理</x:String>
-	<x:String x:Key="Dashboard.Button.CopyPsProxy">PS 代理</x:String>
-	<x:String x:Key="Dashboard.Button.CopyLinuxProxy">终端代理</x:String>
-	<x:String x:Key="Dashboard.Menu.CopyCommand">拷贝命令</x:String>
+	<x:String x:Key="Dashboard.Button.CopyCmdProxy">拷贝 CMD 代理命令</x:String>
+	<x:String x:Key="Dashboard.Button.CopyPsProxy">拷贝 PowerShell 代理命令</x:String>
+	<x:String x:Key="Dashboard.Button.CopyLinuxProxy">拷贝终端代理命令</x:String>
 	<x:String x:Key="Dashboard.Menu.OpenTool">打开工具</x:String>
 	<x:String x:Key="Dashboard.Menu.OpenCmd">打开 CMD</x:String>
 	<x:String x:Key="Dashboard.Menu.OpenPs">打开 PowerShell</x:String>

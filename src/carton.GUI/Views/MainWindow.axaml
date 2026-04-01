@@ -82,11 +82,11 @@
                            Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
               </StackPanel>
 
-              <Button Command="{Binding DashboardViewModel.ToggleConnectionCommand}"
-                      Classes="accent connectionToggle"
-                      HorizontalAlignment="Center"
-                      IsEnabled="{Binding DashboardViewModel.CanToggleConnection}"
-                      ToolTip.Tip="{Binding DashboardViewModel.StatusText}">
+               <Button Command="{Binding DashboardViewModel.ToggleConnectionCommand}"
+                       Classes="accent connectionToggle"
+                       HorizontalAlignment="Center"
+                       IsEnabled="{Binding DashboardViewModel.CanToggleConnection}"
+                       ToolTip.Tip="{Binding DashboardViewModel.ConnectionToggleToolTip}">
                 <Button.Transitions>
                   <Transitions>
                     <DoubleTransition Property="MinWidth" Duration="0:0:0.2"/>
