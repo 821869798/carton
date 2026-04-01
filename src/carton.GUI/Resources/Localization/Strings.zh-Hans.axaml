@@ -267,4 +267,6 @@
 	<x:String x:Key="Profiles.Status.UpdateSucceeded">更新成功</x:String>
 	<x:String x:Key="Profiles.Status.UpdateSucceededViaProxy">已通过 mixed 代理更新成功</x:String>
 	<x:String x:Key="Profiles.Status.UpdateFailed">更新失败</x:String>
-	<x:String x:Key="Profiles.Status.ProfileNotFound">配置不存在</x:String></ResourceDictionary>
+	<x:String x:Key="Profiles.Status.ProfileNotFound">配置不存在</x:String>	<x:String x:Key="Settings.Kernel.CacheCleanupPolicy">缓存清理</x:String>
+	<x:String x:Key="Settings.Kernel.CacheCleanupPolicy.ClearOnChannelChange">仅非同渠道更换时清理</x:String>
+	<x:String x:Key="Settings.Kernel.CacheCleanupPolicy.Never">任何时候都不清理</x:String></ResourceDictionary>

@@ -38,6 +38,7 @@ public sealed class KernelPackageDownloadResult
 {
     public string TempFilePath { get; init; } = string.Empty;
     public string VersionLabel { get; init; } = string.Empty;
+    public KernelInstallChannel SourceChannel { get; init; } = KernelInstallChannel.Official;
 }
 
 public class KernelManager : IKernelManager
@@ -357,7 +358,10 @@ public class KernelManager : IKernelManager
                 return new KernelPackageDownloadResult
                 {
                     TempFilePath = tempFile,
-                    VersionLabel = $"(ref1nd {channelLabel})"
+                    VersionLabel = $"(ref1nd {channelLabel})",
+                    SourceChannel = mirror == DownloadMirror.Ref1ndTest
+                        ? KernelInstallChannel.Ref1ndTest
+                        : KernelInstallChannel.Ref1ndStable
                 };
             }
 
@@ -388,7 +392,8 @@ public class KernelManager : IKernelManager
             return new KernelPackageDownloadResult
             {
                 TempFilePath = archiveFile,
-                VersionLabel = version
+                VersionLabel = version,
+                SourceChannel = KernelInstallChannel.Official
             };
         }
         catch (Exception ex)

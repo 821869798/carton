@@ -69,6 +69,9 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     private bool _useProxyForRemoteConfigUpdates;
 
     [ObservableProperty]
+    private KernelCacheCleanupPolicy _selectedKernelCacheCleanupPolicy = KernelCacheCleanupPolicy.ClearOnChannelChange;
+
+    [ObservableProperty]
     private LanguageOptionViewModel? _selectedLanguage;
 
     [ObservableProperty]
@@ -87,6 +90,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     partial void OnSelectedUpdateChannelChanged(string value) => OnUpdateChannelChanged(value);
     partial void OnAutoCheckAppUpdatesChanged(bool value) => UpdatePreference(p => p.AutoCheckAppUpdates = value);
     partial void OnUseProxyForRemoteConfigUpdatesChanged(bool value) => UpdatePreference(p => p.UseProxyForRemoteConfigUpdates = value);
+    partial void OnSelectedKernelCacheCleanupPolicyChanged(KernelCacheCleanupPolicy value) => UpdatePreference(p => p.KernelCacheCleanupPolicy = value);
     partial void OnLoopbackStatusChanged(string value) => OnPropertyChanged(nameof(HasLoopbackStatus));
     partial void OnSelectedKernelDownloadMirrorChanged(DownloadMirror value)
     {
@@ -166,6 +170,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
 
     public ObservableCollection<ThemeOptionViewModel> Themes { get; } = new();
     public ObservableCollection<DownloadMirror> KernelDownloadMirrors { get; } = new(Enum.GetValues<DownloadMirror>());
+    public ObservableCollection<KernelCacheCleanupPolicy> KernelCacheCleanupPolicies { get; } = new(Enum.GetValues<KernelCacheCleanupPolicy>());
     public ObservableCollection<LanguageOptionViewModel> Languages { get; } = new();
     public ObservableCollection<UpdateChannelOptionViewModel> UpdateChannels { get; } = new();
     public bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
@@ -353,6 +358,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         SelectedUpdateChannel = UpdateChannelToString(_currentPreferences.UpdateChannel);
         AutoCheckAppUpdates = _currentPreferences.AutoCheckAppUpdates;
         UseProxyForRemoteConfigUpdates = _currentPreferences.UseProxyForRemoteConfigUpdates;
+        SelectedKernelCacheCleanupPolicy = _currentPreferences.KernelCacheCleanupPolicy;
         SelectedKernelDownloadMirror = _currentPreferences.KernelDownloadMirror;
         IsDataInExeDirectory = File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, carton.Core.Utilities.PathHelper.PortableMarkerFileName));
         _suppressPreferenceUpdates = false;
@@ -411,6 +417,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         if (_kernelManager == null || IsUpdatingKernel) return;
 
         IsUpdatingKernel = true;
+        var hadInstalledKernel = _kernelManager.IsKernelInstalled;
         var package = _pendingKernelPackage;
         if (package == null || !File.Exists(package.TempFilePath))
         {
@@ -431,7 +438,13 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
 
         if (success)
         {
-            ClearKernelCacheFile();
+            if (KernelCacheCleanupService.ShouldClearCache(_currentPreferences, package.SourceChannel, hadInstalledKernel))
+            {
+                ClearKernelCacheFile();
+            }
+
+            KernelCacheCleanupService.RecordInstalledChannel(_currentPreferences, package.SourceChannel);
+            PersistPreferences();
             await RefreshKernelInfoAsync();
         }
     }
@@ -463,6 +476,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
 
         IsUpdatingKernel = true;
         UpdateStatus = GetString("Settings.Kernel.InstallingCustom", "Installing custom kernel...");
+        var hadInstalledKernel = _kernelManager.IsKernelInstalled;
 
         var readyToReplace = await PrepareForKernelReplacementAsync(requirePromptWhenRunning: true, promptAfterDownload: false);
         if (!readyToReplace)
@@ -477,7 +491,13 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
 
         if (success)
         {
-            ClearKernelCacheFile();
+            if (KernelCacheCleanupService.ShouldClearCache(_currentPreferences, KernelInstallChannel.Custom, hadInstalledKernel))
+            {
+                ClearKernelCacheFile();
+            }
+
+            KernelCacheCleanupService.RecordInstalledChannel(_currentPreferences, KernelInstallChannel.Custom);
+            PersistPreferences();
             await RefreshKernelInfoAsync();
         }
     }
@@ -490,7 +510,8 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         var success = await _kernelManager.UninstallAsync();
         if (success)
         {
-            ClearKernelCacheFile();
+            KernelCacheCleanupService.RecordInstalledChannel(_currentPreferences, null);
+            PersistPreferences();
         }
 
         await RefreshKernelInfoAsync();
@@ -857,6 +878,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         SelectedUpdateChannel = UpdateChannelToString(_currentPreferences.UpdateChannel);
         AutoCheckAppUpdates = _currentPreferences.AutoCheckAppUpdates;
         UseProxyForRemoteConfigUpdates = _currentPreferences.UseProxyForRemoteConfigUpdates;
+        SelectedKernelCacheCleanupPolicy = _currentPreferences.KernelCacheCleanupPolicy;
         SelectedKernelDownloadMirror = _currentPreferences.KernelDownloadMirror;
         _suppressPreferenceUpdates = false;
         _localizationService?.SetLanguage(_currentPreferences.Language);

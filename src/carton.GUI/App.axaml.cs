@@ -293,3 +293,27 @@ public class KernelDownloadMirrorDisplayConverter : Avalonia.Data.Converters.IVa
         throw new NotImplementedException();
     }
 }
+
+public class KernelCacheCleanupPolicyDisplayConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not KernelCacheCleanupPolicy policy)
+        {
+            return value?.ToString() ?? string.Empty;
+        }
+
+        var localization = LocalizationService.Instance;
+        return policy switch
+        {
+            KernelCacheCleanupPolicy.ClearOnChannelChange => localization["Settings.Kernel.CacheCleanupPolicy.ClearOnChannelChange"],
+            KernelCacheCleanupPolicy.Never => localization["Settings.Kernel.CacheCleanupPolicy.Never"],
+            _ => policy.ToString()
+        };
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}

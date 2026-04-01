@@ -170,6 +170,9 @@
 	<x:String x:Key="Settings.Kernel.Mirror.GhProxy">GhProxy</x:String>
 	<x:String x:Key="Settings.Kernel.Mirror.Ref1ndStable">Ref1nd Stable</x:String>
 	<x:String x:Key="Settings.Kernel.Mirror.Ref1ndTest">Ref1nd Test</x:String>
+	<x:String x:Key="Settings.Kernel.CacheCleanupPolicy">Cache Cleanup</x:String>
+	<x:String x:Key="Settings.Kernel.CacheCleanupPolicy.ClearOnChannelChange">Clear when channel changes</x:String>
+	<x:String x:Key="Settings.Kernel.CacheCleanupPolicy.Never">Never clear</x:String>
 	<x:String x:Key="Settings.Kernel.InstallCustom">Custom Install</x:String>
 	<x:String x:Key="Settings.Kernel.SelectCustomExe">Select Custom Kernel</x:String>
 	<x:String x:Key="Settings.Kernel.InstallingCustom">Installing kernel...</x:String>

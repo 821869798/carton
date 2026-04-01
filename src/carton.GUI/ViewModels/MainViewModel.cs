@@ -825,6 +825,7 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(KernelPrimaryActionText));
         IsDownloadingKernel = true;
         DownloadStatus = _localizationService["Status.KernelDownloading"];
+        var hadInstalledKernel = _kernelManager.IsKernelInstalled;
 
         var success = await _kernelManager.DownloadAndInstallAsync(null, SelectedKernelDownloadMirror);
 
@@ -833,7 +834,14 @@ public partial class MainViewModel : ViewModelBase
         if (success)
         {
             HasKernelDownloadFailed = false;
-            ClearKernelCacheFile();
+            var installedChannel = KernelCacheCleanupService.GetInstallChannel(SelectedKernelDownloadMirror);
+            if (KernelCacheCleanupService.ShouldClearCache(_currentPreferences, installedChannel, hadInstalledKernel))
+            {
+                ClearKernelCacheFile();
+            }
+
+            KernelCacheCleanupService.RecordInstalledChannel(_currentPreferences, installedChannel);
+            _preferencesService.Save(_currentPreferences);
             IsKernelInstalled = true;
             ShowKernelDialog = false;
             var kernelInfo = await _kernelManager.GetInstalledKernelInfoAsync();
