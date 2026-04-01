@@ -119,7 +119,8 @@
   <x:String x:Key="Dashboard.Status.RuntimeOptionsResetToConfig">Options reset to config values</x:String>
   <x:String x:Key="Dashboard.Status.ResetRuntimeOptionsUnavailable">Config values are unavailable for reset</x:String>
   <x:String x:Key="Dashboard.Status.ResetRuntimeOptionsFailed">Failed to reset options to config values</x:String>
-  <x:String x:Key="Dashboard.KernelMemory.Title">Kernel &amp; Memory</x:String>
+  <x:String x:Key="Dashboard.KernelStatus.Title">Kernel &amp; Status</x:String>
+  <x:String x:Key="Dashboard.KernelStatus.Refresh">Refresh latency test</x:String>
 	<x:String x:Key="Dashboard.KernelMemory.KernelVersion">Kernel Version</x:String>
 	<x:String x:Key="Dashboard.KernelMemory.MemoryUsage">Memory Usage</x:String>
 

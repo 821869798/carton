@@ -317,16 +317,27 @@
 
                   <Border Grid.Column="2" Classes="card sfmCard" Padding="16">
                     <StackPanel Spacing="12">
-                      <StackPanel Orientation="Horizontal" Spacing="10">
-                        <PathIcon Width="16"
+                      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                        <PathIcon Grid.Column="0"
+                                  Width="16"
                                   Height="16"
                                   Data="M3 6 H21 V18 H3 Z M7 10 H17 V14 H7 Z"
                                   VerticalAlignment="Center"/>
-                        <TextBlock Text="{DynamicResource Dashboard.KernelMemory.Title}"
+                        <TextBlock Grid.Column="1"
+                                   Text="{DynamicResource Dashboard.KernelStatus.Title}"
                                    FontSize="17"
                                    FontWeight="Bold"
                                    VerticalAlignment="Center"/>
-                      </StackPanel>
+                        <Button Grid.Column="2"
+                                Classes="iconButton"
+                                Command="{Binding RefreshConnectivityCommand}"
+                                IsEnabled="{Binding !IsRefreshingConnectivity}"
+                                ToolTip.Tip="{DynamicResource Dashboard.KernelStatus.Refresh}">
+                          <PathIcon Width="14"
+                                    Height="14"
+                                    Data="M13 2 L5 13 H11 L9 22 L19 9 H13 Z"/>
+                        </Button>
+                      </Grid>
 
                       <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
                         <TextBlock Text="{DynamicResource Dashboard.KernelMemory.KernelVersion}"
@@ -347,6 +358,23 @@
                                    FontSize="13"
                                    HorizontalAlignment="Right"/>
                       </Grid>
+
+                      <ItemsControl ItemsSource="{Binding ConnectivityItems}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="vm:DashboardSiteStatusItemViewModel">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                              <TextBlock Text="{Binding Name}"
+                                         FontSize="12"
+                                         Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                              <TextBlock Grid.Column="1"
+                                         Text="{Binding LatencyText}"
+                                         FontSize="13"
+                                         Foreground="{Binding Latency, Converter={StaticResource LatencyForegroundConverter}}"
+                                         HorizontalAlignment="Right"/>
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
                     </StackPanel>
                   </Border>
                 </Grid>

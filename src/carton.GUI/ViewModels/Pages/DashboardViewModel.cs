@@ -31,6 +31,13 @@ public partial class DashboardViewModel : PageViewModelBase
     private const string TerminalProxyTypePowerShell = "ps";
     private const string TerminalProxyTypeLinux = "linux";
     private const int TrafficSparklineSampleCount = 60;
+    private static readonly IReadOnlyList<DashboardSiteStatusDefinition> ConnectivityTargets =
+    [
+        new("Baidu", "https://apps.bdimg.com/favicon.ico"),
+        new("GitHub", "https://github.githubassets.com/favicon.ico"),
+        new("Cloudflare", "https://www.cloudflare.com/favicon.ico"),
+        new("Google", "https://www.google.com/favicon.ico")
+    ];
     private readonly ISingBoxManager? _singBoxManager;
     private readonly IKernelManager? _kernelManager;
     private readonly IProfileManager? _profileManager;
@@ -55,6 +62,7 @@ public partial class DashboardViewModel : PageViewModelBase
     private static readonly ObservableCollection<string> SupportedLogLevels = new(SingBoxLogLevelHelper.Levels);
     public override NavigationPage PageType => NavigationPage.Dashboard;
 
+    [NotifyCanExecuteChangedFor(nameof(RefreshConnectivityCommand))]
     [ObservableProperty]
     private bool _isConnected;
 
@@ -82,6 +90,7 @@ public partial class DashboardViewModel : PageViewModelBase
     public ObservableCollection<DashboardClashModeOptionViewModel> ClashModeOptions { get; } = new();
     public ObservableCollection<long> UploadTrafficSamples { get; } = new();
     public ObservableCollection<long> DownloadTrafficSamples { get; } = new();
+    public ObservableCollection<DashboardSiteStatusItemViewModel> ConnectivityItems { get; } = new();
 
     public int ClashModeColumnCount => Math.Max(1, ClashModeOptions.Count);
     public bool UseClashModeDropdown => ClashModeOptions.Count > 5;
@@ -113,6 +122,10 @@ public partial class DashboardViewModel : PageViewModelBase
     [ObservableProperty]
     private string _memoryUsage = "0 B";
 
+    [NotifyCanExecuteChangedFor(nameof(RefreshConnectivityCommand))]
+    [ObservableProperty]
+    private bool _isRefreshingConnectivity;
+
     [RelayCommand]
     private Task CopyCmdTerminalProxy() => CopyTerminalProxyAsync(TerminalProxyTypeCmd);
 
@@ -127,6 +140,9 @@ public partial class DashboardViewModel : PageViewModelBase
 
     [RelayCommand]
     private void OpenPsTerminalProxy() => OpenTerminalProxy(TerminalProxyTypePowerShell);
+
+    [RelayCommand(CanExecute = nameof(CanRefreshConnectivity))]
+    private Task RefreshConnectivity() => RefreshConnectivityCoreAsync(force: true);
 
     [RelayCommand]
     private async Task EditInboundPortAsync()
@@ -326,6 +342,7 @@ public partial class DashboardViewModel : PageViewModelBase
         {
             Interval = TimeSpan.FromSeconds(1)
         };
+        InitializeConnectivityItems();
         AvailableProfiles.CollectionChanged += OnAvailableProfilesCollectionChanged;
         _sessionDurationTimer.Tick += (_, _) => UpdateSessionStartTime();
         _localizationService.LanguageChanged += (_, _) =>
@@ -507,6 +524,7 @@ public partial class DashboardViewModel : PageViewModelBase
             ApplyMemoryUsage(_singBoxManager?.State.MemoryInUse ?? memoryInUse);
         });
     }
+
     public async Task LoadProfilesAsync()
     {
         if (_profileManager == null) return;
@@ -1423,6 +1441,7 @@ public partial class DashboardViewModel : PageViewModelBase
         InitializeTrafficMetrics();
         InitializeMemoryMetrics();
         _ = RefreshClashModeAsync();
+        _ = RefreshConnectivityCoreAsync(force: false);
     }
 
     private void ApplyTrafficMetrics(long uploadSpeed, long downloadSpeed, long totalUpload, long totalDownload, bool updateHistory = true)
@@ -1438,15 +1457,15 @@ public partial class DashboardViewModel : PageViewModelBase
         }
     }
 
-    private void ApplyMemoryUsage(long memoryInUse)
-    {
-        MemoryUsage = FormatBytes(memoryInUse);
-    }
-
     private void UpdateTrafficHistory(long uploadSpeed, long downloadSpeed)
     {
         AppendTrafficSample(UploadTrafficSamples, uploadSpeed);
         AppendTrafficSample(DownloadTrafficSamples, downloadSpeed);
+    }
+
+    private void ApplyMemoryUsage(long memoryInUse)
+    {
+        MemoryUsage = FormatBytes(memoryInUse);
     }
 
     private void ResetTrafficHistory()
@@ -1712,6 +1731,118 @@ public partial class DashboardViewModel : PageViewModelBase
         return true;
     }
 
+    private bool CanRefreshConnectivity()
+    {
+        return ShowDashboardMetrics && !IsRefreshingConnectivity;
+    }
+
+    private void InitializeConnectivityItems()
+    {
+        if (ConnectivityItems.Count > 0)
+        {
+            return;
+        }
+
+        foreach (var target in ConnectivityTargets)
+        {
+            ConnectivityItems.Add(new DashboardSiteStatusItemViewModel
+            {
+                Name = target.Name,
+                Url = target.Url
+            });
+        }
+    }
+
+    private async Task RefreshConnectivityCoreAsync(bool force)
+    {
+        if (IsRefreshingConnectivity || !ShowDashboardMetrics)
+        {
+            return;
+        }
+
+        if (!force && ConnectivityItems.All(item => item.HasMeasured))
+        {
+            return;
+        }
+
+        IsRefreshingConnectivity = true;
+        try
+        {
+            using var client = CreateConnectivityProxyClient();
+            if (client == null)
+            {
+                foreach (var item in ConnectivityItems)
+                {
+                    item.SetMeasuredLatency(null);
+                }
+
+                return;
+            }
+
+            var tasks = ConnectivityItems.Select(item => RefreshConnectivityItemAsync(client, item)).ToArray();
+            await Task.WhenAll(tasks);
+        }
+        finally
+        {
+            IsRefreshingConnectivity = false;
+        }
+    }
+
+    private async Task RefreshConnectivityItemAsync(HttpClient client, DashboardSiteStatusItemViewModel item)
+    {
+        var latency = await MeasureConnectivityAsync(client, item.Url);
+        await Dispatcher.UIThread.InvokeAsync(() => item.SetMeasuredLatency(latency));
+    }
+
+    private HttpClient? CreateConnectivityProxyClient()
+    {
+        if (!TryGetValidatedPort(out var port, out _))
+        {
+            return null;
+        }
+
+        return HttpClientFactory.CreateExternalProxyClient("127.0.0.1", port);
+    }
+
+    private static async Task<int?> MeasureConnectivityAsync(HttpClient client, string url)
+    {
+        var requestUri = AppendConnectivityCacheBuster(url);
+        using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+        request.Headers.TryAddWithoutValidation("Cache-Control", "no-cache");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            using var response = await client.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cts.Token);
+            stopwatch.Stop();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            return Math.Max(1, (int)Math.Round(stopwatch.Elapsed.TotalMilliseconds));
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
+
+    private static string AppendConnectivityCacheBuster(string url)
+    {
+        var separator = url.Contains('?', StringComparison.Ordinal) ? "&" : "?";
+        return $"{url}{separator}_={Environment.TickCount64}";
+    }
+
     private static void ApplyRuntimeLogLevel(JsonObject root, string logLevel)
     {
         if (root["log"] is not JsonObject logConfig)
@@ -1788,4 +1919,30 @@ public partial class DashboardClashModeOptionViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isSelected;
+}
+
+internal sealed record DashboardSiteStatusDefinition(string Name, string Url);
+
+public partial class DashboardSiteStatusItemViewModel : ObservableObject
+{
+    [ObservableProperty]
+    private string _name = string.Empty;
+
+    [ObservableProperty]
+    private int _latency;
+
+    [ObservableProperty]
+    private string _latencyText = "--";
+
+    [ObservableProperty]
+    private bool _hasMeasured;
+
+    public string Url { get; init; } = string.Empty;
+
+    public void SetMeasuredLatency(int? latency)
+    {
+        Latency = latency ?? 0;
+        LatencyText = latency.HasValue ? $"{latency.Value} ms" : "--";
+        HasMeasured = true;
+    }
 }

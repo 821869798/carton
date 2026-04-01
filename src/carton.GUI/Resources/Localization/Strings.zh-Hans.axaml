@@ -254,8 +254,9 @@
   <x:String x:Key="Settings.Kernel.ReplaceDialog.Later">稍后</x:String>
 
   <x:String x:Key="Common.Unknown">未知</x:String>
-  <x:String x:Key="Dashboard.KernelMemory.Title">内核和内存</x:String>
-  <x:String x:Key="Dashboard.KernelMemory.KernelVersion">内核版本</x:String>
+	<x:String x:Key="Dashboard.KernelStatus.Title">内核和状态</x:String>
+	<x:String x:Key="Dashboard.KernelStatus.Refresh">刷新延迟测试</x:String>
+	<x:String x:Key="Dashboard.KernelMemory.KernelVersion">内核版本</x:String>
 	<x:String x:Key="Dashboard.KernelMemory.MemoryUsage">内存使用</x:String>
 	<x:String x:Key="Status.RemoteConfigRefreshDeferred">远程配置已到更新间隔，先使用本地缓存配置启动，sing-box 启动后再刷新。</x:String>
 	<x:String x:Key="Status.RemoteConfigRefreshingViaProxy">正在通过本地 mixed 代理刷新远程配置...</x:String>
