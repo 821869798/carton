@@ -57,8 +57,7 @@ public partial class GroupsViewModel : PageViewModelBase
 
     public GroupsViewModel()
     {
-        Title = "Groups";
-        Icon = "Group";
+        InitializePageMetadata("Group", "Navigation.Groups", "Groups");
         _clashConfigCache = ClashConfigCacheService.Instance;
         _urlTestRefreshTimer = new DispatcherTimer
         {

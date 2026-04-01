@@ -197,7 +197,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     {
         _localizationService = LocalizationService.Instance;
         _localizationService.LanguageChanged += OnLanguageChanged;
-        Icon = "Profiles";
+        InitializePageMetadata("Profiles", "Navigation.Profiles", "Profiles");
         UpdateLocalizedTexts();
     }
 

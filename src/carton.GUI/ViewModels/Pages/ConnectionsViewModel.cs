@@ -40,8 +40,7 @@ public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
 
     public ConnectionsViewModel()
     {
-        Title = "Connections";
-        Icon = "Connections";
+        InitializePageMetadata("Connections", "Navigation.Connections", "Connections");
     }
 
     public ConnectionsViewModel(ISingBoxManager singBoxManager) : this()

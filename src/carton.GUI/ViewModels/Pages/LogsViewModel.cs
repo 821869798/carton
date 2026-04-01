@@ -49,8 +49,7 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
 
     public LogsViewModel(LogStore logStore)
     {
-        Title = "Logs";
-        Icon = "Logs";
+        InitializePageMetadata("Logs", "Navigation.Logs", "Logs");
         _logStore = logStore;
         _localizationService = LocalizationService.Instance;
         InitializeSourceFilters();

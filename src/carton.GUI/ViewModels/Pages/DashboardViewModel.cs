@@ -334,8 +334,7 @@ public partial class DashboardViewModel : PageViewModelBase
 
     public DashboardViewModel()
     {
-        Title = "Dashboard";
-        Icon = "Home";
+        InitializePageMetadata("Home", "Navigation.Dashboard", "Dashboard");
         _localizationService = LocalizationService.Instance;
         _clashConfigCache = ClashConfigCacheService.Instance;
         _sessionDurationTimer = new DispatcherTimer

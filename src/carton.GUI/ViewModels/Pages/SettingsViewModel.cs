@@ -178,8 +178,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
 
     public SettingsViewModel()
     {
-        Title = "Settings";
-        Icon = "Settings";
+        InitializePageMetadata("Settings", "Navigation.Settings", "Settings");
         InitializeThemes();
         InitializeUpdateChannels();
     }
