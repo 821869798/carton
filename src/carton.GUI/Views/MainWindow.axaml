@@ -135,15 +135,25 @@
                             Margin="0,12,0,12"
                             Background="#33FFFFFF"
                             IsVisible="{Binding DashboardViewModel.IsConnected}"/>
-                    <TextBlock Text="{Binding DashboardViewModel.SessionStartTimeText}"
-                               Margin="10,0,12,0"
-                               VerticalAlignment="Center"
-                               FontSize="13"
-                               FontWeight="SemiBold"
-                               IsVisible="{Binding DashboardViewModel.IsConnected}"/>
-                  </StackPanel>
-                </Grid>
-              </Button>
+                     <Grid Margin="10,0,12,0"
+                           VerticalAlignment="Center"
+                           IsVisible="{Binding DashboardViewModel.IsConnected}">
+                       <TextBlock Text="{Binding DashboardViewModel.SessionStartTimeMeasureText}"
+                                  Opacity="0"
+                                  TextAlignment="Center"
+                                  FontSize="13"
+                                  FontWeight="SemiBold"
+                                  IsHitTestVisible="False"/>
+                       <TextBlock Text="{Binding DashboardViewModel.SessionStartTimeText}"
+                                  TextAlignment="Center"
+                                  FontSize="13"
+                                  FontWeight="SemiBold"
+                                  FontFeatures="tnum"
+                                  IsHitTestVisible="False"/>
+                     </Grid>
+                    </StackPanel>
+                  </Grid>
+                </Button>
             </StackPanel>
 
             <Grid Grid.Row="1"

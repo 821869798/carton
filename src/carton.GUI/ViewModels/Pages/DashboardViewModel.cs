@@ -59,6 +59,7 @@ public partial class DashboardViewModel : PageViewModelBase
     private bool _isLiveRefreshActive;
     private int _pendingTrafficRefresh;
     private int _pendingMemoryRefresh;
+    private int _sessionStartTimeMeasureHourDigits = 2;
     private static readonly ObservableCollection<string> SupportedLogLevels = new(SingBoxLogLevelHelper.Levels);
     public override NavigationPage PageType => NavigationPage.Dashboard;
 
@@ -271,6 +272,9 @@ public partial class DashboardViewModel : PageViewModelBase
 
     [ObservableProperty]
     private string _sessionStartTimeText = "--";
+
+    [ObservableProperty]
+    private string _sessionStartTimeMeasureText = "88:88:88";
 
     [ObservableProperty]
     private string _inboundPortText = "2028";
@@ -1376,6 +1380,7 @@ public partial class DashboardViewModel : PageViewModelBase
         if (!startTime.HasValue)
         {
             SessionStartTimeText = "--";
+            ResetSessionStartTimeMeasureText();
             return;
         }
 
@@ -1387,6 +1392,48 @@ public partial class DashboardViewModel : PageViewModelBase
 
         var totalHours = (int)elapsed.TotalHours;
         SessionStartTimeText = $"{totalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}";
+        UpdateSessionStartTimeMeasureText(totalHours);
+    }
+
+    private void ResetSessionStartTimeMeasureText()
+    {
+        if (_sessionStartTimeMeasureHourDigits == 2)
+        {
+            return;
+        }
+
+        _sessionStartTimeMeasureHourDigits = 2;
+        SessionStartTimeMeasureText = "88:88:88";
+    }
+
+    private void UpdateSessionStartTimeMeasureText(int totalHours)
+    {
+        var hourDigits = GetHourDigitCount(totalHours);
+        if (hourDigits == _sessionStartTimeMeasureHourDigits)
+        {
+            return;
+        }
+
+        _sessionStartTimeMeasureHourDigits = hourDigits;
+        SessionStartTimeMeasureText = $"{new string('8', hourDigits)}:88:88";
+    }
+
+    private static int GetHourDigitCount(int totalHours)
+    {
+        if (totalHours < 100)
+        {
+            return 2;
+        }
+
+        var digits = 0;
+        do
+        {
+            digits++;
+            totalHours /= 10;
+        }
+        while (totalHours > 0);
+
+        return digits;
     }
 
     private void StartSessionDurationTimer()
