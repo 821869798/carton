@@ -218,22 +218,6 @@
           </Grid>
 
           <StackPanel Spacing="12" IsVisible="{Binding ShowStartupSelector}">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-              <TextBlock Grid.Column="0"
-                         Text="{DynamicResource Dashboard.StartupPrompt}"
-                         VerticalAlignment="Center"
-                         Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
-              <Button Grid.Column="1"
-                      Command="{Binding StartWithSelectedProfileCommand}"
-                      Classes="accent"
-                      Padding="12,8"
-                      MinWidth="44">
-                <PathIcon Width="14"
-                          Height="14"
-                          Data="M 0 0 L 12 6 L 0 12 Z"/>
-              </Button>
-            </Grid>
-
             <ItemsControl ItemsSource="{Binding AvailableProfiles}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="vm:DashboardProfileItemViewModel">
@@ -269,54 +253,6 @@
         <ContentControl.DataTemplates>
           <DataTemplate DataType="vm:DashboardViewModel">
             <StackPanel Spacing="12">
-              <Border Classes="card" Padding="14,10">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                  <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="{DynamicResource Dashboard.CurrentProfileLabel}"
-                               FontSize="12"
-                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                               VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding CurrentProfile}"
-                               FontSize="16"
-                               FontWeight="SemiBold"
-                               VerticalAlignment="Center"/>
-                  </StackPanel>
-                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                    <Ellipse Width="10"
-                             Height="10"
-                             VerticalAlignment="Center"
-                             Fill="{Binding IsConnected, Converter={StaticResource ConnectionStatusConverter}}"/>
-                    <TextBlock Text="{Binding StatusText}"
-                               FontSize="14"
-                               FontWeight="SemiBold"
-                               VerticalAlignment="Center"/>
-                    <Button Command="{Binding StopConnectionCommand}"
-                            Classes="danger"
-                            Padding="10,4"
-                            CornerRadius="17">
-                      <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Border Width="18"
-                                Height="18"
-                                CornerRadius="9"
-                                BorderThickness="1.5"
-                                BorderBrush="#F8FFFFFF"
-                                VerticalAlignment="Center">
-                          <Border Width="7"
-                                  Height="7"
-                                  CornerRadius="1.5"
-                                  Background="#F8FFFFFF"
-                                  HorizontalAlignment="Center"
-                                  VerticalAlignment="Center"/>
-                        </Border>
-                        <TextBlock Text="{Binding SessionStartTimeText}"
-                                   FontWeight="SemiBold"
-                                   VerticalAlignment="Center"/>
-                      </StackPanel>
-                    </Button>
-                  </StackPanel>
-                </Grid>
-              </Border>
-
               <StackPanel Spacing="16">
                 <Grid ColumnDefinitions="*,*,0.95*" ColumnSpacing="16">
                   <Border Classes="card sfmCard" Padding="16">

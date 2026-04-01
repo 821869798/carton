@@ -12,6 +12,7 @@ using carton.Core.Models;
 using carton.Core.Utilities;
 using carton.GUI.Models;
 using carton.GUI.Services;
+using Avalonia.Threading;
 
 namespace carton.ViewModels;
 
@@ -24,8 +25,10 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     private readonly ISingBoxManager? _singBoxManager;
     private readonly RemoteConfigUpdateService? _remoteConfigUpdateService;
     private readonly Action<string, int>? _toastWriter;
+    private readonly Func<Task>? _profilesChangedCallback;
     private readonly ILocalizationService _localizationService;
     private string _neverLabel = "Never";
+    private int? _runningProfileId;
 
     public override NavigationPage PageType => NavigationPage.Profiles;
 
@@ -203,14 +206,18 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         IConfigManager configManager,
         ISingBoxManager singBoxManager,
         IPreferencesService preferencesService,
+        Func<Task>? profilesChangedCallback = null,
         Action<string, int>? toastWriter = null) : this()
     {
         _profileManager = profileManager;
         _configManager = configManager;
         _singBoxManager = singBoxManager;
         _remoteConfigUpdateService = new RemoteConfigUpdateService(configManager, profileManager, preferencesService);
+        _profilesChangedCallback = profilesChangedCallback;
         _toastWriter = toastWriter;
+        _singBoxManager.StatusChanged += OnSingBoxStatusChanged;
         _ = LoadProfilesAsync();
+        _ = RefreshRunningProfileIdAsync();
     }
 
     public async Task RefreshAsync()
@@ -241,7 +248,8 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
                     IsSelected = profile.Id == selectedId,
                     UpdateInterval = profile.UpdateInterval,
                     AutoUpdate = profile.AutoUpdate,
-                    IsRemoteType = profile.Type == ProfileType.Remote
+                    IsRemoteType = profile.Type == ProfileType.Remote,
+                    CanDelete = _runningProfileId != profile.Id
                 };
                 Profiles.Add(vm);
 
@@ -358,6 +366,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
 
             await _profileManager.SetSelectedProfileIdAsync(profile.Id);
             await LoadProfilesAsync();
+            await NotifyProfilesChangedAsync();
 
             IsCreatingMode = false;
             NewProfileStatus = "Profile created successfully!";
@@ -425,6 +434,13 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         var target = profile;
         if (target == null) return;
 
+        if (_runningProfileId == target.Id)
+        {
+            ImportStatus = GetString("Profiles.Status.CannotDeleteRunning", "Cannot delete the profile that is currently running");
+            _toastWriter?.Invoke(ImportStatus, 2600);
+            return;
+        }
+
         await _profileManager.DeleteAsync(target.Id);
 
         if (target.IsSelected)
@@ -438,6 +454,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         {
             SelectedProfile = null;
         }
+        await NotifyProfilesChangedAsync();
     }
 
     [RelayCommand]
@@ -455,6 +472,8 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         {
             p.IsSelected = p.Id == target.Id;
         }
+
+        await NotifyProfilesChangedAsync();
     }
 
     [RelayCommand]
@@ -578,6 +597,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
             }
 
             await LoadProfilesAsync();
+            await NotifyProfilesChangedAsync();
             IsEditingMode = false;
             IsFormChanged = false;
             _editingProfile = null;
@@ -712,8 +732,46 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         Avalonia.Threading.Dispatcher.UIThread.Post(UpdateLocalizedTexts);
     }
 
+    private void OnSingBoxStatusChanged(object? sender, ServiceStatus status)
+    {
+        _ = status == ServiceStatus.Running
+            ? RefreshRunningProfileIdAsync()
+            : ClearRunningProfileIdAsync();
+    }
+
+    private async Task RefreshRunningProfileIdAsync()
+    {
+        if (_singBoxManager?.IsRunning != true || _profileManager == null)
+        {
+            await ClearRunningProfileIdAsync();
+            return;
+        }
+
+        _runningProfileId = await _profileManager.GetSelectedProfileIdAsync();
+        await Dispatcher.UIThread.InvokeAsync(UpdateProfileDeleteAvailability);
+    }
+
+    private async Task ClearRunningProfileIdAsync()
+    {
+        _runningProfileId = null;
+        await Dispatcher.UIThread.InvokeAsync(UpdateProfileDeleteAvailability);
+    }
+
+    private void UpdateProfileDeleteAvailability()
+    {
+        foreach (var profile in Profiles)
+        {
+            profile.CanDelete = _runningProfileId != profile.Id;
+        }
+    }
+
     public void Dispose()
     {
+        if (_singBoxManager != null)
+        {
+            _singBoxManager.StatusChanged -= OnSingBoxStatusChanged;
+        }
+
         _localizationService.LanguageChanged -= OnLanguageChanged;
     }
 
@@ -734,6 +792,14 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         return runtimeOptions.InboundPort is >= 1 and <= 65535
             ? runtimeOptions.InboundPort
             : 2028;
+    }
+
+    private async Task NotifyProfilesChangedAsync()
+    {
+        if (_profilesChangedCallback != null)
+        {
+            await _profilesChangedCallback();
+        }
     }
 
     private void UpdateLocalizedTexts()
@@ -801,6 +867,9 @@ public partial class ProfileItemViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isRemoteType;
+
+    [ObservableProperty]
+    private bool _canDelete = true;
 
     partial void OnNameChanged(string value)
     {

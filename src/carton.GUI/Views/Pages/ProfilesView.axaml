@@ -149,6 +149,7 @@
 												<Button Classes="iconButton"
 														Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).DeleteProfileCommand}"
 														CommandParameter="{Binding}"
+														IsEnabled="{Binding CanDelete}"
 														ToolTip.Tip="{DynamicResource Profiles.Button.Delete}">
 													<PathIcon Width="14"
 															  Height="14"

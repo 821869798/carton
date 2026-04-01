@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
@@ -296,12 +297,23 @@ public partial class DashboardViewModel : PageViewModelBase
     public DashboardViewModel? DashboardMetricsContent => ShowDashboardMetrics ? this : null;
     public ObservableCollection<string> LogLevelOptions => SupportedLogLevels;
     public bool ShowVerboseLogLevelHint => SingBoxLogLevelHelper.IsVerbose(SelectedLogLevel);
+    public bool HasAvailableProfiles => AvailableProfiles.Count > 0;
+    public bool HasSelectedProfile => SelectedStartupProfile != null;
+    public bool CanToggleConnection => IsConnected || HasSelectedProfile;
+
+    partial void OnSelectedStartupProfileChanged(DashboardProfileItemViewModel? value)
+    {
+        OnPropertyChanged(nameof(HasSelectedProfile));
+        OnPropertyChanged(nameof(CanToggleConnection));
+    }
 
     partial void OnIsConnectedChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowStartupSelector));
         OnPropertyChanged(nameof(ShowDashboardMetrics));
         OnPropertyChanged(nameof(DashboardMetricsContent));
+        OnPropertyChanged(nameof(HasSelectedProfile));
+        OnPropertyChanged(nameof(CanToggleConnection));
     }
 
     public DashboardViewModel()
@@ -314,6 +326,7 @@ public partial class DashboardViewModel : PageViewModelBase
         {
             Interval = TimeSpan.FromSeconds(1)
         };
+        AvailableProfiles.CollectionChanged += OnAvailableProfilesCollectionChanged;
         _sessionDurationTimer.Tick += (_, _) => UpdateSessionStartTime();
         _localizationService.LanguageChanged += (_, _) =>
         {
@@ -321,6 +334,13 @@ public partial class DashboardViewModel : PageViewModelBase
             _ = RefreshKernelVersionAsync();
         };
         _ = RefreshKernelVersionAsync();
+    }
+
+    private void OnAvailableProfilesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(HasAvailableProfiles));
+        OnPropertyChanged(nameof(HasSelectedProfile));
+        OnPropertyChanged(nameof(CanToggleConnection));
     }
 
     public DashboardViewModel(
@@ -493,6 +513,7 @@ public partial class DashboardViewModel : PageViewModelBase
 
         var profiles = await _profileManager.ListAsync();
         var selectedId = await _profileManager.GetSelectedProfileIdAsync();
+        var currentProfileName = GetString("Dashboard.Startup.NoProfileAvailable", "No profile available");
 
         await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
         {
@@ -512,7 +533,7 @@ public partial class DashboardViewModel : PageViewModelBase
                 if (vm.IsSelected)
                 {
                     SelectedStartupProfile = vm;
-                    CurrentProfile = vm.Name;
+                    currentProfileName = vm.Name;
                 }
             }
 
@@ -520,7 +541,10 @@ public partial class DashboardViewModel : PageViewModelBase
             {
                 SelectedStartupProfile = AvailableProfiles[0];
                 SelectedStartupProfile.IsSelected = true;
+                currentProfileName = SelectedStartupProfile.Name;
             }
+
+            CurrentProfile = currentProfileName;
         });
 
         if (SelectedStartupProfile != null)
@@ -664,6 +688,18 @@ public partial class DashboardViewModel : PageViewModelBase
         LogInfo("Stopping sing-box");
         await _singBoxManager.StopAsync();
         StartupStatus = string.Empty;
+    }
+
+    [RelayCommand]
+    private async Task ToggleConnection()
+    {
+        if (IsConnected)
+        {
+            await StopConnection();
+            return;
+        }
+
+        await StartWithSelectedProfile();
     }
 
     [RelayCommand]

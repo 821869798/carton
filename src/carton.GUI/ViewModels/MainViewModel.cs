@@ -464,7 +464,13 @@ public partial class MainViewModel : ViewModelBase
     public ProfilesViewModel EnsureProfilesViewModel()
     {
         _profilesInactiveAtUtc = null;
-        _profilesViewModel ??= new ProfilesViewModel(_profileManager, _configManager, _singBoxManager, _preferencesService, ShowToast);
+        _profilesViewModel ??= new ProfilesViewModel(
+            _profileManager,
+            _configManager,
+            _singBoxManager,
+            _preferencesService,
+            DashboardViewModel.LoadProfilesAsync,
+            ShowToast);
         return _profilesViewModel;
     }
 

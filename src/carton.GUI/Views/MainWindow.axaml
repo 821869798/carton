@@ -15,30 +15,30 @@
         WindowStartupLocation="CenterScreen"
         TransparencyLevelHint="None">
 
+  <Window.Styles>
+    <Style Selector="Button.connectionToggle">
+      <Setter Property="MinWidth" Value="56"/>
+      <Setter Property="Height" Value="40"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="CornerRadius" Value="14"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+    </Style>
+  </Window.Styles>
+
   <Design.DataContext>
     <vm:MainViewModel/>
   </Design.DataContext>
 
   <Grid RowDefinitions="Auto,*">
     <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
-      <Grid ColumnDefinitions="*,Auto,*" Margin="12,8">
-        <TextBlock Grid.Column="1"
+      <Grid ColumnDefinitions="*" Margin="12,8">
+        <TextBlock
                    Text="{Binding CurrentPage.Title}"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center"
                    FontSize="14"
                    FontWeight="Medium"/>
-
-        <StackPanel Grid.Column="2"
-                    Orientation="Horizontal"
-                    Spacing="8"
-                    HorizontalAlignment="Right">
-          <Button Content="{DynamicResource MainWindow.Button.Start}" Command="{Binding ToggleConnectionCommand}"
-                  Classes="accent"
-                  IsVisible="{Binding ShowStartButton}"/>
-          <Button Content="{DynamicResource MainWindow.Button.Stop}" Command="{Binding ToggleConnectionCommand}"
-                  IsVisible="{Binding ShowStopButton}"/>
-        </StackPanel>
       </Grid>
     </Border>
 
@@ -53,7 +53,8 @@
             <StackPanel Grid.Row="0"
                         Margin="0,28,0,24"
                         HorizontalAlignment="Center"
-                        Spacing="12">
+                        Spacing="12"
+                        Width="168">
               <Image Width="52"
                      Height="52"
                      Source="/Assets/carton_icon.png"/>
@@ -69,6 +70,79 @@
                            FontSize="12"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+              </StackPanel>
+
+              <StackPanel Spacing="8">
+                <TextBlock Text="{Binding DashboardViewModel.CurrentProfile}"
+                           FontSize="13"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           MaxLines="1"
+                           ToolTip.Tip="{Binding DashboardViewModel.CurrentProfile}"/>
+
+                <Button Command="{Binding DashboardViewModel.ToggleConnectionCommand}"
+                        Classes="accent connectionToggle"
+                        HorizontalAlignment="Center"
+                        IsEnabled="{Binding DashboardViewModel.CanToggleConnection}"
+                        ToolTip.Tip="{Binding DashboardViewModel.StatusText}">
+                  <Button.Transitions>
+                    <Transitions>
+                      <DoubleTransition Property="MinWidth" Duration="0:0:0.2"/>
+                    </Transitions>
+                  </Button.Transitions>
+                  <Grid>
+                    <Grid Width="56"
+                          Height="40"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          IsVisible="{Binding !DashboardViewModel.IsConnected}">
+                      <Path Width="10"
+                            Height="12"
+                            Data="M0,0 L10,6 L0,12 Z"
+                            Fill="#F8FFFFFF"
+                            Stretch="Fill"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Margin="2,0,0,0"/>
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="0"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                IsVisible="{Binding DashboardViewModel.IsConnected}">
+                      <Grid Width="40"
+                            Height="40">
+                        <Grid Width="12"
+                              Height="12"
+                              ColumnDefinitions="*,*"
+                              ColumnSpacing="4"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              IsVisible="{Binding DashboardViewModel.IsConnected}">
+                          <Border Grid.Column="0"
+                                  Background="#F8FFFFFF"
+                                  CornerRadius="1"/>
+                          <Border Grid.Column="1"
+                                  Background="#F8FFFFFF"
+                                  CornerRadius="1"/>
+                        </Grid>
+                      </Grid>
+                      <Border Width="1"
+                              Height="16"
+                              Margin="0,12,0,12"
+                              Background="#33FFFFFF"
+                              IsVisible="{Binding DashboardViewModel.IsConnected}"/>
+                      <TextBlock Text="{Binding DashboardViewModel.SessionStartTimeText}"
+                                 Margin="10,0,12,0"
+                                 VerticalAlignment="Center"
+                                 FontSize="13"
+                                 FontWeight="SemiBold"
+                                 IsVisible="{Binding DashboardViewModel.IsConnected}"/>
+                    </StackPanel>
+                  </Grid>
+                </Button>
               </StackPanel>
             </StackPanel>
 
