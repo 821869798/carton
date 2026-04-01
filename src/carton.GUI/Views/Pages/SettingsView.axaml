@@ -96,6 +96,15 @@
             <TextBlock Grid.Column="0" Text="{DynamicResource Settings.General.AutoDisconnectConnectionsOnNodeSwitch}" VerticalAlignment="Center"/>
             <ToggleSwitch Grid.Column="1" Classes="OnlySwitch" IsChecked="{Binding AutoDisconnectConnectionsOnNodeSwitch}"/>
           </Grid>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <StackPanel Spacing="4">
+              <TextBlock Text="{DynamicResource Settings.General.RemoteConfigProxy}" VerticalAlignment="Center"/>
+              <TextBlock Text="{DynamicResource Settings.General.RemoteConfigProxy.Description}"
+                         Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                         TextWrapping="Wrap"/>
+            </StackPanel>
+            <ToggleSwitch Grid.Column="1" Classes="OnlySwitch" IsChecked="{Binding UseProxyForRemoteConfigUpdates}" VerticalAlignment="Top"/>
+          </Grid>
           <Grid ColumnDefinitions="*,Auto"
                 ColumnSpacing="12"
                 IsVisible="{Binding IsWindows}">

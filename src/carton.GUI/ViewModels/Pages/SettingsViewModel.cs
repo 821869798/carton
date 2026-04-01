@@ -66,6 +66,9 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     private bool _autoCheckAppUpdates = true;
 
     [ObservableProperty]
+    private bool _useProxyForRemoteConfigUpdates;
+
+    [ObservableProperty]
     private LanguageOptionViewModel? _selectedLanguage;
 
     [ObservableProperty]
@@ -83,6 +86,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     partial void OnSelectedLanguageChanged(LanguageOptionViewModel? value) => OnLanguageOptionChanged(value);
     partial void OnSelectedUpdateChannelChanged(string value) => OnUpdateChannelChanged(value);
     partial void OnAutoCheckAppUpdatesChanged(bool value) => UpdatePreference(p => p.AutoCheckAppUpdates = value);
+    partial void OnUseProxyForRemoteConfigUpdatesChanged(bool value) => UpdatePreference(p => p.UseProxyForRemoteConfigUpdates = value);
     partial void OnLoopbackStatusChanged(string value) => OnPropertyChanged(nameof(HasLoopbackStatus));
     partial void OnSelectedKernelDownloadMirrorChanged(DownloadMirror value)
     {
@@ -348,6 +352,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         SelectedLanguage = Languages.FirstOrDefault(l => l.Language == _currentPreferences.Language) ?? Languages.FirstOrDefault();
         SelectedUpdateChannel = UpdateChannelToString(_currentPreferences.UpdateChannel);
         AutoCheckAppUpdates = _currentPreferences.AutoCheckAppUpdates;
+        UseProxyForRemoteConfigUpdates = _currentPreferences.UseProxyForRemoteConfigUpdates;
         SelectedKernelDownloadMirror = _currentPreferences.KernelDownloadMirror;
         IsDataInExeDirectory = File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, carton.Core.Utilities.PathHelper.PortableMarkerFileName));
         _suppressPreferenceUpdates = false;
@@ -851,6 +856,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         SelectedLanguage = Languages.FirstOrDefault(l => l.Language == _currentPreferences.Language) ?? Languages.FirstOrDefault();
         SelectedUpdateChannel = UpdateChannelToString(_currentPreferences.UpdateChannel);
         AutoCheckAppUpdates = _currentPreferences.AutoCheckAppUpdates;
+        UseProxyForRemoteConfigUpdates = _currentPreferences.UseProxyForRemoteConfigUpdates;
         SelectedKernelDownloadMirror = _currentPreferences.KernelDownloadMirror;
         _suppressPreferenceUpdates = false;
         _localizationService?.SetLanguage(_currentPreferences.Language);

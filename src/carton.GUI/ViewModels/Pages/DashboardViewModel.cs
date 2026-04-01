@@ -34,6 +34,8 @@ public partial class DashboardViewModel : PageViewModelBase
     private readonly IKernelManager? _kernelManager;
     private readonly IProfileManager? _profileManager;
     private readonly IConfigManager? _configManager;
+    private readonly RemoteConfigUpdateService? _remoteConfigUpdateService;
+    private readonly Action<string, int>? _toastWriter;
     private readonly Action<string>? _logWriter;
     private readonly ILocalizationService _localizationService;
     private readonly ClashConfigCacheService _clashConfigCache;
@@ -321,12 +323,21 @@ public partial class DashboardViewModel : PageViewModelBase
         _ = RefreshKernelVersionAsync();
     }
 
-    public DashboardViewModel(ISingBoxManager singBoxManager, IKernelManager kernelManager, IProfileManager profileManager, IConfigManager configManager, Action<string>? logWriter = null) : this()
+    public DashboardViewModel(
+        ISingBoxManager singBoxManager,
+        IKernelManager kernelManager,
+        IProfileManager profileManager,
+        IConfigManager configManager,
+        IPreferencesService preferencesService,
+        Action<string, int>? toastWriter = null,
+        Action<string>? logWriter = null) : this()
     {
         _singBoxManager = singBoxManager;
         _kernelManager = kernelManager;
         _profileManager = profileManager;
         _configManager = configManager;
+        _remoteConfigUpdateService = new RemoteConfigUpdateService(configManager, profileManager, preferencesService);
+        _toastWriter = toastWriter;
         _logWriter = logWriter;
         _singBoxManager.StatusChanged += OnStatusChanged;
         _singBoxManager.TrafficUpdated += OnTrafficUpdated;
@@ -572,7 +583,8 @@ public partial class DashboardViewModel : PageViewModelBase
             return;
         }
 
-        var configPath = await EnsureProfileConfigPathForStartAsync(profile, target.Name) ?? string.Empty;
+        var (configPath, deferredRefresh) = await EnsureProfileConfigPathForStartAsync(profile, target.Name);
+        configPath ??= string.Empty;
         if (string.IsNullOrWhiteSpace(configPath))
         {
             StartupStatus = profile.Type == ProfileType.Remote
@@ -631,6 +643,10 @@ public partial class DashboardViewModel : PageViewModelBase
         if (success)
         {
             ApplyRunningSystemProxy(EnableSystemProxy);
+            if (deferredRefresh)
+            {
+                _ = RefreshRemoteProfileAfterStartAsync(profile, target.Name, port);
+            }
         }
         StartupStatus = success ? string.Empty : BuildStartFailureStatus();
         if (!success)
@@ -899,25 +915,34 @@ public partial class DashboardViewModel : PageViewModelBase
         return await dialog.ShowDialog<(string PortText, bool AllowLanConnections)?>(window);
     }
 
-    private async Task<string?> EnsureProfileConfigPathForStartAsync(Profile profile, string profileName)
+    private async Task<(string? ConfigPath, bool DeferredRefresh)> EnsureProfileConfigPathForStartAsync(Profile profile, string profileName)
     {
         var configPath = await _configManager!.GetConfigPathAsync(profile.Id, profile.Type);
         var hasLocalConfig = !string.IsNullOrWhiteSpace(configPath) && File.Exists(configPath);
-        if (hasLocalConfig && !ShouldRefreshRemoteProfileOnStart(profile))
+        if (hasLocalConfig && !RemoteConfigUpdateService.ShouldRefreshOnStart(profile))
         {
-            return configPath;
+            return (configPath, false);
         }
 
         if (profile.Type != ProfileType.Remote)
         {
-            return null;
+            return (null, false);
         }
 
         if (string.IsNullOrWhiteSpace(profile.Url))
         {
             StartupStatus = GetString("Status.RemoteProfileUrlEmpty", "Remote profile URL is empty");
             LogError($"{StartupStatus}: {profileName} ({profile.Id})");
-            return null;
+            return (null, false);
+        }
+
+        if (hasLocalConfig && _remoteConfigUpdateService?.ShouldDeferRefreshUntilStarted(profile, hasLocalConfig) == true)
+        {
+            StartupStatus = GetString(
+                "Status.RemoteConfigRefreshDeferred",
+                "Remote config is due for update. Starting with the local cached config first and refreshing after sing-box starts.");
+            LogInfo($"{StartupStatus}: {profileName} ({profile.Id})");
+            return (configPath, true);
         }
 
         var loadingMessage = hasLocalConfig
@@ -928,22 +953,11 @@ public partial class DashboardViewModel : PageViewModelBase
 
         try
         {
-            var client = HttpClientFactory.External;
-            var content = await client.GetStringAsync(profile.Url);
-            if (string.IsNullOrWhiteSpace(content))
+            var result = await _remoteConfigUpdateService!.UpdateAsync(profile);
+            if (!result.Success || string.IsNullOrWhiteSpace(result.ConfigPath))
             {
-                var message = GetString("Status.RemoteConfigEmpty", "Downloaded remote config is empty");
-                return HandleRemoteConfigRefreshFailure(profile, profileName, configPath, hasLocalConfig, message);
-            }
-
-            await _configManager.SaveConfigAsync(profile.Id, content, ProfileType.Remote);
-            profile.LastUpdated = DateTime.Now;
-            await _profileManager!.UpdateAsync(profile);
-            var downloadedPath = await _configManager.GetConfigPathAsync(profile.Id, ProfileType.Remote);
-            if (string.IsNullOrWhiteSpace(downloadedPath) || !File.Exists(downloadedPath))
-            {
-                var message = GetString("Status.RemoteConfigFileMissing", "Remote config download succeeded but file missing");
-                return HandleRemoteConfigRefreshFailure(profile, profileName, configPath, hasLocalConfig, message);
+                var message = GetString("Status.RemoteConfigDownloadFailed", "Failed to download remote config");
+                return (HandleRemoteConfigRefreshFailure(profile, profileName, configPath, hasLocalConfig, $"{message}: {result.ErrorMessage}"), false);
             }
 
             var completedMessage = hasLocalConfig
@@ -951,17 +965,17 @@ public partial class DashboardViewModel : PageViewModelBase
                 : GetString("Status.RemoteConfigDownloaded", "Remote config downloaded");
             StartupStatus = completedMessage;
             LogInfo($"{completedMessage}: {profileName} ({profile.Id})");
-            return downloadedPath;
+            return (result.ConfigPath, false);
         }
         catch (Exception ex)
         {
             var message = GetString("Status.RemoteConfigDownloadFailed", "Failed to download remote config");
-            return HandleRemoteConfigRefreshFailure(
+            return (HandleRemoteConfigRefreshFailure(
                 profile,
                 profileName,
                 configPath,
                 hasLocalConfig,
-                $"{message}: {ex.Message}");
+                $"{message}: {ex.Message}"), false);
         }
     }
 
@@ -985,19 +999,38 @@ public partial class DashboardViewModel : PageViewModelBase
         return null;
     }
 
-    private static bool ShouldRefreshRemoteProfileOnStart(Profile profile)
+    private async Task RefreshRemoteProfileAfterStartAsync(Profile profile, string profileName, int mixedPort)
     {
-        if (profile.Type != ProfileType.Remote || !profile.AutoUpdate)
+        if (_remoteConfigUpdateService == null)
         {
-            return false;
+            return;
         }
 
-        if (profile.UpdateInterval <= 0 || profile.LastUpdated == null)
+        var loadingMessage = GetString(
+            "Status.RemoteConfigRefreshingViaProxy",
+            "Refreshing remote config via the local mixed proxy...");
+        StartupStatus = loadingMessage;
+        LogInfo($"{loadingMessage}: {profileName} ({profile.Id})");
+        _toastWriter?.Invoke(loadingMessage, 1800);
+
+        var latestProfile = await _profileManager!.GetAsync(profile.Id) ?? profile;
+        var result = await _remoteConfigUpdateService.UpdateAsync(latestProfile, mixedPort);
+        if (result.Success)
         {
-            return true;
+            await LoadProfilesAsync();
+            var completedMessage = GetString(
+                "Status.RemoteConfigRefreshedViaProxy",
+                "Remote config refreshed via the local mixed proxy.");
+            LogInfo($"{completedMessage}: {profileName} ({profile.Id})");
+            ShowTransientStatus(completedMessage, 3000);
+            _toastWriter?.Invoke(completedMessage, 2600);
+            return;
         }
 
-        return DateTime.Now - profile.LastUpdated.Value >= TimeSpan.FromMinutes(profile.UpdateInterval);
+        var failedMessage = $"{GetString("Status.RemoteConfigRefreshViaProxyFailed", "Failed to refresh remote config via the local mixed proxy")}: {result.ErrorMessage}";
+        StartupStatus = failedMessage;
+        LogWarning($"{failedMessage}: {profileName} ({profile.Id})");
+        _toastWriter?.Invoke(failedMessage, 3200);
     }
 
     private async Task LoadRuntimeOptionsAsync(int profileId)

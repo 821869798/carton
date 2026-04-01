@@ -126,6 +126,35 @@
                           IsVisible="{Binding #MainWindowRoot.DataContext.IsGroupsPage}"/>
         <ContentControl Content="{Binding ActiveTransientPage}"
                         IsVisible="{Binding #MainWindowRoot.DataContext.IsTransientPage}"/>
+        <Grid IsHitTestVisible="False">
+          <ItemsControl ItemsSource="{Binding #MainWindowRoot.DataContext.Toasts}"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Bottom"
+                        Margin="0,0,0,24">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="10"/>
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:ToastNotificationViewModel">
+                <Border Classes="toast"
+                        MaxWidth="440"
+                        Opacity="{Binding Opacity}"
+                        Margin="{Binding OffsetMargin}">
+                  <Border.Transitions>
+                    <Transitions>
+                      <DoubleTransition Property="Opacity" Duration="0:0:0.18"/>
+                      <ThicknessTransition Property="Margin" Duration="0:0:0.22"/>
+                    </Transitions>
+                  </Border.Transitions>
+                  <TextBlock Text="{Binding Message}"
+                             TextWrapping="Wrap"/>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Grid>
       </Grid>
     </SplitView>
 

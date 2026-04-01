@@ -76,6 +76,11 @@
   <x:String x:Key="Profiles.Form.Title.New">New Profile</x:String>
   <x:String x:Key="Profiles.Form.Title.Edit">Edit Profile</x:String>
   <x:String x:Key="Profiles.Form.DefaultNamePrefix">New Profile</x:String>
+  <x:String x:Key="Profiles.Status.Updating">Updating...</x:String>
+  <x:String x:Key="Profiles.Status.UpdateSucceeded">Update successful</x:String>
+  <x:String x:Key="Profiles.Status.UpdateSucceededViaProxy">Update successful via mixed proxy</x:String>
+  <x:String x:Key="Profiles.Status.UpdateFailed">Update failed</x:String>
+  <x:String x:Key="Profiles.Status.ProfileNotFound">profile not found</x:String>
 
 
   <x:String x:Key="Dashboard.Section.Configuration">Configuration</x:String>
@@ -135,6 +140,10 @@
 	<x:String x:Key="Status.RemoteConfigRefreshed">Remote config refreshed</x:String>
 	<x:String x:Key="Status.RemoteConfigDownloadFailed">Failed to fetch remote config</x:String>
 	<x:String x:Key="Status.RemoteConfigRefreshFailedUsingLocal">Remote config refresh failed, using local cached config</x:String>
+	<x:String x:Key="Status.RemoteConfigRefreshDeferred">Remote config is due for update. Starting with the local cached config first and refreshing after sing-box starts.</x:String>
+	<x:String x:Key="Status.RemoteConfigRefreshingViaProxy">Refreshing remote config via the local mixed proxy...</x:String>
+	<x:String x:Key="Status.RemoteConfigRefreshedViaProxy">Remote config refreshed via the local mixed proxy.</x:String>
+	<x:String x:Key="Status.RemoteConfigRefreshViaProxyFailed">Failed to refresh remote config via the local mixed proxy</x:String>
 	<x:String x:Key="Status.KernelDownloading">Starting download...</x:String>
 	<x:String x:Key="Dashboard.Startup.ServiceUnavailable">Service unavailable</x:String>
 	<x:String x:Key="Dashboard.Startup.NoProfileAvailable">No profile available</x:String>
@@ -169,6 +178,8 @@
 	<x:String x:Key="Settings.General.StartAtLogin">Start at Login</x:String>
 	<x:String x:Key="Settings.General.AutoStartOnLaunch">Auto start Carton when opened</x:String>
 	<x:String x:Key="Settings.General.AutoDisconnectConnectionsOnNodeSwitch">Auto disconnect connections on node switch (extra API interrupt)</x:String>
+	<x:String x:Key="Settings.General.RemoteConfigProxy">Use proxy for remote config updates</x:String>
+	<x:String x:Key="Settings.General.RemoteConfigProxy.Description">Takes effect after sing-box starts.</x:String>
 	<x:String x:Key="Settings.General.UwpLoopback.Title">UWP Proxy Loopback</x:String>
 	<x:String x:Key="Settings.General.UwpLoopback.Description">Launch the loopback unlock tool so UWP apps can access the local proxy.</x:String>
 	<x:String x:Key="Settings.General.UwpLoopback.Action">Open Tool</x:String>

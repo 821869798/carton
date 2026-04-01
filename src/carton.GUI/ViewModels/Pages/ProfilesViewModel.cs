@@ -22,6 +22,8 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     private readonly IProfileManager? _profileManager;
     private readonly IConfigManager? _configManager;
     private readonly ISingBoxManager? _singBoxManager;
+    private readonly RemoteConfigUpdateService? _remoteConfigUpdateService;
+    private readonly Action<string, int>? _toastWriter;
     private readonly ILocalizationService _localizationService;
     private string _neverLabel = "Never";
 
@@ -196,11 +198,18 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         UpdateLocalizedTexts();
     }
 
-    public ProfilesViewModel(IProfileManager profileManager, IConfigManager configManager, ISingBoxManager singBoxManager) : this()
+    public ProfilesViewModel(
+        IProfileManager profileManager,
+        IConfigManager configManager,
+        ISingBoxManager singBoxManager,
+        IPreferencesService preferencesService,
+        Action<string, int>? toastWriter = null) : this()
     {
         _profileManager = profileManager;
         _configManager = configManager;
         _singBoxManager = singBoxManager;
+        _remoteConfigUpdateService = new RemoteConfigUpdateService(configManager, profileManager, preferencesService);
+        _toastWriter = toastWriter;
         _ = LoadProfilesAsync();
     }
 
@@ -592,29 +601,36 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         var target = profile ?? SelectedProfile;
         if (target == null || string.IsNullOrWhiteSpace(target.Url)) return;
 
-        ImportStatus = "Updating...";
+        ImportStatus = GetString("Profiles.Status.Updating", "Updating...");
         IsImporting = true;
 
         try
         {
-            var httpClient = HttpClientFactory.External;
-            var content = await httpClient.GetStringAsync(target.Url);
-
-            await _configManager.SaveConfigAsync(target.Id, content, ProfileType.Remote);
-
             var profileModel = await _profileManager.GetAsync(target.Id);
-            if (profileModel != null)
+            if (profileModel == null)
             {
-                profileModel.LastUpdated = DateTime.Now;
-                await _profileManager.UpdateAsync(profileModel);
+                ImportStatus = $"{GetString("Profiles.Status.UpdateFailed", "Update failed")}: {GetString("Profiles.Status.ProfileNotFound", "profile not found")} ({target.Id})";
+                return;
+            }
+
+            var mixedPort = await ResolveActiveMixedPortAsync();
+            var result = await _remoteConfigUpdateService!.UpdateAsync(profileModel, mixedPort);
+            if (!result.Success)
+            {
+                ImportStatus = $"{GetString("Profiles.Status.UpdateFailed", "Update failed")}: {result.ErrorMessage}";
+                return;
             }
 
             await LoadProfilesAsync();
-            ImportStatus = $"Update successful: {target.Name}";
+            ImportStatus = result.UsedProxy
+                ? $"{GetString("Profiles.Status.UpdateSucceededViaProxy", "Update successful via mixed proxy")}: {target.Name}"
+                : $"{GetString("Profiles.Status.UpdateSucceeded", "Update successful")}: {target.Name}";
+            _toastWriter?.Invoke(ImportStatus, 2200);
         }
         catch (Exception ex)
         {
-            ImportStatus = $"Update failed: {ex.Message}";
+            ImportStatus = $"{GetString("Profiles.Status.UpdateFailed", "Update failed")}: {ex.Message}";
+            _toastWriter?.Invoke(ImportStatus, 3200);
         }
         finally
         {
@@ -699,6 +715,25 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     public void Dispose()
     {
         _localizationService.LanguageChanged -= OnLanguageChanged;
+    }
+
+    private async Task<int?> ResolveActiveMixedPortAsync()
+    {
+        if (_singBoxManager?.IsRunning != true || _profileManager == null)
+        {
+            return null;
+        }
+
+        var selectedId = await _profileManager.GetSelectedProfileIdAsync();
+        if (selectedId <= 0)
+        {
+            return 2028;
+        }
+
+        var runtimeOptions = await _profileManager.GetRuntimeOptionsAsync(selectedId);
+        return runtimeOptions.InboundPort is >= 1 and <= 65535
+            ? runtimeOptions.InboundPort
+            : 2028;
     }
 
     private void UpdateLocalizedTexts()

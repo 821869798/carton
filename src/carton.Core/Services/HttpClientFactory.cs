@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 
 namespace carton.Core.Services;
@@ -67,7 +68,31 @@ public static class HttpClientFactory
         {
             Timeout = TimeSpan.FromSeconds(15)
         };
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", $"carton/{_appVersion} (sing-box 1.13.0; sing-box/1.13.0)");
+        ConfigureExternalClient(client);
         return client;
+    }
+
+    public static HttpClient CreateExternalProxyClient(string host, int port)
+    {
+        // This is the proxy endpoint scheme, not the destination scheme:
+        // HTTPS URLs still work here because HttpClient tunnels them via CONNECT
+        // through the local mixed-port HTTP proxy.
+        var handler = new HttpClientHandler
+        {
+            UseProxy = true,
+            Proxy = new WebProxy($"http://{host}:{port}")
+        };
+
+        var client = new HttpClient(handler, disposeHandler: true)
+        {
+            Timeout = TimeSpan.FromSeconds(15)
+        };
+        ConfigureExternalClient(client);
+        return client;
+    }
+
+    private static void ConfigureExternalClient(HttpClient client)
+    {
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", $"carton/{_appVersion} (sing-box 1.13.0; sing-box/1.13.0)");
     }
 }

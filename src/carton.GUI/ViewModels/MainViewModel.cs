@@ -12,6 +12,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Threading;
+using Avalonia;
 
 namespace carton.ViewModels;
 
@@ -91,6 +92,8 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _hasKernelDownloadFailed;
+
+    public ObservableCollection<ToastNotificationViewModel> Toasts { get; } = new();
 
     public MainViewModel? KernelDialogHost => ShowKernelDialog ? this : null;
 
@@ -176,7 +179,7 @@ public partial class MainViewModel : ViewModelBase
         _singBoxManager.ManagerLogReceived += OnManagerLogReceived;
         _singBoxManager.LogReceived += OnLogReceived;
 
-        DashboardViewModel = new DashboardViewModel(_singBoxManager, _kernelManager, _profileManager, _configManager, _logStore.AddLog);
+        DashboardViewModel = new DashboardViewModel(_singBoxManager, _kernelManager, _profileManager, _configManager, _preferencesService, ShowToast, _logStore.AddLog);
         _lazyGroupsViewModel = new Lazy<GroupsViewModel>(() => new GroupsViewModel(_singBoxManager, _preferencesService));
         _appUpdateService = new AppUpdateService("https://github.com/821869798/carton", null, _logStore.AddLog);
         _transientPageUnloadTimer = new DispatcherTimer
@@ -461,8 +464,64 @@ public partial class MainViewModel : ViewModelBase
     public ProfilesViewModel EnsureProfilesViewModel()
     {
         _profilesInactiveAtUtc = null;
-        _profilesViewModel ??= new ProfilesViewModel(_profileManager, _configManager, _singBoxManager);
+        _profilesViewModel ??= new ProfilesViewModel(_profileManager, _configManager, _singBoxManager, _preferencesService, ShowToast);
         return _profilesViewModel;
+    }
+
+    public void ShowToast(string message, int durationMilliseconds = 2400)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        _ = ShowToastAsync(message, durationMilliseconds);
+    }
+
+    private async Task ShowToastAsync(string message, int durationMilliseconds)
+    {
+        ToastNotificationViewModel? toast = null;
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            while (Toasts.Count >= 3)
+            {
+                Toasts.RemoveAt(0);
+            }
+
+            toast = new ToastNotificationViewModel
+            {
+                Message = message,
+                Opacity = 0,
+                OffsetMargin = new Thickness(0, 18, 0, -18)
+            };
+            Toasts.Add(toast);
+        });
+
+        if (toast == null)
+        {
+            return;
+        }
+
+        await Task.Delay(16);
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            toast.Opacity = 1;
+            toast.OffsetMargin = new Thickness(0);
+        });
+
+        await Task.Delay(durationMilliseconds);
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            toast.Opacity = 0;
+            toast.OffsetMargin = new Thickness(0, -18, 0, 18);
+        });
+
+        await Task.Delay(220);
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            Toasts.Remove(toast);
+        });
     }
 
     public ConnectionsViewModel EnsureConnectionsViewModel()
@@ -933,4 +992,16 @@ public partial class MainViewModel : ViewModelBase
             _logStore.AddLog($"[ERROR] Failed to auto start: {ex.Message}");
         }
     }
+}
+
+public partial class ToastNotificationViewModel : ObservableObject
+{
+    [ObservableProperty]
+    private string _message = string.Empty;
+
+    [ObservableProperty]
+    private double _opacity;
+
+    [ObservableProperty]
+    private Thickness _offsetMargin;
 }

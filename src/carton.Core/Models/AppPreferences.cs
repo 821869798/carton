@@ -5,6 +5,7 @@ public class AppPreferences
     public bool StartAtLogin { get; set; }
     public bool AutoStartOnLaunch { get; set; }
     public bool AutoDisconnectConnectionsOnNodeSwitch { get; set; } = false;
+    public bool UseProxyForRemoteConfigUpdates { get; set; }
     public AppTheme Theme { get; set; } = AppTheme.System;
     public AppLanguage Language { get; set; } = AppLanguage.English;
     public AppUpdateChannel UpdateChannel { get; set; } = AppUpdateChannel.Release;

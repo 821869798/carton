@@ -32,6 +32,19 @@
       <Setter Property="BoxShadow" Value="0 2 8 0 #10000000"/>
     </Style>
 
+    <Style Selector="Border.toast">
+      <Setter Property="Background" Value="#F2282E39"/>
+      <Setter Property="CornerRadius" Value="999"/>
+      <Setter Property="Padding" Value="16,10"/>
+      <Setter Property="BoxShadow" Value="0 8 24 0 #22000000"/>
+    </Style>
+
+    <Style Selector="Border.toast TextBlock">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="TextAlignment" Value="Center"/>
+    </Style>
+
     <Style Selector="Button.accent">
       <Setter Property="Background" Value="{DynamicResource SystemAccentColor}"/>
       <Setter Property="Foreground" Value="{DynamicResource SystemAccentColorForeground}"/>
