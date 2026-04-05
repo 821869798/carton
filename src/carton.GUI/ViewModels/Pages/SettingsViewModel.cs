@@ -17,7 +17,6 @@ using carton.Core.Services;
 using carton.Core.Models;
 using carton.GUI.Models;
 using carton.GUI.Services;
-using NuGet.Versioning;
 
 namespace carton.ViewModels;
 
@@ -31,10 +30,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     private readonly ILocalizationService? _localizationService;
     private readonly IThemeService? _themeService;
     private readonly IStartupService? _startupService;
-    private readonly IAppUpdateService? _appUpdateService;
-    private AppUpdateResult? _pendingAppUpdate;
-    private GitHubReleaseInfo? _latestReleaseInfo;
-    private bool _requiresManualAppUpdate;
+    private AppUpdateCoordinator _appUpdate = new();
     private AppPreferences _currentPreferences = new();
     private KernelPackageDownloadResult? _pendingKernelPackage;
     private bool _suppressPreferenceUpdates;
@@ -132,16 +128,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     private string _dataOperationStatus = string.Empty;
 
     [ObservableProperty]
-    private bool _isCheckingAppUpdate;
-
-    [ObservableProperty]
-    private bool _isDownloadingAppUpdate;
-
-    [ObservableProperty]
     private bool _isDataInExeDirectory;
-
-    [ObservableProperty]
-    private bool _isPortableApp;
 
     partial void OnIsDataInExeDirectoryChanged(bool value)
     {
@@ -150,24 +137,6 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         _ = HandleDataDirectoryToggleAsync(value);
     }
 
-    [ObservableProperty]
-    private bool _isAppUpdateAvailable;
-
-    [ObservableProperty]
-    private bool _isAppUpdateReadyToInstall;
-
-    [ObservableProperty]
-    private double _appUpdateProgress;
-
-    [ObservableProperty]
-    private string _appUpdateStatus = string.Empty;
-
-    [ObservableProperty]
-    private string _latestAvailableVersion = string.Empty;
-
-    [ObservableProperty]
-    private string _currentAppVersion = string.Empty;
-
     public ObservableCollection<ThemeOptionViewModel> Themes { get; } = new();
     public ObservableCollection<DownloadMirror> KernelDownloadMirrors { get; } = new(Enum.GetValues<DownloadMirror>());
     public ObservableCollection<KernelCacheCleanupPolicy> KernelCacheCleanupPolicies { get; } = new(Enum.GetValues<KernelCacheCleanupPolicy>());
@@ -175,6 +144,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     public ObservableCollection<UpdateChannelOptionViewModel> UpdateChannels { get; } = new();
     public bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
     public bool HasLoopbackStatus => !string.IsNullOrWhiteSpace(LoopbackStatus);
+    public AppUpdateCoordinator AppUpdate => _appUpdate;
 
     public SettingsViewModel()
     {
@@ -192,7 +162,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         ILocalizationService localizationService,
         IThemeService themeService,
         IStartupService startupService,
-        IAppUpdateService appUpdateService) : this()
+        AppUpdateCoordinator appUpdateCoordinator) : this()
     {
         _configManager = configManager;
         _profileManager = profileManager;
@@ -202,7 +172,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         _localizationService = localizationService;
         _themeService = themeService;
         _startupService = startupService;
-        _appUpdateService = appUpdateService;
+        _appUpdate = appUpdateCoordinator ?? new AppUpdateCoordinator();
 
         _kernelManager.DownloadProgressChanged += OnDownloadProgress;
         _kernelManager.StatusChanged += OnKernelStatusChanged;
@@ -222,11 +192,6 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         LoadPreferences();
         await LoadProfilesAsync();
         await RefreshKernelInfoAsync();
-        InitializeAppUpdateState();
-        if (_currentPreferences.AutoCheckAppUpdates)
-        {
-            _ = CheckAppUpdate();
-        }
     }
 
     private void InitializeThemes()
@@ -284,21 +249,6 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         {
             option.DisplayName = GetUpdateChannelDisplayName(option.Channel);
         }
-    }
-
-    private void InitializeAppUpdateState()
-    {
-        CurrentAppVersion = _appUpdateService?.CurrentVersion ?? GetString("Common.Unknown", "unknown");
-        _requiresManualAppUpdate = _appUpdateService != null && !_appUpdateService.SupportsInAppUpdates;
-        IsPortableApp = _requiresManualAppUpdate;
-        LatestAvailableVersion = _appUpdateService?.PendingRestartVersion ?? string.Empty;
-        IsAppUpdateAvailable = false;
-        IsAppUpdateReadyToInstall = _appUpdateService?.IsUpdatePendingRestart == true;
-        AppUpdateProgress = 0;
-        AppUpdateStatus = IsAppUpdateReadyToInstall
-            ? GetString("Settings.Update.Status.Ready", "Update downloaded. Restart to apply.")
-            : string.Empty;
-        SelectedUpdateChannel = UpdateChannelToString(_currentPreferences.UpdateChannel);
     }
 
     private void UpdateLocalizedTexts()
@@ -361,6 +311,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         SelectedKernelDownloadMirror = _currentPreferences.KernelDownloadMirror;
         IsDataInExeDirectory = File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, carton.Core.Utilities.PathHelper.PortableMarkerFileName));
         _suppressPreferenceUpdates = false;
+        _appUpdate.Configure(SelectedUpdateChannel);
         _localizationService?.SetLanguage(_currentPreferences.Language);
         _startupService?.ApplyStartAtLoginPreference(StartAtLogin);
     }
@@ -886,197 +837,6 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private async Task CheckAppUpdate()
-    {
-        if (_appUpdateService == null)
-        {
-            AppUpdateStatus = GetString("Settings.Update.Status.Unsupported", "Update service unavailable");
-            return;
-        }
-
-        if (IsCheckingAppUpdate)
-        {
-            return;
-        }
-
-        IsCheckingAppUpdate = true;
-        AppUpdateStatus = GetString("Settings.Update.Status.Checking", "Checking for updates...");
-        try
-        {
-            var latestRelease = await _appUpdateService.GetLatestReleaseInfoAsync(SelectedUpdateChannel);
-            if (latestRelease != null)
-            {
-                _latestReleaseInfo = latestRelease;
-                LatestAvailableVersion = latestRelease.Version;
-            }
-            else
-            {
-                _latestReleaseInfo = null;
-                _pendingAppUpdate = null;
-                LatestAvailableVersion = string.Empty;
-                IsAppUpdateAvailable = false;
-                IsAppUpdateReadyToInstall = false;
-                AppUpdateProgress = 0;
-                AppUpdateStatus =
-                    $"{GetString("Settings.Update.Status.Error", "Update failed")}: no release found for channel '{SelectedUpdateChannel}'";
-                return;
-            }
-
-            if (_requiresManualAppUpdate)
-            {
-                _pendingAppUpdate = null;
-                IsAppUpdateReadyToInstall = false;
-                AppUpdateProgress = 0;
-
-                if (latestRelease != null &&
-                    IsRemoteVersionDifferent(latestRelease.Version, _appUpdateService.CurrentVersion))
-                {
-                    IsAppUpdateAvailable = true;
-                    AppUpdateStatus = GetString("Settings.Update.Status.ManualRequired", "New version available. Download it from the releases page.");
-                    await ShowManualUpdatePromptAsync();
-                }
-                else
-                {
-                    IsAppUpdateAvailable = false;
-                    AppUpdateStatus = GetString("Settings.Update.Status.Latest", "Already up to date");
-                }
-
-                return;
-            }
-
-            var result = await _appUpdateService.CheckForUpdatesAsync(SelectedUpdateChannel);
-            if (result == null)
-            {
-                _pendingAppUpdate = null;
-                IsAppUpdateAvailable = false;
-                AppUpdateProgress = 0;
-                IsAppUpdateReadyToInstall = _appUpdateService.IsUpdatePendingRestart;
-                if (IsAppUpdateReadyToInstall)
-                {
-                    LatestAvailableVersion = _appUpdateService.PendingRestartVersion ?? LatestAvailableVersion;
-                }
-                AppUpdateStatus = IsAppUpdateReadyToInstall
-                    ? GetString("Settings.Update.Status.Ready", "Update downloaded. Restart to apply.")
-                    : GetString("Settings.Update.Status.Latest", "Already up to date");
-                return;
-            }
-
-            _pendingAppUpdate = result;
-            _latestReleaseInfo = result.ReleaseInfo;
-            LatestAvailableVersion = result.Version;
-            IsAppUpdateAvailable = true;
-            IsAppUpdateReadyToInstall = false;
-            AppUpdateProgress = 0;
-            if (_requiresManualAppUpdate)
-            {
-                AppUpdateStatus = GetString("Settings.Update.Status.ManualRequired", "New version available. Download it from the releases page.");
-                await ShowManualUpdatePromptAsync();
-            }
-            else
-            {
-                AppUpdateStatus = GetString("Settings.Update.Status.Available", "New version available");
-            }
-        }
-        catch (Exception ex)
-        {
-            _pendingAppUpdate = null;
-            IsAppUpdateAvailable = false;
-            IsAppUpdateReadyToInstall = false;
-            AppUpdateStatus = $"{GetString("Settings.Update.Status.Error", "Update failed")}: {ex.Message}";
-        }
-        finally
-        {
-            IsCheckingAppUpdate = false;
-        }
-    }
-
-    [RelayCommand]
-    private async Task DownloadAppUpdate()
-    {
-        if (_appUpdateService == null)
-        {
-            AppUpdateStatus = GetString("Settings.Update.Status.Unsupported", "Update service unavailable");
-            return;
-        }
-
-        if (_requiresManualAppUpdate)
-        {
-            AppUpdateStatus = GetString("Settings.Update.Status.ManualRequired", "New version available. Download it from the releases page.");
-            await ShowManualUpdatePromptAsync();
-            return;
-        }
-
-        if (_pendingAppUpdate == null)
-        {
-            await CheckAppUpdate();
-            if (_pendingAppUpdate == null)
-            {
-                return;
-            }
-        }
-
-        if (IsDownloadingAppUpdate)
-        {
-            return;
-        }
-
-        IsDownloadingAppUpdate = true;
-        IsAppUpdateReadyToInstall = false;
-        AppUpdateStatus = GetString("Settings.Update.Status.Downloading", "Downloading update...");
-        var progress = new Progress<int>(value => AppUpdateProgress = value);
-
-        try
-        {
-            await _appUpdateService.DownloadUpdateAsync(_pendingAppUpdate, SelectedUpdateChannel, progress);
-            IsAppUpdateAvailable = false;
-            IsAppUpdateReadyToInstall = true;
-            AppUpdateStatus = GetString("Settings.Update.Status.Ready", "Update downloaded. Restart to apply.");
-        }
-        catch (Exception ex)
-        {
-            IsAppUpdateReadyToInstall = false;
-            AppUpdateStatus = $"{GetString("Settings.Update.Status.Error", "Update failed")}: {ex.Message}";
-        }
-        finally
-        {
-            IsDownloadingAppUpdate = false;
-        }
-    }
-
-    [RelayCommand]
-    private async Task ApplyAppUpdate()
-    {
-        if (_appUpdateService == null)
-        {
-            AppUpdateStatus = GetString("Settings.Update.Status.Unsupported", "Update service unavailable");
-            return;
-        }
-
-        if (_requiresManualAppUpdate)
-        {
-            AppUpdateStatus = GetString("Settings.Update.Status.ManualRequired", "New version available. Download it from the releases page.");
-            await ShowManualUpdatePromptAsync();
-            return;
-        }
-
-        if (!IsAppUpdateReadyToInstall)
-        {
-            AppUpdateStatus = GetString("Settings.Update.Status.DownloadFirst", "Download the update first.");
-            return;
-        }
-
-        try
-        {
-            AppUpdateStatus = GetString("Settings.Update.Status.Applying", "Restarting to apply update...");
-            await _appUpdateService.RestartToApplyDownloadedUpdateAsync();
-        }
-        catch (Exception ex)
-        {
-            AppUpdateStatus = $"{GetString("Settings.Update.Status.Error", "Update failed")}: {ex.Message}";
-        }
-    }
-
-    [RelayCommand]
     private async Task AddProfile()
     {
         if (_profileManager != null)
@@ -1150,6 +910,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     {
         var normalized = NormalizeUpdateChannel(value);
         var parsed = ParseUpdateChannel(normalized);
+        _appUpdate.Configure(normalized);
         if (_suppressPreferenceUpdates)
         {
             _currentPreferences.UpdateChannel = parsed;
@@ -1214,11 +975,6 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         return string.Equals(channel, "beta", StringComparison.OrdinalIgnoreCase)
             ? AppUpdateChannel.Beta
             : AppUpdateChannel.Release;
-    }
-
-    private static bool IsRemoteVersionDifferent(string remoteVersion, string currentVersion)
-    {
-        return !string.Equals(remoteVersion, currentVersion, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string UpdateChannelToString(AppUpdateChannel channel)
@@ -1577,110 +1333,6 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         {
             var dest = Path.Combine(destDir, Path.GetFileName(dir));
             CopyDirectory(dir, dest);
-        }
-    }
-
-    private async Task ShowManualUpdatePromptAsync()
-    {
-        if (_appUpdateService == null)
-        {
-            return;
-        }
-
-        var releaseUrl = _appUpdateService.ReleasesPageUrl;
-        if (string.IsNullOrWhiteSpace(releaseUrl))
-        {
-            return;
-        }
-
-        if (Avalonia.Application.Current?.ApplicationLifetime is not Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop ||
-            desktop.MainWindow == null)
-        {
-            OpenReleasesPage(releaseUrl);
-            return;
-        }
-
-        var owner = desktop.MainWindow;
-        var versionLabel = string.IsNullOrWhiteSpace(LatestAvailableVersion)
-            ? GetString("Common.Unknown", "unknown")
-            : LatestAvailableVersion;
-
-        var dialog = new Window
-        {
-            Width = 480,
-            Height = 220,
-            CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Title = GetString("Settings.Update.ManualDialog.Title", "Manual update required")
-        };
-
-        var message = new TextBlock
-        {
-            Text = string.Format(
-                GetString(
-                    "Settings.Update.ManualDialog.Message",
-                    "Portable builds cannot update automatically. Open the releases page to download version {0}?"),
-                versionLabel),
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 16)
-        };
-
-        var openButton = new Button
-        {
-            Content = GetString("Settings.Update.ManualDialog.OpenButton", "Open Releases"),
-            MinWidth = 120
-        };
-        openButton.Click += (_, _) => dialog.Close(true);
-
-        var laterButton = new Button
-        {
-            Content = GetString("Settings.Update.ManualDialog.LaterButton", "Later"),
-            MinWidth = 90
-        };
-        laterButton.Click += (_, _) => dialog.Close(false);
-
-        var buttons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Spacing = 8,
-            Children =
-            {
-                laterButton,
-                openButton
-            }
-        };
-
-        dialog.Content = new StackPanel
-        {
-            Margin = new Thickness(20),
-            Children =
-            {
-                message,
-                buttons
-            }
-        };
-
-        var shouldOpen = await dialog.ShowDialog<bool>(owner);
-        if (shouldOpen)
-        {
-            OpenReleasesPage(releaseUrl);
-        }
-    }
-
-    private void OpenReleasesPage(string releaseUrl)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = releaseUrl,
-                UseShellExecute = true
-            });
-        }
-        catch (Exception ex)
-        {
-            AppUpdateStatus = $"{GetString("Settings.Update.Status.OpenReleasesFailed", "Failed to open releases page")}: {ex.Message}";
         }
     }
 

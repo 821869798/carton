@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
@@ -39,7 +40,7 @@ public interface IAppUpdateService
     Task DownloadUpdateAsync(
         AppUpdateResult update,
         string channel,
-        IProgress<int>? progress = null,
+        IProgress<AppUpdateDownloadProgress>? progress = null,
         CancellationToken cancellationToken = default);
 
     Task RestartToApplyDownloadedUpdateAsync(bool silentRestart = false);
@@ -65,6 +66,11 @@ public sealed record GitHubAssetInfo(
     string Name,
     string DownloadUrl,
     long Size);
+
+public sealed record AppUpdateDownloadProgress(
+    int Percent,
+    long BytesReceived,
+    long TotalBytes);
 
 public sealed class AppUpdateService : IAppUpdateService
 {
@@ -278,7 +284,7 @@ public sealed class AppUpdateService : IAppUpdateService
     public async Task DownloadUpdateAsync(
         AppUpdateResult update,
         string channel,
-        IProgress<int>? progress = null,
+        IProgress<AppUpdateDownloadProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         if (update == null)
@@ -286,6 +292,7 @@ public sealed class AppUpdateService : IAppUpdateService
             throw new ArgumentNullException(nameof(update));
         }
 
+        var totalBytes = ResolveDownloadSize(update);
         var manager = CreateManager(channel);
         try
         {
@@ -293,7 +300,14 @@ public sealed class AppUpdateService : IAppUpdateService
 
             await manager.DownloadUpdatesAsync(
                 update.UpdateInfo,
-                percent => progress?.Report(percent),
+                percent =>
+                {
+                    var normalizedPercent = Math.Clamp(percent, 0, 100);
+                    var bytesReceived = totalBytes <= 0
+                        ? 0
+                        : (long)Math.Round(totalBytes * (normalizedPercent / 100d), MidpointRounding.AwayFromZero);
+                    progress?.Report(new AppUpdateDownloadProgress(normalizedPercent, bytesReceived, totalBytes));
+                },
                 cancellationToken).ConfigureAwait(false);
 
             _stagedRelease = update.UpdateInfo.TargetFullRelease;
@@ -369,6 +383,40 @@ public sealed class AppUpdateService : IAppUpdateService
     private void Log(string message)
     {
         _log?.Invoke(message);
+    }
+
+    private static long ResolveDownloadSize(AppUpdateResult update)
+    {
+        var deltaPackages = update.UpdateInfo.DeltasToTarget;
+        if (deltaPackages is { Length: > 0 })
+        {
+            var deltaBytes = deltaPackages
+                .Where(asset => asset != null)
+                .Sum(asset => Math.Max(0, asset.Size));
+            if (deltaBytes > 0)
+            {
+                return deltaBytes;
+            }
+        }
+
+        var fullRelease = update.UpdateInfo.TargetFullRelease;
+        if (fullRelease != null && fullRelease.Size > 0)
+        {
+            return fullRelease.Size;
+        }
+
+        var fileName = fullRelease?.FileName;
+        if (!string.IsNullOrWhiteSpace(fileName))
+        {
+            var matchedAsset = update.ReleaseInfo.Assets.FirstOrDefault(asset =>
+                string.Equals(asset.Name, fileName, StringComparison.OrdinalIgnoreCase));
+            if (matchedAsset != null && matchedAsset.Size > 0)
+            {
+                return matchedAsset.Size;
+            }
+        }
+
+        return 0;
     }
 
     private VelopackAsset? GetPendingRestartRelease()

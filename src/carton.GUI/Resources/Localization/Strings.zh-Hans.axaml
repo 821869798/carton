@@ -21,6 +21,12 @@
 	<x:String x:Key="MainWindow.KernelDialog.LatestVersionPrefix">最新版本：</x:String>
 	<x:String x:Key="MainWindow.KernelDialog.Button.Download">下载</x:String>
 	<x:String x:Key="MainWindow.KernelDialog.Button.Later">稍后</x:String>
+  <x:String x:Key="MainWindow.AppUpdateDialog.Title">发现新版本</x:String>
+  <x:String x:Key="MainWindow.AppUpdateDialog.DescriptionLine1">检测到新版本，可以现在下载，下载完成后再决定是否重启应用。</x:String>
+  <x:String x:Key="MainWindow.AppUpdateDialog.LatestVersionPrefix">最新版本：</x:String>
+  <x:String x:Key="MainWindow.AppUpdateDialog.Button.Download">下载更新</x:String>
+  <x:String x:Key="MainWindow.AppUpdateDialog.Button.SilentDownload">静默下载</x:String>
+  <x:String x:Key="MainWindow.AppUpdateDialog.Button.Later">稍后</x:String>
 
 	<x:String x:Key="Navigation.Dashboard">仪表盘</x:String>
 	<x:String x:Key="Navigation.Profiles">配置</x:String>
@@ -191,6 +197,10 @@
 	<x:String x:Key="Settings.Update.ManualDialog.Message">免安装版本无法自动更新，是否打开发布页下载 {0}？</x:String>
 	<x:String x:Key="Settings.Update.ManualDialog.OpenButton">打开发布页</x:String>
 	<x:String x:Key="Settings.Update.ManualDialog.LaterButton">稍后再说</x:String>
+  <x:String x:Key="Settings.Update.ApplyPrompt.Title">更新已下载</x:String>
+  <x:String x:Key="Settings.Update.ApplyPrompt.Message">版本 {0} 已下载完成，是否现在重启并应用更新？</x:String>
+  <x:String x:Key="Settings.Update.ApplyPrompt.RestartButton">立即重启</x:String>
+  <x:String x:Key="Settings.Update.ApplyPrompt.LaterButton">稍后</x:String>
 
 	<x:String x:Key="Settings.Section.Appearance">外观</x:String>
 	<x:String x:Key="Settings.Appearance.Theme">主题</x:String>

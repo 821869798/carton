@@ -21,6 +21,12 @@
 	<x:String x:Key="MainWindow.KernelDialog.LatestVersionPrefix">Latest version: </x:String>
 	<x:String x:Key="MainWindow.KernelDialog.Button.Download">Download</x:String>
 	<x:String x:Key="MainWindow.KernelDialog.Button.Later">Later</x:String>
+  <x:String x:Key="MainWindow.AppUpdateDialog.Title">Update Available</x:String>
+  <x:String x:Key="MainWindow.AppUpdateDialog.DescriptionLine1">A new version is available. You can download it now and decide whether to restart after it finishes.</x:String>
+  <x:String x:Key="MainWindow.AppUpdateDialog.LatestVersionPrefix">Latest version: </x:String>
+  <x:String x:Key="MainWindow.AppUpdateDialog.Button.Download">Download Update</x:String>
+  <x:String x:Key="MainWindow.AppUpdateDialog.Button.SilentDownload">Silent Download</x:String>
+  <x:String x:Key="MainWindow.AppUpdateDialog.Button.Later">Later</x:String>
 
   <x:String x:Key="Navigation.Dashboard">Dashboard</x:String>
   <x:String x:Key="Navigation.Profiles">Profiles</x:String>
@@ -210,6 +216,10 @@
 	<x:String x:Key="Settings.Update.ManualDialog.Message">Portable builds cannot update automatically. Open the releases page to download version {0}?</x:String>
 	<x:String x:Key="Settings.Update.ManualDialog.OpenButton">Open Releases</x:String>
 	<x:String x:Key="Settings.Update.ManualDialog.LaterButton">Later</x:String>
+  <x:String x:Key="Settings.Update.ApplyPrompt.Title">Update Ready</x:String>
+  <x:String x:Key="Settings.Update.ApplyPrompt.Message">Version {0} has finished downloading. Restart now to apply it?</x:String>
+  <x:String x:Key="Settings.Update.ApplyPrompt.RestartButton">Restart Now</x:String>
+  <x:String x:Key="Settings.Update.ApplyPrompt.LaterButton">Later</x:String>
 
 	<x:String x:Key="Settings.Section.Appearance">Appearance</x:String>
 	<x:String x:Key="Settings.Appearance.Theme">Theme</x:String>

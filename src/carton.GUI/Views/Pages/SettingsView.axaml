@@ -169,41 +169,41 @@
 
           <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
             <TextBlock Grid.Column="0" Text="{DynamicResource Settings.Update.CurrentVersion}" VerticalAlignment="Center"/>
-            <TextBlock Grid.Column="1" Text="{Binding CurrentAppVersion}" FontWeight="Medium"/>
+            <TextBlock Grid.Column="1" Text="{Binding AppUpdate.CurrentAppVersion}" FontWeight="Medium"/>
           </Grid>
 
           <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
             <TextBlock Grid.Column="0" Text="{DynamicResource Settings.Update.LatestVersion}" VerticalAlignment="Center"/>
-            <TextBlock Grid.Column="1" Text="{Binding LatestAvailableVersion}" FontWeight="Medium"/>
+            <TextBlock Grid.Column="1" Text="{Binding AppUpdate.LatestAvailableVersion}" FontWeight="Medium"/>
           </Grid>
 
           <ProgressBar Maximum="100"
                        Height="4"
                        IsIndeterminate="True"
-                       IsVisible="{Binding IsCheckingAppUpdate}"/>
+                       IsVisible="{Binding AppUpdate.IsCheckingAppUpdate}"/>
 
-          <ProgressBar Value="{Binding AppUpdateProgress}"
+          <ProgressBar Value="{Binding AppUpdate.AppUpdateProgress}"
                        Maximum="100"
                        Height="4"
-                       IsVisible="{Binding IsDownloadingAppUpdate}"/>
+                       IsVisible="{Binding AppUpdate.IsDownloadingAppUpdate}"/>
 
-          <TextBlock Text="{Binding AppUpdateStatus}"
+          <TextBlock Text="{Binding AppUpdate.AppUpdateStatus}"
                      Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                      TextWrapping="Wrap"/>
 
           <StackPanel Orientation="Horizontal" Spacing="8">
             <Button Content="{DynamicResource Settings.Update.Check}"
-                    Command="{Binding CheckAppUpdateCommand}"
-                    IsEnabled="{Binding !IsCheckingAppUpdate}"/>
+                    Command="{Binding AppUpdate.CheckAppUpdateCommand}"
+                    IsEnabled="{Binding !AppUpdate.IsCheckingAppUpdate}"/>
             <Button Content="{DynamicResource Settings.Update.Download}"
-                    Command="{Binding DownloadAppUpdateCommand}"
-                    IsEnabled="{Binding IsAppUpdateAvailable}"
-                    IsVisible="{Binding IsAppUpdateAvailable}"/>
+                    Command="{Binding AppUpdate.DownloadAppUpdateCommand}"
+                    IsEnabled="{Binding AppUpdate.IsAppUpdateAvailable}"
+                    IsVisible="{Binding AppUpdate.IsAppUpdateAvailable}"/>
             <Button Content="{DynamicResource Settings.Update.Apply}"
-                    Command="{Binding ApplyAppUpdateCommand}"
+                    Command="{Binding AppUpdate.ApplyAppUpdateCommand}"
                     Classes="accent"
-                    IsEnabled="{Binding IsAppUpdateReadyToInstall}"
-                    IsVisible="{Binding IsAppUpdateReadyToInstall}"/>
+                    IsEnabled="{Binding AppUpdate.IsAppUpdateReadyToInstall}"
+                    IsVisible="{Binding AppUpdate.IsAppUpdateReadyToInstall}"/>
           </StackPanel>
         </StackPanel>
       </Border>
@@ -250,7 +250,7 @@
         <StackPanel Spacing="12">
           <Grid ColumnDefinitions="*,Auto"
                 ColumnSpacing="12"
-                IsVisible="{Binding IsPortableApp}">
+                IsVisible="{Binding AppUpdate.IsPortableApp}">
             <TextBlock Grid.Column="0" Text="{DynamicResource Settings.Data.StoreInAppDir}" VerticalAlignment="Center"/>
             <ToggleSwitch Grid.Column="1" Classes="OnlySwitch" IsChecked="{Binding IsDataInExeDirectory}" />
           </Grid>
@@ -283,7 +283,7 @@
             <TextBlock.Inlines>
               <Run Text="{DynamicResource Settings.About.Version}"/>
               <Run Text=": "/>
-              <Run Text="{Binding CurrentAppVersion}"/>
+              <Run Text="{Binding AppUpdate.CurrentAppVersion}"/>
             </TextBlock.Inlines>
           </TextBlock>
           <TextBlock Text="{DynamicResource Settings.About.Description}" 

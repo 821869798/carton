@@ -307,6 +307,60 @@
         </DataTemplate>
       </ContentControl.ContentTemplate>
     </ContentControl>
+
+    <ContentControl Grid.Row="0"
+                    Grid.RowSpan="2"
+                    Content="{Binding AppUpdateDialogHost}">
+      <ContentControl.ContentTemplate>
+        <DataTemplate DataType="vm:AppUpdateCoordinator">
+          <Grid Background="#80000000">
+            <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                    CornerRadius="8"
+                    Padding="24"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    MinWidth="400"
+                    MaxWidth="560">
+              <StackPanel Spacing="16">
+                <TextBlock Text="{DynamicResource MainWindow.AppUpdateDialog.Title}" FontSize="18" FontWeight="SemiBold"/>
+                <TextBlock TextWrapping="Wrap">
+                  <Run Text="{DynamicResource MainWindow.AppUpdateDialog.DescriptionLine1}"/>
+                  <LineBreak/>
+                  <Run Text="{DynamicResource MainWindow.AppUpdateDialog.LatestVersionPrefix}"/>
+                  <Run Text="{Binding LatestAvailableVersion}" FontWeight="Medium"/>
+                </TextBlock>
+
+                <ProgressBar IsIndeterminate="False"
+                             Value="{Binding AppUpdateProgress}"
+                             Maximum="100"
+                             IsVisible="{Binding IsDownloadingAppUpdate}"
+                             Height="4"/>
+
+                <TextBlock Text="{Binding AppUpdateStatus}"
+                           TextWrapping="Wrap"
+                           FontSize="12"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                  <Button Content="{DynamicResource MainWindow.AppUpdateDialog.Button.Download}"
+                          Command="{Binding DownloadAppUpdateCommand}"
+                          Classes="accent"
+                          IsEnabled="{Binding !IsDownloadingAppUpdate}"
+                          IsVisible="{Binding !IsDownloadingAppUpdate}"/>
+                  <Button Content="{DynamicResource MainWindow.AppUpdateDialog.Button.SilentDownload}"
+                          Command="{Binding SilentDownloadAppUpdateCommand}"
+                          IsVisible="{Binding IsDownloadingAppUpdate}"/>
+                  <Button Content="{DynamicResource MainWindow.AppUpdateDialog.Button.Later}"
+                          Command="{Binding CloseStartupUpdateDialogCommand}"
+                          IsEnabled="{Binding !IsDownloadingAppUpdate}"
+                          IsVisible="{Binding !IsDownloadingAppUpdate}"/>
+                </StackPanel>
+              </StackPanel>
+            </Border>
+          </Grid>
+        </DataTemplate>
+      </ContentControl.ContentTemplate>
+    </ContentControl>
   </Grid>
 
 </Window>

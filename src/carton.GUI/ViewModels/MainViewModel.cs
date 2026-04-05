@@ -8,6 +8,7 @@ using carton.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
+using System.ComponentModel;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading.Tasks;
@@ -31,6 +32,7 @@ public partial class MainViewModel : ViewModelBase
     private readonly ILocalizationService _localizationService;
     private readonly IThemeService _themeService;
     private readonly IAppUpdateService _appUpdateService;
+    private readonly AppUpdateCoordinator _appUpdateCoordinator;
     private readonly LogStore _logStore;
     private readonly DispatcherTimer _transientPageUnloadTimer;
     private readonly DispatcherTimer _sessionDurationTimer;
@@ -105,10 +107,13 @@ public partial class MainViewModel : ViewModelBase
     public ObservableCollection<ToastNotificationViewModel> Toasts { get; } = new();
 
     public MainViewModel? KernelDialogHost => ShowKernelDialog ? this : null;
+    public AppUpdateCoordinator AppUpdate => _appUpdateCoordinator;
+    public AppUpdateCoordinator? AppUpdateDialogHost => !ShowKernelDialog && AppUpdate.ShowStartupUpdateDialog ? AppUpdate : null;
 
     partial void OnShowKernelDialogChanged(bool value)
     {
         OnPropertyChanged(nameof(KernelDialogHost));
+        OnPropertyChanged(nameof(AppUpdateDialogHost));
     }
 
     partial void OnSelectedKernelDownloadMirrorChanged(DownloadMirror value)
@@ -191,6 +196,8 @@ public partial class MainViewModel : ViewModelBase
         DashboardViewModel = new DashboardViewModel(_singBoxManager, _kernelManager, _profileManager, _configManager, _preferencesService, ShowToast, _logStore.AddLog);
         _lazyGroupsViewModel = new Lazy<GroupsViewModel>(() => new GroupsViewModel(_singBoxManager, _preferencesService));
         _appUpdateService = new AppUpdateService("https://github.com/821869798/carton", null, _logStore.AddLog);
+        _appUpdateCoordinator = new AppUpdateCoordinator(_appUpdateService, _localizationService);
+        _appUpdateCoordinator.PropertyChanged += OnAppUpdateCoordinatorPropertyChanged;
         _transientPageUnloadTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(30)
@@ -231,6 +238,7 @@ public partial class MainViewModel : ViewModelBase
         _suppressPreferenceUpdates = true;
         SelectedKernelDownloadMirror = _currentPreferences.KernelDownloadMirror;
         _suppressPreferenceUpdates = false;
+        _appUpdateCoordinator.Configure(UpdateChannelToString(_currentPreferences.UpdateChannel));
 
         _localizationService.SetLanguage(_currentPreferences.Language);
         _themeService.ApplyTheme(_currentPreferences.Theme);
@@ -268,6 +276,8 @@ public partial class MainViewModel : ViewModelBase
                 CurrentProfileName = profile.Name;
             }
         }
+
+        _ = _appUpdateCoordinator.RunStartupCheckAsync(_currentPreferences.AutoCheckAppUpdates);
     }
 
     private async Task RecoverStaleSystemProxyAsync()
@@ -584,8 +594,17 @@ public partial class MainViewModel : ViewModelBase
             _localizationService,
             _themeService,
             new StartupService(),
-            _appUpdateService);
+            _appUpdateCoordinator);
         return _settingsViewModel;
+    }
+
+    private void OnAppUpdateCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(e.PropertyName) ||
+            e.PropertyName == nameof(AppUpdateCoordinator.ShowStartupUpdateDialog))
+        {
+            OnPropertyChanged(nameof(AppUpdateDialogHost));
+        }
     }
 
     private void OnTransientPageUnloadTimerTick(object? sender, EventArgs e)
@@ -1098,6 +1117,7 @@ public partial class MainViewModel : ViewModelBase
             _connectionsViewModel = null;
             _settingsViewModel?.Dispose();
             _settingsViewModel = null;
+            _appUpdateCoordinator.PropertyChanged -= OnAppUpdateCoordinatorPropertyChanged;
 
             if (_singBoxManager is IDisposable disposable)
             {
@@ -1114,6 +1134,9 @@ public partial class MainViewModel : ViewModelBase
     }
 
     private static string FormatBytes(long bytes) => FormatHelper.FormatBytes(bytes);
+
+    private static string UpdateChannelToString(AppUpdateChannel channel)
+        => channel == AppUpdateChannel.Beta ? "beta" : "release";
 
     private async Task TryAutoStartAsync()
     {
