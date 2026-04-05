@@ -147,7 +147,8 @@ public sealed class LogStore
             ? AnsiEscapeRegex.Replace(message, "")
             : message;
 
-        var span = msg.AsSpan();
+        var span = msg.AsSpan().TrimStart();
+        var prefixedLevel = TryStripPrefixedLevel(ref span);
         var tokenIndex = 0;
         var position = 0;
         var timeTokenStart = -1;
@@ -189,7 +190,7 @@ public sealed class LogStore
 
         if (payloadStart < 0)
         {
-            return (currentTime, "Info", msg);
+            return (currentTime, prefixedLevel ?? "Info", span.ToString());
         }
 
         var time = ExtractTime(span, timeTokenStart, timeTokenLength, currentTime);
@@ -197,7 +198,7 @@ public sealed class LogStore
         var payload = span[payloadStart..].TrimStart();
         if (payload.Length == 0)
         {
-            return (time, "Info", string.Empty);
+            return (time, prefixedLevel ?? "Info", string.Empty);
         }
 
         var separatorIndex = payload.IndexOf(' ');
@@ -214,7 +215,9 @@ public sealed class LogStore
             messagePart = payload[(separatorIndex + 1)..].TrimStart();
         }
 
-        var level = NormalizeSingBoxLevel(levelToken);
+        var level = TryNormalizeSingBoxLevel(levelToken, out var parsedLevel)
+            ? parsedLevel
+            : prefixedLevel ?? "Info";
 
         if (messagePart.Length > 0 && messagePart[0] == '[')
         {
@@ -226,6 +229,28 @@ public sealed class LogStore
         }
 
         return (time, level, messagePart.ToString());
+    }
+
+    private static string? TryStripPrefixedLevel(ref ReadOnlySpan<char> span)
+    {
+        if (span.Length < 3 || span[0] != '[')
+        {
+            return null;
+        }
+
+        var endIndex = span.IndexOf(']');
+        if (endIndex <= 1)
+        {
+            return null;
+        }
+
+        if (!TryNormalizeSingBoxLevel(span[1..endIndex], out var level))
+        {
+            return null;
+        }
+
+        span = span[(endIndex + 1)..].TrimStart();
+        return level;
     }
 
     private static string ExtractTime(ReadOnlySpan<char> span, int start, int length, string fallback)
@@ -254,26 +279,36 @@ public sealed class LogStore
         return new string(first8);
     }
 
-    private static string NormalizeSingBoxLevel(ReadOnlySpan<char> value)
+    private static bool TryNormalizeSingBoxLevel(ReadOnlySpan<char> value, out string level)
     {
         if (value.Equals("DEBUG", StringComparison.OrdinalIgnoreCase))
         {
-            return "Debug";
+            level = "Debug";
+            return true;
         }
 
         if (value.Equals("WARN", StringComparison.OrdinalIgnoreCase) ||
             value.Equals("WARNING", StringComparison.OrdinalIgnoreCase))
         {
-            return "Warn";
+            level = "Warn";
+            return true;
         }
 
         if (value.Equals("ERROR", StringComparison.OrdinalIgnoreCase) ||
             value.Equals("FATAL", StringComparison.OrdinalIgnoreCase))
         {
-            return "Error";
+            level = "Error";
+            return true;
         }
 
-        return "Info";
+        if (value.Equals("INFO", StringComparison.OrdinalIgnoreCase))
+        {
+            level = "Info";
+            return true;
+        }
+
+        level = "Info";
+        return false;
     }
 }
 
