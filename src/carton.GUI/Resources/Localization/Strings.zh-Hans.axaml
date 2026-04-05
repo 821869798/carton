@@ -92,6 +92,15 @@
 	<x:String x:Key="Dashboard.Option.Tun">虚拟网卡 (TUN)</x:String>
 	<x:String x:Key="Dashboard.Button.ResetToConfig">重置为配置值</x:String>
 	<x:String x:Key="Dashboard.Port.Edit">编辑端口</x:String>
+	<x:String x:Key="Dashboard.Port.Scope.LocalOnly">仅本机</x:String>
+	<x:String x:Key="Dashboard.Port.Scope.Lan">局域网</x:String>
+	<x:String x:Key="Dashboard.Port.Scope.LocalOnly.ToolTip">监听在 127.0.0.1，仅当前设备可以连接。</x:String>
+	<x:String x:Key="Dashboard.Port.Scope.Lan.ToolTip">监听在 0.0.0.0，局域网内其他设备也可以连接。</x:String>
+	<x:String x:Key="Dashboard.Port.Scope.ToggleToLocal.ToolTip">点击切换为仅本机。</x:String>
+	<x:String x:Key="Dashboard.Port.Scope.ToggleToLan.ToolTip">点击切换为允许局域网连接。</x:String>
+	<x:String x:Key="Dashboard.Port.Scope.Locked.ToolTip">请先停止内核，再修改监听范围。</x:String>
+	<x:String x:Key="Dashboard.Port.Scope.EnabledStatus">已允许局域网连接</x:String>
+	<x:String x:Key="Dashboard.Port.Scope.DisabledStatus">已切换为仅本机</x:String>
   <x:String x:Key="Dashboard.LogLevel.HighVolumeHint">当前日志较多，推荐 warn 及以上</x:String>
 	<x:String x:Key="Dashboard.ClashMode">Clash 出站模式</x:String>
 	<x:String x:Key="Dashboard.Label.UploadSpeed">上传速度</x:String>

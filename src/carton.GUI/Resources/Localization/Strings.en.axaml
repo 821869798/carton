@@ -98,6 +98,15 @@
   <x:String x:Key="Dashboard.Option.Tun">Virtual Adapter (TUN)</x:String>
   <x:String x:Key="Dashboard.Button.ResetToConfig">Reset to Config</x:String>
   <x:String x:Key="Dashboard.Port.Edit">Edit Port</x:String>
+  <x:String x:Key="Dashboard.Port.Scope.LocalOnly">Local Only</x:String>
+  <x:String x:Key="Dashboard.Port.Scope.Lan">LAN</x:String>
+  <x:String x:Key="Dashboard.Port.Scope.LocalOnly.ToolTip">Listening on 127.0.0.1. Only this device can connect.</x:String>
+  <x:String x:Key="Dashboard.Port.Scope.Lan.ToolTip">Listening on 0.0.0.0. Devices on your LAN can connect.</x:String>
+  <x:String x:Key="Dashboard.Port.Scope.ToggleToLocal.ToolTip">Click to switch to local only.</x:String>
+  <x:String x:Key="Dashboard.Port.Scope.ToggleToLan.ToolTip">Click to allow devices on your LAN.</x:String>
+  <x:String x:Key="Dashboard.Port.Scope.Locked.ToolTip">Stop the kernel before changing the listening scope.</x:String>
+  <x:String x:Key="Dashboard.Port.Scope.EnabledStatus">LAN access enabled</x:String>
+  <x:String x:Key="Dashboard.Port.Scope.DisabledStatus">Switched to local only</x:String>
   <x:String x:Key="Dashboard.LogLevel.HighVolumeHint">Current log volume is high. Warn or above is recommended.</x:String>
   <x:String x:Key="Dashboard.ClashMode">Clash Outbound Mode</x:String>
 	<x:String x:Key="Dashboard.Label.UploadSpeed">Upload Speed</x:String>

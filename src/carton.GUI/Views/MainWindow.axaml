@@ -10,7 +10,7 @@
         x:Name="MainWindowRoot"
         x:DataType="vm:MainViewModel"
         Title="{DynamicResource App.Name}"
-        Width="900" Height="640"
+        Width="910" Height="640"
         MinWidth="700" MinHeight="400"
         WindowStartupLocation="CenterScreen"
         TransparencyLevelHint="None">

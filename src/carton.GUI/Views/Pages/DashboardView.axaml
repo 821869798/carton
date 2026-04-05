@@ -39,6 +39,57 @@
       <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
     </Style>
 
+    <Style Selector="Button.portScopeButton">
+      <Setter Property="Padding" Value="8,3"/>
+      <Setter Property="CornerRadius" Value="999"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="MinHeight" Value="28"/>
+    </Style>
+
+    <Style Selector="Button.portScopeButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"/>
+      <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+    </Style>
+
+    <Style Selector="Button.portScopeButton:pressed">
+      <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+    </Style>
+
+    <Style Selector="Button.portScopeButton:disabled">
+      <Setter Property="Opacity" Value="0.7"/>
+    </Style>
+
+    <Style Selector="Button.portScopeButton.localOnly">
+      <Setter Property="Background" Value="#EAF2FF"/>
+      <Setter Property="BorderBrush" Value="#8CA8D6"/>
+      <Setter Property="Foreground" Value="#254A7B"/>
+    </Style>
+
+    <Style Selector="Button.portScopeButton.localOnly:pointerover">
+      <Setter Property="Background" Value="#DDEAFF"/>
+      <Setter Property="BorderBrush" Value="#6E90C7"/>
+      <Setter Property="Foreground" Value="#1E3F69"/>
+    </Style>
+
+    <Style Selector="Button.portScopeButton.localOnly:pressed">
+      <Setter Property="Background" Value="#D2E3FF"/>
+      <Setter Property="BorderBrush" Value="#5D82BE"/>
+      <Setter Property="Foreground" Value="#183455"/>
+    </Style>
+
+    <Style Selector="Button.portScopeButton.lanEnabled">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColor}"/>
+      <Setter Property="Foreground" Value="{DynamicResource SystemAccentColor}"/>
+    </Style>
+
+    <Style Selector="TextBlock.portScopeButtonText">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
     <Style Selector="RadioButton.clashModeSegment">
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
@@ -107,7 +158,7 @@
                     CornerRadius="12"
                     Padding="12">
               <StackPanel Spacing="12">
-                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*" ColumnSpacing="10">
+                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*" ColumnSpacing="10">
                   <TextBlock Grid.Column="0"
                              Text="{DynamicResource Dashboard.Field.Port}"
                              Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
@@ -118,6 +169,24 @@
                              FontWeight="SemiBold"
                              VerticalAlignment="Center"/>
                   <Button Grid.Column="2"
+                          Classes="portScopeButton localOnly"
+                          Command="{Binding ToggleInboundAccessCommand}"
+                          IsEnabled="{Binding ShowStartupSelector}"
+                          IsVisible="{Binding !AllowLanConnections}"
+                          ToolTip.Tip="{Binding InboundAccessActionToolTip}">
+                    <TextBlock Classes="portScopeButtonText"
+                               Text="{Binding InboundAccessBadgeText}"/>
+                  </Button>
+                  <Button Grid.Column="2"
+                          Classes="portScopeButton lanEnabled"
+                          Command="{Binding ToggleInboundAccessCommand}"
+                          IsEnabled="{Binding ShowStartupSelector}"
+                          IsVisible="{Binding AllowLanConnections}"
+                          ToolTip.Tip="{Binding InboundAccessActionToolTip}">
+                    <TextBlock Classes="portScopeButtonText"
+                               Text="{Binding InboundAccessBadgeText}"/>
+                  </Button>
+                  <Button Grid.Column="3"
                           Classes="iconButton"
                           Command="{Binding EditInboundPortCommand}"
                           IsEnabled="{Binding ShowStartupSelector}"
@@ -126,7 +195,7 @@
                               Height="14"
                               Data="M4 16.5 V20 H7.5 L17.8 9.7 L14.3 6.2 Z M19 8.5 L20.5 7 C21.1 6.4 21.1 5.4 20.5 4.8 L19.2 3.5 C18.6 2.9 17.6 2.9 17 3.5 L15.5 5 Z"/>
                   </Button>
-                  <Button Grid.Column="3"
+                  <Button Grid.Column="4"
                           Classes="iconButton"
                           IsEnabled="{Binding ShowDashboardMetrics}"
                           ToolTip.Tip="{DynamicResource Dashboard.Menu.OpenTool}">
@@ -153,7 +222,7 @@
                               Height="14"
                               Data="M3 6 H21 V18 H3 Z M6.5 10 L9.5 12 L6.5 14 M11.5 14 H16.5"/>
                   </Button>
-                  <Button Grid.Column="4"
+                  <Button Grid.Column="5"
                           Classes="iconButton"
                           Command="{Binding OpenWebUiCommand}"
                           IsEnabled="{Binding ShowDashboardMetrics}"

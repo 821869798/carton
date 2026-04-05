@@ -152,9 +152,24 @@ public partial class DashboardViewModel : PageViewModelBase
             return;
         }
 
-        AllowLanConnections = result.Value.AllowLanConnections;
-        InboundPortText = result.Value.PortText;
+        InboundPortText = result;
         CommitInboundPortEdit();
+    }
+
+    [RelayCommand]
+    private void ToggleInboundAccess()
+    {
+        if (!ShowStartupSelector)
+        {
+            return;
+        }
+
+        AllowLanConnections = !AllowLanConnections;
+        var message = AllowLanConnections
+            ? GetString("Dashboard.Port.Scope.EnabledStatus", "LAN access enabled")
+            : GetString("Dashboard.Port.Scope.DisabledStatus", "Switched to local only");
+        ShowTransientStatus(message);
+        LogInfo($"Inbound access scope changed: lan={AllowLanConnections}");
     }
 
     [RelayCommand]
@@ -276,6 +291,20 @@ public partial class DashboardViewModel : PageViewModelBase
     [ObservableProperty]
     private bool _allowLanConnections;
 
+    public string InboundAccessBadgeText => AllowLanConnections
+        ? GetString("Dashboard.Port.Scope.Lan", "LAN")
+        : GetString("Dashboard.Port.Scope.LocalOnly", "Local Only");
+
+    public string InboundAccessToolTip => AllowLanConnections
+        ? GetString("Dashboard.Port.Scope.Lan.ToolTip", "Listening on 0.0.0.0. Devices on your LAN can connect.")
+        : GetString("Dashboard.Port.Scope.LocalOnly.ToolTip", "Listening on 127.0.0.1. Only this device can connect.");
+
+    public string InboundAccessActionToolTip => ShowStartupSelector
+        ? $"{InboundAccessToolTip}{Environment.NewLine}{(AllowLanConnections
+            ? GetString("Dashboard.Port.Scope.ToggleToLocal.ToolTip", "Click to switch to local only.")
+            : GetString("Dashboard.Port.Scope.ToggleToLan.ToolTip", "Click to allow devices on your LAN."))}"
+        : $"{InboundAccessToolTip}{Environment.NewLine}{GetString("Dashboard.Port.Scope.Locked.ToolTip", "Stop the kernel before changing the listening scope.")}";
+
     [ObservableProperty]
     private bool _enableSystemProxy;
 
@@ -285,7 +314,13 @@ public partial class DashboardViewModel : PageViewModelBase
     [ObservableProperty]
     private string _selectedLogLevel = SingBoxLogLevelHelper.DefaultLevel;
 
-    partial void OnAllowLanConnectionsChanged(bool value) => UpdateRuntimeOptions(options => options.AllowLanConnections = value);
+    partial void OnAllowLanConnectionsChanged(bool value)
+    {
+        UpdateRuntimeOptions(options => options.AllowLanConnections = value);
+        OnPropertyChanged(nameof(InboundAccessBadgeText));
+        OnPropertyChanged(nameof(InboundAccessToolTip));
+        OnPropertyChanged(nameof(InboundAccessActionToolTip));
+    }
     partial void OnEnableSystemProxyChanged(bool value)
     {
         UpdateRuntimeOptions(options => options.EnableSystemProxy = value);
@@ -332,6 +367,7 @@ public partial class DashboardViewModel : PageViewModelBase
         OnPropertyChanged(nameof(HasSelectedProfile));
         OnPropertyChanged(nameof(CanToggleConnection));
         OnPropertyChanged(nameof(ConnectionToggleToolTip));
+        OnPropertyChanged(nameof(InboundAccessActionToolTip));
     }
 
     public DashboardViewModel()
@@ -344,6 +380,9 @@ public partial class DashboardViewModel : PageViewModelBase
         _localizationService.LanguageChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(ConnectionToggleToolTip));
+            OnPropertyChanged(nameof(InboundAccessBadgeText));
+            OnPropertyChanged(nameof(InboundAccessToolTip));
+            OnPropertyChanged(nameof(InboundAccessActionToolTip));
             _ = RefreshKernelVersionAsync();
         };
         _ = RefreshKernelVersionAsync();
@@ -857,7 +896,7 @@ public partial class DashboardViewModel : PageViewModelBase
         return await dialog.ShowDialog<string?>(window);
     }
 
-    private async Task<(string PortText, bool AllowLanConnections)?> ShowInboundPortDialogAsync()
+    private async Task<string?> ShowInboundPortDialogAsync()
     {
         var desktop = Avalonia.Application.Current?.ApplicationLifetime
             as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
@@ -870,7 +909,7 @@ public partial class DashboardViewModel : PageViewModelBase
         var dialog = new Avalonia.Controls.Window
         {
             Width = 380,
-            Height = 230,
+            Height = 180,
             CanResize = false,
             WindowStartupLocation = Avalonia.Controls.WindowStartupLocation.CenterOwner,
             Title = GetString("Dashboard.Port.Edit", "Edit Port")
@@ -886,30 +925,8 @@ public partial class DashboardViewModel : PageViewModelBase
         {
             Text = InboundPortText,
             Watermark = GetString("Dashboard.Field.Port", "Mixed Port"),
-            Margin = new Avalonia.Thickness(0, 0, 0, 12)
+            Margin = new Avalonia.Thickness(0, 0, 0, 16)
         };
-
-        var allowLanToggle = new Avalonia.Controls.ToggleSwitch
-        {
-            IsChecked = AllowLanConnections,
-            Width = 40,
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right
-        };
-        allowLanToggle.Classes.Add("OnlySwitch");
-
-        var allowLanRow = new Avalonia.Controls.Grid
-        {
-            Margin = new Avalonia.Thickness(0, 0, 0, 16),
-            ColumnDefinitions = new Avalonia.Controls.ColumnDefinitions("*,Auto")
-        };
-        allowLanRow.Children.Add(new Avalonia.Controls.TextBlock
-        {
-            Text = GetString("Dashboard.Option.AllowLan", "Allow LAN Connections"),
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
-        });
-        var allowLanToggleHost = allowLanToggle;
-        Avalonia.Controls.Grid.SetColumn(allowLanToggleHost, 1);
-        allowLanRow.Children.Add(allowLanToggleHost);
 
         var okBtn = new Avalonia.Controls.Button
         {
@@ -935,7 +952,7 @@ public partial class DashboardViewModel : PageViewModelBase
                 return;
             }
 
-            dialog.Close((port.ToString(), allowLanToggle.IsChecked == true));
+            dialog.Close(port.ToString());
         };
 
         var buttons = new Avalonia.Controls.StackPanel
@@ -955,12 +972,11 @@ public partial class DashboardViewModel : PageViewModelBase
             {
                 prompt,
                 portBox,
-                allowLanRow,
                 buttons
             }
         };
 
-        return await dialog.ShowDialog<(string PortText, bool AllowLanConnections)?>(window);
+        return await dialog.ShowDialog<string?>(window);
     }
 
     private async Task<(string? ConfigPath, bool DeferredRefresh)> EnsureProfileConfigPathForStartAsync(Profile profile, string profileName)
