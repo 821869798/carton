@@ -53,13 +53,11 @@ public partial class DashboardViewModel : PageViewModelBase
     private ProfileRuntimeOptions _runtimeOptions = new();
     private bool _suppressRuntimeOptionUpdates;
     private bool _suppressSystemProxyApply;
-    private readonly DispatcherTimer _sessionDurationTimer;
     private bool _isOnPage = true;
     private bool _isWindowVisible = true;
     private bool _isLiveRefreshActive;
     private int _pendingTrafficRefresh;
     private int _pendingMemoryRefresh;
-    private int _sessionStartTimeMeasureHourDigits = 2;
     private static readonly ObservableCollection<string> SupportedLogLevels = new(SingBoxLogLevelHelper.Levels);
     public override NavigationPage PageType => NavigationPage.Dashboard;
 
@@ -273,12 +271,6 @@ public partial class DashboardViewModel : PageViewModelBase
     private string _startupStatus = string.Empty;
 
     [ObservableProperty]
-    private string _sessionStartTimeText = "--";
-
-    [ObservableProperty]
-    private string _sessionStartTimeMeasureText = "88:88:88";
-
-    [ObservableProperty]
     private string _inboundPortText = "2028";
 
     [ObservableProperty]
@@ -347,16 +339,10 @@ public partial class DashboardViewModel : PageViewModelBase
         InitializePageMetadata("Home", "Navigation.Dashboard", "Dashboard");
         _localizationService = LocalizationService.Instance;
         _clashConfigCache = ClashConfigCacheService.Instance;
-        _sessionDurationTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromSeconds(1)
-        };
         InitializeConnectivityItems();
         AvailableProfiles.CollectionChanged += OnAvailableProfilesCollectionChanged;
-        _sessionDurationTimer.Tick += (_, _) => UpdateSessionStartTime();
         _localizationService.LanguageChanged += (_, _) =>
         {
-            UpdateSessionStartTime();
             OnPropertyChanged(nameof(ConnectionToggleToolTip));
             _ = RefreshKernelVersionAsync();
         };
@@ -437,7 +423,6 @@ public partial class DashboardViewModel : PageViewModelBase
                 _ => _localizationService["Status.Disconnected"]
             };
             OnPropertyChanged(nameof(ShowTerminalProxyButtons));
-            UpdateSessionStartTime();
 
             if (status == ServiceStatus.Error)
             {
@@ -458,7 +443,6 @@ public partial class DashboardViewModel : PageViewModelBase
         }
         else
         {
-            StopSessionDurationTimer();
             Dispatcher.UIThread.Post(() =>
             {
                 UpdateLiveRefreshState();
@@ -1360,7 +1344,6 @@ public partial class DashboardViewModel : PageViewModelBase
         ResetTrafficHistory();
         ApplyTrafficMetrics(0, 0, 0, 0, false);
         ApplyMemoryUsage(0);
-        SessionStartTimeText = "--";
     }
 
     private async Task RefreshKernelVersionAsync()
@@ -1381,84 +1364,6 @@ public partial class DashboardViewModel : PageViewModelBase
         }
     }
 
-    private void UpdateSessionStartTime()
-    {
-        var startTime = _singBoxManager?.State.StartTime;
-        if (!startTime.HasValue)
-        {
-            SessionStartTimeText = "--";
-            ResetSessionStartTimeMeasureText();
-            return;
-        }
-
-        var elapsed = DateTime.Now - startTime.Value;
-        if (elapsed < TimeSpan.Zero)
-        {
-            elapsed = TimeSpan.Zero;
-        }
-
-        var totalHours = (int)elapsed.TotalHours;
-        SessionStartTimeText = $"{totalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}";
-        UpdateSessionStartTimeMeasureText(totalHours);
-    }
-
-    private void ResetSessionStartTimeMeasureText()
-    {
-        if (_sessionStartTimeMeasureHourDigits == 2)
-        {
-            return;
-        }
-
-        _sessionStartTimeMeasureHourDigits = 2;
-        SessionStartTimeMeasureText = "88:88:88";
-    }
-
-    private void UpdateSessionStartTimeMeasureText(int totalHours)
-    {
-        var hourDigits = GetHourDigitCount(totalHours);
-        if (hourDigits == _sessionStartTimeMeasureHourDigits)
-        {
-            return;
-        }
-
-        _sessionStartTimeMeasureHourDigits = hourDigits;
-        SessionStartTimeMeasureText = $"{new string('8', hourDigits)}:88:88";
-    }
-
-    private static int GetHourDigitCount(int totalHours)
-    {
-        if (totalHours < 100)
-        {
-            return 2;
-        }
-
-        var digits = 0;
-        do
-        {
-            digits++;
-            totalHours /= 10;
-        }
-        while (totalHours > 0);
-
-        return digits;
-    }
-
-    private void StartSessionDurationTimer()
-    {
-        if (!_sessionDurationTimer.IsEnabled)
-        {
-            _sessionDurationTimer.Start();
-        }
-    }
-
-    private void StopSessionDurationTimer()
-    {
-        if (_sessionDurationTimer.IsEnabled)
-        {
-            _sessionDurationTimer.Stop();
-        }
-    }
-
     private bool CanRefreshLiveMetrics()
     {
         return _singBoxManager is { IsRunning: true } && _isOnPage && _isWindowVisible;
@@ -1475,12 +1380,8 @@ public partial class DashboardViewModel : PageViewModelBase
         _isLiveRefreshActive = shouldRefresh;
         if (shouldRefresh)
         {
-            StartSessionDurationTimer();
             RefreshVisibleDashboardData();
-            return;
         }
-
-        StopSessionDurationTimer();
     }
 
     private void RefreshVisibleDashboardData()
@@ -1490,7 +1391,6 @@ public partial class DashboardViewModel : PageViewModelBase
             return;
         }
 
-        UpdateSessionStartTime();
         InitializeTrafficMetrics();
         InitializeMemoryMetrics();
         _ = RefreshClashModeAsync();

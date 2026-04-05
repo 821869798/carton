@@ -33,11 +33,14 @@ public partial class MainViewModel : ViewModelBase
     private readonly IAppUpdateService _appUpdateService;
     private readonly LogStore _logStore;
     private readonly DispatcherTimer _transientPageUnloadTimer;
+    private readonly DispatcherTimer _sessionDurationTimer;
     private AppPreferences _currentPreferences = new();
     private bool _isShuttingDown;
     private bool _autoStartOnLaunch;
     private bool _isWindowVisible = true;
+    private bool _isSessionDurationRefreshActive;
     private bool _suppressPreferenceUpdates;
+    private int _sessionStartTimeMeasureHourDigits = 2;
 
     [ObservableProperty]
     private PageViewModelBase _currentPage;
@@ -92,6 +95,12 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _hasKernelDownloadFailed;
+
+    [ObservableProperty]
+    private string _sessionStartTimeText = "--";
+
+    [ObservableProperty]
+    private string _sessionStartTimeMeasureText = "88:88:88";
 
     public ObservableCollection<ToastNotificationViewModel> Toasts { get; } = new();
 
@@ -188,6 +197,11 @@ public partial class MainViewModel : ViewModelBase
         };
         _transientPageUnloadTimer.Tick += OnTransientPageUnloadTimerTick;
         _transientPageUnloadTimer.Start();
+        _sessionDurationTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _sessionDurationTimer.Tick += (_, _) => UpdateSessionStartTime();
 
         _currentPage = DashboardViewModel;
         UpdateNavigationIndicatorOffset();
@@ -237,6 +251,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         await _singBoxManager.SyncRunningStateAsync();
+        Dispatcher.UIThread.Post(UpdateSessionDurationRefreshState);
         await RecoverStaleSystemProxyAsync();
 
         if (_autoStartOnLaunch && !_singBoxManager.IsRunning)
@@ -319,6 +334,16 @@ public partial class MainViewModel : ViewModelBase
                 ServiceStatus.Error => _localizationService["Status.Error"],
                 _ => _localizationService["Status.Disconnected"]
             };
+            if (status == ServiceStatus.Running)
+            {
+                UpdateSessionStartTime();
+            }
+            else
+            {
+                ResetSessionStartTimeDisplay();
+            }
+
+            UpdateSessionDurationRefreshState();
             OnPropertyChanged(nameof(ShowStartButton));
             OnPropertyChanged(nameof(ShowStopButton));
             if (_connectionsViewModel != null)
@@ -432,6 +457,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         _isWindowVisible = isVisible;
+        UpdateSessionDurationRefreshState();
         DashboardViewModel.SetWindowVisible(isVisible);
         if (_activeGroupsViewModel != null)
         {
@@ -565,6 +591,108 @@ public partial class MainViewModel : ViewModelBase
     private void OnTransientPageUnloadTimerTick(object? sender, EventArgs e)
     {
         TryUnloadInactiveTransientPages();
+    }
+
+    private void UpdateSessionStartTime()
+    {
+        var startTime = _singBoxManager.State.StartTime;
+        if (!startTime.HasValue)
+        {
+            ResetSessionStartTimeDisplay();
+            return;
+        }
+
+        var elapsed = DateTime.Now - startTime.Value;
+        if (elapsed < TimeSpan.Zero)
+        {
+            elapsed = TimeSpan.Zero;
+        }
+
+        var totalHours = (int)elapsed.TotalHours;
+        SessionStartTimeText = $"{totalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}";
+        UpdateSessionStartTimeMeasureText(totalHours);
+    }
+
+    private void ResetSessionStartTimeDisplay()
+    {
+        SessionStartTimeText = "--";
+        ResetSessionStartTimeMeasureText();
+    }
+
+    private void ResetSessionStartTimeMeasureText()
+    {
+        if (_sessionStartTimeMeasureHourDigits == 2)
+        {
+            return;
+        }
+
+        _sessionStartTimeMeasureHourDigits = 2;
+        SessionStartTimeMeasureText = "88:88:88";
+    }
+
+    private void UpdateSessionStartTimeMeasureText(int totalHours)
+    {
+        var hourDigits = GetHourDigitCount(totalHours);
+        if (hourDigits == _sessionStartTimeMeasureHourDigits)
+        {
+            return;
+        }
+
+        _sessionStartTimeMeasureHourDigits = hourDigits;
+        SessionStartTimeMeasureText = $"{new string('8', hourDigits)}:88:88";
+    }
+
+    private static int GetHourDigitCount(int totalHours)
+    {
+        if (totalHours < 100)
+        {
+            return 2;
+        }
+
+        var digits = 0;
+        do
+        {
+            digits++;
+            totalHours /= 10;
+        }
+        while (totalHours > 0);
+
+        return digits;
+    }
+
+    private void StartSessionDurationTimer()
+    {
+        if (!_sessionDurationTimer.IsEnabled)
+        {
+            _sessionDurationTimer.Start();
+        }
+    }
+
+    private void StopSessionDurationTimer()
+    {
+        if (_sessionDurationTimer.IsEnabled)
+        {
+            _sessionDurationTimer.Stop();
+        }
+    }
+
+    private void UpdateSessionDurationRefreshState()
+    {
+        var shouldRefresh = _singBoxManager is { IsRunning: true } && _isWindowVisible;
+        if (_isSessionDurationRefreshActive == shouldRefresh)
+        {
+            return;
+        }
+
+        _isSessionDurationRefreshActive = shouldRefresh;
+        if (shouldRefresh)
+        {
+            UpdateSessionStartTime();
+            StartSessionDurationTimer();
+            return;
+        }
+
+        StopSessionDurationTimer();
     }
 
     private void TryUnloadInactiveTransientPages()
@@ -949,6 +1077,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         _isShuttingDown = true;
+        StopSessionDurationTimer();
         _transientPageUnloadTimer.Stop();
         _transientPageUnloadTimer.Tick -= OnTransientPageUnloadTimerTick;
         try

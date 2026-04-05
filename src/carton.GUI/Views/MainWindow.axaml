@@ -138,18 +138,18 @@
                      <Grid Margin="10,0,12,0"
                            VerticalAlignment="Center"
                            IsVisible="{Binding DashboardViewModel.IsConnected}">
-                       <TextBlock Text="{Binding DashboardViewModel.SessionStartTimeMeasureText}"
-                                  Opacity="0"
-                                  TextAlignment="Center"
-                                  FontSize="13"
-                                  FontWeight="SemiBold"
-                                  IsHitTestVisible="False"/>
-                       <TextBlock Text="{Binding DashboardViewModel.SessionStartTimeText}"
-                                  TextAlignment="Center"
-                                  FontSize="13"
-                                  FontWeight="SemiBold"
-                                  FontFeatures="tnum"
-                                  IsHitTestVisible="False"/>
+                        <TextBlock Text="{Binding SessionStartTimeMeasureText}"
+                                   Opacity="0"
+                                   TextAlignment="Center"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   IsHitTestVisible="False"/>
+                        <TextBlock Text="{Binding SessionStartTimeText}"
+                                   TextAlignment="Center"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   FontFeatures="tnum"
+                                   IsHitTestVisible="False"/>
                      </Grid>
                     </StackPanel>
                   </Grid>
