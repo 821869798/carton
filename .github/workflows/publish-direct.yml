@@ -328,10 +328,13 @@ jobs:
             Copy-Item $appImage.FullName (Join-Path $releaseDir "$env:APP_NAME-$env:VERSION-${{ matrix.rid }}.AppImage") -Force
           }
 
-          foreach ($pattern in @('*-portable.zip', '*-portable.tar.gz', '*.nupkg', 'releases*.json')) {
-            Get-ChildItem -Path $env:PACK_DIR -Filter $pattern -File | ForEach-Object {
-              Copy-Item $_.FullName (Join-Path $releaseDir $_.Name) -Force
-            }
+          Get-ChildItem -Path $env:PACK_DIR -File | Where-Object {
+            $_.Name -clike '*-portable.zip' -or
+            $_.Name -clike '*-portable.tar.gz' -or
+            $_.Name -like '*.nupkg' -or
+            $_.Name -like 'releases*.json'
+          } | ForEach-Object {
+            Copy-Item $_.FullName (Join-Path $releaseDir $_.Name) -Force
           }
 
           $prepared = Get-ChildItem -Path $releaseDir -File
