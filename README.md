@@ -2,17 +2,17 @@
 
 # carton
 
-`carton` 是一个基于 `sing-box` 的桌面客户端，目标是在交互体验和信息组织上尽量靠近官方 SFM，同时把重点放在高性能和一些更实用的增强能力上。
+`carton` 是一个基于 `sing-box` 的桌面客户端，交互和信息组织尽量贴近官方 SFM，同时更看重性能、响应速度，以及一些更实用的增强功能。
 
-当前项目面向 `Windows` 和 `Linux`。不会发布 `macOS` 版本，因为 mac 上已经有 SFM。
+目前支持 `Windows` 和 `Linux`。暂不提供 `macOS` 版本，因为 macOS 上已经有 SFM。
 
-项目当前仍处于早期迭代阶段，但核心方向已经比较明确：
+项目方向：
 
-- 体验尽量贴近官方 SFM，减少迁移成本
-- 以高性能为优先，保持界面响应和启动速度
-- 直接使用你自己的配置和规则启动 sing-box，只复写少量开关配置项以便使用
-- 在不破坏主流程的前提下补充一些额外能力
-- 非 Electron、Tauri 以及其他基于 Web 技术的桌面壳
+- 尽量贴近官方 SFM 的体验，降低迁移成本
+- 更看重界面响应、启动速度和长期运行时的资源占用
+- 直接使用你自己的配置和规则启动 `sing-box`，只额外提供少量开关式选项
+- 在不打乱主流程的前提下补上一些实用能力
+- 使用非 Electron / Tauri / Web 技术栈的桌面实现，内存占用更低、性能更好
 
 > `carton` 不是官方 SFM 客户端，也不隶属于 sing-box 官方团队。
 
@@ -26,19 +26,19 @@
 
 ## 主要特性
 
-### 接近官方 SFM 的使用路径
+### 贴近官方 SFM 的主流程
 
 - Dashboard / Groups / Profiles / Connections / Logs / Settings 六个核心页面
 - 启动、停止、查看状态、切换分组等常用操作集中在主流程中
 - 内置 Clash API / WebUI 入口，方便和现有使用习惯衔接
 
-### 高性能优先
+### 性能优先
 
 - 基于 `Avalonia` + `.NET 10`
 - 非 Electron、Tauri 和其他基于 Web 技术的桌面框架
-- 这样做的一个直接原因，是这类方案在很多实际应用里启动后就很容易来到 `200MB+` 的内存占用
-- 提供 `NativeAOT` 发布脚本，面向更快启动和更轻的运行负担
-- 页面按需加载，并对后台页面做了释放和刷新控制，降低长期运行时开销
+- 很多同类方案在实际使用里，启动后内存占用很容易来到 `200MB+`
+- 提供 `NativeAOT` 发布脚本，用来进一步改善启动速度和运行开销
+- 页面按需加载，并对后台页面做了释放和刷新控制，减少长期运行时的资源占用
 
 ### 配置与订阅管理
 
@@ -49,14 +49,14 @@
 
 ### 节点与分组增强
 
-- 读取并展示 outbound groups
+- 读取并展示 `outbound groups`
 - 支持节点切换、延迟测试、URLTest 结果刷新
 - 托盘菜单可直接查看和切换分组
-- 可选在切换节点后自动断开受影响连接
+- 可选在切换节点后自动断开受影响的连接
 
 ### 实用附加功能
 
-- 系统代理开关
+- 系统代理切换
 - TUN / 监听端口 / LAN 访问 / 日志级别等运行时选项
 - 实时流量、内存占用、会话时长、连接列表、日志查看
 - 支持 sing-box 内核下载、更新、自定义内核安装与内核切换
@@ -82,12 +82,18 @@
 
 - `.NET 10 SDK`
 - Windows NativeAOT 发布需要安装 `Desktop development with C++` 或等效的 MSVC / Windows SDK 构建工具链
-- 如需生成安装包，还需要 `Velopack CLI (vpk)`；`scripts\build-release-win-x64.ps1` 会尝试自动安装或更新
+- 如需生成安装包，还需要 `Velopack CLI (vpk)`；`scripts\build-release-win-x64.ps1` 会尝试自动安装或更新它
 
 ### 本地构建
 
 ```powershell
 dotnet build carton.slnx
+```
+
+### 开发运行
+
+```powershell
+dotnet run --project src\carton.GUI\carton.GUI.csproj
 ```
 
 ### Windows NativeAOT 发布
@@ -105,19 +111,27 @@ scripts\build-release-win-x64.bat
 其中：
 
 - `scripts\test-publish-win-aot.bat` 只执行 NativeAOT 发布
-- `scripts\build-release-win-x64.bat` 会调用 `scripts\build-release-win-x64.ps1`，额外生成便携压缩包和 Velopack 安装包
+- `scripts\build-release-win-x64.bat` 会执行 `scripts\build-release-win-x64.ps1`，并额外生成便携压缩包和 Velopack 安装包
 
-当前仓库已经包含多个运行时目标，现成的发布脚本主要围绕 Windows AOT 构建流程整理。
+### Linux NativeAOT 发布
+
+```bash
+./scripts/test-publish-linux-aot.sh linux-x64 Release
+```
+
+输出目录为 `artifacts/publish/<rid>`。
+
+仓库里已经包含多个运行时目标，现成脚本主要围绕 Windows AOT 构建流程整理。
 
 ## 项目定位
 
-如果你想要的是：
+如果你更在意：
 
 - 尽量接近官方 SFM 的体验
-- 更强调性能
-- 同时希望补上一些官方客户端之外的实用功能
+- 更偏性能取向的实现
+- 一些官方客户端之外但又不喧宾夺主的实用功能
 
-那么 `carton` 就是沿着这个方向在做。
+那么 `carton` 基本就是按这个方向来做的。
 
 ## License
 

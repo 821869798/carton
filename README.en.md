@@ -2,17 +2,17 @@
 
 # carton
 
-`carton` is a desktop client powered by `sing-box`. The project aims to stay as close as possible to the official SFM experience in interaction flow and information layout, while focusing on high performance and a few practical extra features.
+`carton` is a desktop client powered by `sing-box`. It aims to stay close to the official SFM experience in interaction flow and information layout, while putting more weight on performance, responsiveness, and a few practical enhancements.
 
 The project currently targets `Windows` and `Linux`. There are no plans to publish a `macOS` version, because SFM already exists on macOS.
 
-The project is still in an early stage, but its direction is already clear:
+Current focus:
 
 - Keep the experience close to official SFM to reduce migration cost
-- Prioritize performance, responsiveness, and startup speed
-- Start sing-box with your own config and rules, only overriding a small set of toggle-style options for convenience
-- Add useful features without breaking the main workflow
-- Non-Electron, non-Tauri, and non-web-tech desktop shell
+- Prioritize UI responsiveness, startup speed, and long-running resource usage
+- Start `sing-box` with your own config and rules, only taking over a small set of toggle-style options
+- Add useful enhancements without disrupting the main workflow
+- Use a non-Electron / non-Tauri / non-web-tech desktop stack with lower memory usage and higher performance
 
 > `carton` is not an official SFM client and is not affiliated with the sing-box team.
 
@@ -26,7 +26,7 @@ The project is still in an early stage, but its direction is already clear:
 
 ## Highlights
 
-### Familiar workflow close to official SFM
+### Main workflow close to official SFM
 
 - Six core pages: Dashboard, Groups, Profiles, Connections, Logs, and Settings
 - Common actions such as start, stop, status check, and group switching are kept in the main workflow
@@ -36,7 +36,7 @@ The project is still in an early stage, but its direction is already clear:
 
 - Built with `Avalonia` and `.NET 10`
 - Non-Electron, non-Tauri, and non-web-tech desktop framework approach
-- One direct motivation is that many real-world apps built on those stacks can easily start at `200MB+` memory usage
+- One direct motivation is that many real-world apps built on those stacks can easily land at `200MB+` memory usage after startup
 - Includes `NativeAOT` publish scripts for faster startup and lower runtime overhead
 - Uses on-demand page loading and background page release/refresh control to reduce long-running resource usage
 
@@ -90,6 +90,12 @@ The project is still in an early stage, but its direction is already clear:
 dotnet build carton.slnx
 ```
 
+### Development run
+
+```powershell
+dotnet run --project src\carton.GUI\carton.GUI.csproj
+```
+
 ### Windows NativeAOT publish
 
 ```powershell
@@ -105,19 +111,27 @@ scripts\build-release-win-x64.bat
 In practice:
 
 - `scripts\test-publish-win-aot.bat` performs the NativeAOT publish only
-- `scripts\build-release-win-x64.bat` calls `scripts\build-release-win-x64.ps1` and additionally creates the portable archive and Velopack installer
+- `scripts\build-release-win-x64.bat` runs `scripts\build-release-win-x64.ps1` and additionally creates the portable archive and Velopack installer
+
+### Linux NativeAOT publish
+
+```bash
+./scripts/test-publish-linux-aot.sh linux-x64 Release
+```
+
+This script writes output to `artifacts/publish/<rid>`.
 
 The repository already contains multiple runtime targets, while the current ready-to-use scripts are mainly organized around the Windows AOT build flow.
 
 ## Positioning
 
-If you want:
+If you care about:
 
 - an experience that stays close to official SFM
-- stronger focus on performance
-- a few practical features beyond the official client
+- a more performance-oriented implementation
+- a few practical additions beyond the official client without turning the app into something else
 
-then `carton` is being built in exactly that direction.
+then `carton` is being built in that direction.
 
 ## License
 
