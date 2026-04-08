@@ -10,6 +10,7 @@ The project is still in an early stage, but its direction is already clear:
 
 - Keep the experience close to official SFM to reduce migration cost
 - Prioritize performance, responsiveness, and startup speed
+- Start sing-box with your own config and rules, only overriding a small set of toggle-style options for convenience
 - Add useful features without breaking the main workflow
 - Non-Electron, non-Tauri, and non-web-tech desktop shell
 
@@ -58,7 +59,7 @@ The project is still in an early stage, but its direction is already clear:
 - System proxy toggle
 - Runtime options for TUN, listen port, LAN access, and log level
 - Real-time traffic, memory usage, session duration, connections, and logs
-- sing-box kernel download, update, and custom kernel installation
+- sing-box kernel download, update, custom kernel installation, and kernel switching
 - App update channels, backup export/import, and portable data directory switching
 - Chinese and English UI with theme settings
 
