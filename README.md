@@ -2,6 +2,8 @@
 
 # carton
 
+[![Telegram Group](https://img.shields.io/badge/Telegram-%E4%BA%A4%E6%B5%81%E7%BE%A4-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/+fwutL7igOTk3ZmFl)
+
 `carton` 是一个基于 `sing-box` 的桌面客户端，交互和信息组织尽量贴近官方 SFM，同时更看重性能、响应速度，以及一些更实用的增强功能。
 
 目前支持 `Windows` 和 `Linux`。暂不提供 `macOS` 版本，因为 macOS 上已经有 SFM。

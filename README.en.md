@@ -2,6 +2,8 @@
 
 # carton
 
+[![Telegram Group](https://img.shields.io/badge/Telegram-Group-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/+fwutL7igOTk3ZmFl)
+
 `carton` is a desktop client powered by `sing-box`. It aims to stay close to the official SFM experience in interaction flow and information layout, while putting more weight on performance, responsiveness, and a few practical enhancements.
 
 The project currently targets `Windows` and `Linux`. There are no plans to publish a `macOS` version, because SFM already exists on macOS.
