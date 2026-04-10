@@ -16,6 +16,17 @@ Current focus:
 - Add useful enhancements without disrupting the main workflow
 - Use a non-Electron / non-Tauri / non-web-tech desktop stack with lower memory usage and higher performance
 
+## Config Override Behavior
+
+`carton` does not directly overwrite your entire `sing-box` config at startup. It builds a runtime config on top of your original file and only changes a small set of fields that are directly tied to desktop-side toggles.
+This is intentional because many users strongly dislike third-party GUIs overwriting carefully prepared configs and rules. `carton` tries to touch as little of your hand-written or subscription-generated content as possible.
+
+- `log`: only updates `log.level`; if the original config has no `log` object, `carton` adds a minimal one
+- `inbounds`: only touches `mixed` and `tun` inbounds
+- For an existing `mixed` inbound, it only updates `listen`, `listen_port`, and `set_system_proxy`; other fields stay as-is
+- For an existing `tun` inbound, it only updates `address`, `auto_route`, `strict_route`, and `route_exclude_address`; any extra fields you already configured are preserved
+- If the config does not already contain the corresponding `mixed` or `tun` inbound, `carton` adds it at runtime; if `tun` is turned off, the corresponding `tun` inbound is removed
+
 > `carton` is not an official SFM client and is not affiliated with the sing-box team.
 
 ## Screenshots

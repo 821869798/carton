@@ -16,6 +16,17 @@
 - 在不打乱主流程的前提下补上一些实用能力
 - 使用非 Electron / Tauri / Web 技术栈的桌面实现，内存占用更低、性能更好
 
+## 配置复写说明
+
+`carton` 启动时不会直接整份覆盖你的 `sing-box` 配置，而是在原配置基础上生成运行时配置，只修改少量和桌面开关直接相关的内容。
+这样设计是因为很多用户都很反感第三方 GUI 大面积覆盖自己已经配好的配置和规则，`carton` 会尽量少碰你原本手写或订阅生成的内容。
+
+- `log`：只会更新 `log.level`；如果原配置没有 `log`，才会补一个最小可用的 `log` 对象
+- `inbounds`：只会处理 `mixed` 和 `tun` 两类入口
+- 对已有 `mixed` inbound，只更新 `listen`、`listen_port`、`set_system_proxy`，其他字段保持原样
+- 对已有 `tun` inbound，只更新 `address`、`auto_route`、`strict_route`、`route_exclude_address`，你额外写的其他字段都会保留
+- 如果配置里原本没有对应的 `mixed` / `tun` inbound，运行时才会补上；如果关闭 `tun`，则会移除对应的 `tun` inbound
+
 > `carton` 不是官方 SFM 客户端，也不隶属于 sing-box 官方团队。
 
 ## 界面预览
