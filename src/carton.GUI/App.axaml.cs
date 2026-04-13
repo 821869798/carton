@@ -281,7 +281,9 @@ public class KernelDownloadMirrorDisplayConverter : Avalonia.Data.Converters.IVa
         return mirror switch
         {
             DownloadMirror.GitHub => localization["Settings.Kernel.Mirror.GitHub"],
+            DownloadMirror.GitHubPreRelease => localization["Settings.Kernel.Mirror.GitHubPreRelease"],
             DownloadMirror.GhProxy => localization["Settings.Kernel.Mirror.GhProxy"],
+            DownloadMirror.GhProxyPreRelease => localization["Settings.Kernel.Mirror.GhProxyPreRelease"],
             DownloadMirror.Ref1ndStable => localization["Settings.Kernel.Mirror.Ref1ndStable"],
             DownloadMirror.Ref1ndTest => localization["Settings.Kernel.Mirror.Ref1ndTest"],
             _ => mirror.ToString()

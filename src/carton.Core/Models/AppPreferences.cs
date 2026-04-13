@@ -26,15 +26,18 @@ public enum KernelInstallChannel
     Official = 0,
     Ref1ndStable = 1,
     Ref1ndTest = 2,
-    Custom = 3
+    Custom = 3,
+    OfficialPreRelease = 4
 }
 
 public enum DownloadMirror
 {
-    GitHub,
-    GhProxy,
-    Ref1ndStable,
-    Ref1ndTest
+    GitHub = 0,
+    GhProxy = 1,
+    Ref1ndStable = 2,
+    Ref1ndTest = 3,
+    GitHubPreRelease = 4,
+    GhProxyPreRelease = 5
 }
 
 public enum AppTheme

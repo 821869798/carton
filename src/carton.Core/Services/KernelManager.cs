@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.X86;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using carton.Core.Models;
 
@@ -17,7 +19,7 @@ public interface IKernelManager
     string KernelPath { get; }
 
     Task<KernelInfo?> GetInstalledKernelInfoAsync();
-    Task<string?> GetLatestVersionAsync();
+    Task<string?> GetLatestVersionAsync(DownloadMirror mirror = DownloadMirror.GitHub);
     Task<KernelPackageDownloadResult?> DownloadPackageAsync(string? version = null, DownloadMirror mirror = DownloadMirror.GitHub);
     Task<bool> InstallPackageAsync(KernelPackageDownloadResult package);
     Task<bool> DownloadAndInstallAsync(string? version = null, DownloadMirror mirror = DownloadMirror.GitHub);
@@ -57,8 +59,9 @@ public class KernelManager : IKernelManager
 
     private const string GitHubApiUrl = "https://api.github.com/repos/SagerNet/sing-box/releases/latest";
     private const string GitHubDownloadUrl = "https://github.com/SagerNet/sing-box/releases/download";
+    private const string GitHubReleasesApiUrl = "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=20";
 
-    private const string Ref1ndBaseUrl = "https://github.com/DustinWin/proxy-tools/releases/download/sing-box";
+    private const string Ref1ndReleasesApiUrl = "https://api.github.com/repos/reF1nd/sing-box-releases/releases?per_page=20";
 
     public KernelManager(string baseDirectory)
     {
@@ -201,36 +204,22 @@ public class KernelManager : IKernelManager
         return null;
     }
 
-    public async Task<string?> GetLatestVersionAsync()
+    public async Task<string?> GetLatestVersionAsync(DownloadMirror mirror = DownloadMirror.GitHub)
     {
         try
         {
-            // Try API first
-            try
+            if (mirror is DownloadMirror.Ref1ndStable or DownloadMirror.Ref1ndTest)
             {
-                var response = await _httpClient.GetStringAsync(GitHubApiUrl);
-                using var document = JsonDocument.Parse(response);
-                if (document.RootElement.TryGetProperty("tag_name", out var tagElement) &&
-                    tagElement.ValueKind == JsonValueKind.String)
-                {
-                    return tagElement.GetString();
-                }
-            }
-            catch
-            {
-                // Fallback: follow the /releases/latest redirect to get the tag
-                using var request = new HttpRequestMessage(HttpMethod.Head, "https://github.com/SagerNet/sing-box/releases/latest");
-                using var response = await _httpClient.SendAsync(request);
-                var finalUrl = response.RequestMessage?.RequestUri?.ToString();
-
-                if (finalUrl != null && finalUrl.Contains("/releases/tag/"))
-                {
-                    var version = finalUrl.Substring(finalUrl.LastIndexOf('/') + 1);
-                    return version;
-                }
+                return await GetLatestRef1ndVersionAsync(mirror);
             }
 
-            return null;
+            var wantPrerelease = IsOfficialPreReleaseMirror(mirror);
+            if (wantPrerelease)
+            {
+                return await GetLatestOfficialPreReleaseVersionAsync();
+            }
+
+            return await GetLatestOfficialReleaseVersionAsync();
         }
         catch
         {
@@ -249,87 +238,15 @@ public class KernelManager : IKernelManager
         return await InstallPackageAsync(package);
     }
 
-    /// <summary>
-    /// Downloads and installs sing-box from the ref1nd release channel (DustinWin/proxy-tools).
-    /// Files are published at a fixed tag (sing-box) and use a custom naming scheme:
-    ///   Windows amd64  → sing-box-ref1nd-stable-windows-amd64-v3.exe  (direct exe, no archive)
-    ///   Windows arm64  → sing-box-ref1nd-stable-windows-arm64.exe      (direct exe, no archive)
-    ///   Linux   amd64  → sing-box-ref1nd-stable-linux-amd64-v3.tar.gz
-    ///   Linux   arm64  → sing-box-ref1nd-stable-linux-arm64.tar.gz
-    /// </summary>
     private async Task<bool> DownloadAndInstallFromRef1ndAsync(DownloadMirror mirror)
     {
-        try
+        var package = await DownloadPackageAsync(null, mirror);
+        if (package == null)
         {
-            var platform = PlatformInfo.Current;
-            var fileName = GetRef1ndFileName(platform, mirror);
-            if (fileName == null)
-            {
-                StatusChanged?.Invoke(this, $"ref1nd channel does not support platform: {platform.OS}-{platform.Arch}");
-                return false;
-            }
-
-            var downloadUrl = $"{Ref1ndBaseUrl}/{fileName}";
-            StatusChanged?.Invoke(this, $"Downloading ref1nd sing-box ({GetRef1ndChannelLabel(mirror)})...");
-
-            var isWindowsDirect = platform.OS == "windows";
-            var tempExt = isWindowsDirect ? ".exe" : ".tar.gz";
-            var tempFile = Path.Combine(Path.GetTempPath(), $"sing-box-dustinwin{tempExt}");
-
-            using (var response = await _httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead))
-            {
-                response.EnsureSuccessStatusCode();
-
-                var totalBytes = response.Content.Headers.ContentLength ?? 0;
-                var buffer = new byte[8192];
-                var bytesRead = 0L;
-
-                await using var contentStream = await response.Content.ReadAsStreamAsync();
-                await using var fileStream = File.Create(tempFile);
-
-                int read;
-                while ((read = await contentStream.ReadAsync(buffer)) > 0)
-                {
-                    await fileStream.WriteAsync(buffer.AsMemory(0, read));
-                    bytesRead += read;
-
-                    DownloadProgressChanged?.Invoke(this, new DownloadProgress
-                    {
-                        BytesReceived = bytesRead,
-                        TotalBytes = totalBytes,
-                        Status = "Downloading..."
-                    });
-                }
-            }
-
-            if (isWindowsDirect)
-            {
-                // Windows builds are distributed as a standalone .exe — install directly.
-                StatusChanged?.Invoke(this, "Installing...");
-                await KillRunningKernelAsync();
-                var dest = Path.Combine(_binDirectory, "sing-box.exe");
-                File.Move(tempFile, dest, overwrite: true);
-            }
-            else
-            {
-                StatusChanged?.Invoke(this, "Extracting...");
-                await ExtractArchiveAsync(tempFile, _binDirectory);
-                File.Delete(tempFile);
-
-                var chmodPath = Path.Combine(_binDirectory, "sing-box");
-                if (File.Exists(chmodPath))
-                    Process.Start("chmod", $"+x \"{chmodPath}\"")?.WaitForExit();
-            }
-
-            await GetInstalledKernelInfoAsync();
-            StatusChanged?.Invoke(this, $"Successfully installed sing-box (ref1nd {GetRef1ndChannelLabel(mirror)})");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            StatusChanged?.Invoke(this, $"Failed to install: {ex.Message}");
             return false;
         }
+
+        return await InstallPackageAsync(package);
     }
 
     public async Task<KernelPackageDownloadResult?> DownloadPackageAsync(string? version = null, DownloadMirror mirror = DownloadMirror.GitHub)
@@ -339,33 +256,32 @@ public class KernelManager : IKernelManager
             if (mirror is DownloadMirror.Ref1ndStable or DownloadMirror.Ref1ndTest)
             {
                 var platform = PlatformInfo.Current;
-                var fileName = GetRef1ndFileName(platform, mirror);
-                if (fileName == null)
+                var releaseAsset = await GetRef1ndReleaseAssetAsync(platform, mirror);
+                if (releaseAsset == null)
                 {
                     StatusChanged?.Invoke(this, $"ref1nd channel does not support platform: {platform.OS}-{platform.Arch}");
                     return null;
                 }
 
-                var downloadUrl = $"{Ref1ndBaseUrl}/{fileName}";
                 var channelLabel = GetRef1ndChannelLabel(mirror);
-                StatusChanged?.Invoke(this, $"Downloading ref1nd sing-box ({channelLabel})...");
+                StatusChanged?.Invoke(this, $"Downloading ref1nd sing-box {releaseAsset.TagName} ({channelLabel})...");
 
-                var tempExt = platform.OS == "windows" ? ".exe" : ".tar.gz";
+                var tempExt = GetPackageExtension(releaseAsset.AssetName);
                 var tempFile = Path.Combine(Path.GetTempPath(), $"sing-box-ref1nd-{Guid.NewGuid():N}{tempExt}");
-                await DownloadFileAsync(downloadUrl, tempFile);
-                StatusChanged?.Invoke(this, $"Downloaded ref1nd sing-box ({channelLabel})");
+                await DownloadFileAsync(releaseAsset.DownloadUrl, tempFile);
+                StatusChanged?.Invoke(this, $"Downloaded ref1nd sing-box {releaseAsset.TagName} ({channelLabel})");
 
                 return new KernelPackageDownloadResult
                 {
                     TempFilePath = tempFile,
-                    VersionLabel = $"(ref1nd {channelLabel})",
+                    VersionLabel = releaseAsset.TagName,
                     SourceChannel = mirror == DownloadMirror.Ref1ndTest
                         ? KernelInstallChannel.Ref1ndTest
                         : KernelInstallChannel.Ref1ndStable
                 };
             }
 
-            version ??= await GetLatestVersionAsync();
+            version ??= await GetLatestVersionAsync(mirror);
             if (string.IsNullOrEmpty(version))
             {
                 StatusChanged?.Invoke(this, "Failed to get latest version");
@@ -381,7 +297,7 @@ public class KernelManager : IKernelManager
 
             var downloadUrlForMirror = mirror switch
             {
-                DownloadMirror.GhProxy => $"https://gh-proxy.com/{originalUrl}",
+                DownloadMirror.GhProxy or DownloadMirror.GhProxyPreRelease => $"https://gh-proxy.com/{originalUrl}",
                 _ => originalUrl
             };
 
@@ -393,7 +309,9 @@ public class KernelManager : IKernelManager
             {
                 TempFilePath = archiveFile,
                 VersionLabel = version,
-                SourceChannel = KernelInstallChannel.Official
+                SourceChannel = IsOfficialPreReleaseMirror(mirror)
+                    ? KernelInstallChannel.OfficialPreRelease
+                    : KernelInstallChannel.Official
             };
         }
         catch (Exception ex)
@@ -452,24 +370,155 @@ public class KernelManager : IKernelManager
         }
     }
 
-    /// <summary>
-    /// Returns the ref1nd asset filename for the current platform, or null if unsupported.
-    /// </summary>
-    private static string? GetRef1ndFileName(PlatformInfo platform, DownloadMirror mirror)
+    private static string GetRef1ndChannelLabel(DownloadMirror mirror)
+        => mirror == DownloadMirror.Ref1ndTest ? "test" : "stable";
+
+    private static bool IsOfficialPreReleaseMirror(DownloadMirror mirror)
+        => mirror is DownloadMirror.GitHubPreRelease or DownloadMirror.GhProxyPreRelease;
+
+    private async Task<string?> GetLatestOfficialReleaseVersionAsync()
     {
-        var channelLabel = GetRef1ndChannelLabel(mirror);
+        try
+        {
+            var response = await _httpClient.GetStringAsync(GitHubApiUrl);
+            using var document = JsonDocument.Parse(response);
+            if (document.RootElement.TryGetProperty("tag_name", out var tagElement) &&
+                tagElement.ValueKind == JsonValueKind.String)
+            {
+                return tagElement.GetString();
+            }
+        }
+        catch
+        {
+            // Fallback: follow the /releases/latest redirect to get the tag.
+            using var request = new HttpRequestMessage(HttpMethod.Head, "https://github.com/SagerNet/sing-box/releases/latest");
+            using var response = await _httpClient.SendAsync(request);
+            var finalUrl = response.RequestMessage?.RequestUri?.ToString();
+
+            if (finalUrl != null && finalUrl.Contains("/releases/tag/"))
+            {
+                return finalUrl[(finalUrl.LastIndexOf('/') + 1)..];
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<string?> GetLatestOfficialPreReleaseVersionAsync()
+    {
+        var releases = await GetGitHubReleaseListAsync(GitHubReleasesApiUrl);
+        return releases.FirstOrDefault(item => item.Prerelease)?.TagName;
+    }
+
+    private async Task<string?> GetLatestRef1ndVersionAsync(DownloadMirror mirror)
+    {
+        var releases = await GetGitHubReleaseListAsync(Ref1ndReleasesApiUrl);
+        var wantPrerelease = mirror == DownloadMirror.Ref1ndTest;
+        return releases.FirstOrDefault(item => item.Prerelease == wantPrerelease)?.TagName;
+    }
+
+    private async Task<List<GitHubReleaseInfo>> GetGitHubReleaseListAsync(string apiUrl)
+    {
+        var response = await _httpClient.GetStringAsync(apiUrl);
+        return JsonSerializer.Deserialize<List<GitHubReleaseInfo>>(response) ?? [];
+    }
+
+    private async Task<Ref1ndReleaseAssetInfo?> GetRef1ndReleaseAssetAsync(PlatformInfo platform, DownloadMirror mirror)
+    {
+        var releases = await GetGitHubReleaseListAsync(Ref1ndReleasesApiUrl);
+        if (releases.Count == 0)
+        {
+            return null;
+        }
+
+        var wantPrerelease = mirror == DownloadMirror.Ref1ndTest;
+        var release = releases.FirstOrDefault(item => item.Prerelease == wantPrerelease);
+        if (release == null || string.IsNullOrWhiteSpace(release.TagName))
+        {
+            return null;
+        }
+
+        var version = release.TagName.TrimStart('v');
+        foreach (var candidate in GetRef1ndAssetCandidates(platform, version))
+        {
+            var asset = release.Assets.FirstOrDefault(item =>
+                string.Equals(item.Name, candidate, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(item.BrowserDownloadUrl));
+
+            if (asset != null)
+            {
+                return new Ref1ndReleaseAssetInfo(release.TagName, asset.Name, asset.BrowserDownloadUrl);
+            }
+        }
+
+        return null;
+    }
+
+    private static string[] GetRef1ndAssetCandidates(PlatformInfo platform, string version)
+    {
+        var preferV3 = SupportsX64V3();
+        var preferredLinuxLibc = IsLikelyMuslLinux() ? "musl" : "glibc";
+        var alternateLinuxLibc = preferredLinuxLibc == "glibc" ? "musl" : "glibc";
+
         return (platform.OS, platform.Arch) switch
         {
-            ("windows", "amd64") => $"sing-box-ref1nd-{channelLabel}-windows-amd64-v3.exe",
-            ("windows", "arm64") => $"sing-box-ref1nd-{channelLabel}-windows-arm64.exe",
-            ("linux", "amd64") => $"sing-box-ref1nd-{channelLabel}-linux-amd64-v3.tar.gz",
-            ("linux", "arm64") => $"sing-box-ref1nd-{channelLabel}-linux-arm64.tar.gz",
-            _ => null
+            ("windows", "amd64") => preferV3
+                ? [$"sing-box-{version}-windows-amd64v3.zip", $"sing-box-{version}-windows-amd64.zip"]
+                : [$"sing-box-{version}-windows-amd64.zip", $"sing-box-{version}-windows-amd64v3.zip"],
+            ("windows", "arm64") => [$"sing-box-{version}-windows-arm64.zip"],
+            ("linux", "amd64") => BuildLinuxAssetCandidates(version, preferV3 ? "amd64v3" : "amd64", preferV3 ? "amd64" : "amd64v3", preferredLinuxLibc, alternateLinuxLibc),
+            ("linux", "arm64") => BuildLinuxAssetCandidates(version, "arm64", null, preferredLinuxLibc, alternateLinuxLibc),
+            ("darwin", "amd64") => preferV3
+                ? [$"sing-box-{version}-darwin-amd64v3.tar.gz", $"sing-box-{version}-darwin-amd64.tar.gz"]
+                : [$"sing-box-{version}-darwin-amd64.tar.gz", $"sing-box-{version}-darwin-amd64v3.tar.gz"],
+            ("darwin", "arm64") => [$"sing-box-{version}-darwin-arm64.tar.gz"],
+            _ => []
         };
     }
 
-    private static string GetRef1ndChannelLabel(DownloadMirror mirror)
-        => mirror == DownloadMirror.Ref1ndTest ? "test" : "stable";
+    private static string[] BuildLinuxAssetCandidates(string version, string primaryArch, string? fallbackArch, string preferredLibc, string alternateLibc)
+    {
+        var candidates = new List<string>
+        {
+            $"sing-box-{version}-linux-{primaryArch}-{preferredLibc}.tar.gz",
+            $"sing-box-{version}-linux-{primaryArch}-purego.tar.gz",
+            $"sing-box-{version}-linux-{primaryArch}-{alternateLibc}.tar.gz"
+        };
+
+        if (!string.IsNullOrWhiteSpace(fallbackArch))
+        {
+            candidates.Add($"sing-box-{version}-linux-{fallbackArch}-{preferredLibc}.tar.gz");
+            candidates.Add($"sing-box-{version}-linux-{fallbackArch}-purego.tar.gz");
+            candidates.Add($"sing-box-{version}-linux-{fallbackArch}-{alternateLibc}.tar.gz");
+        }
+
+        return candidates.ToArray();
+    }
+
+    private static bool IsLikelyMuslLinux()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            return false;
+        }
+
+        return File.Exists("/etc/alpine-release") ||
+               File.Exists("/lib/ld-musl-x86_64.so.1") ||
+               File.Exists("/lib/ld-musl-aarch64.so.1");
+    }
+
+    private static bool SupportsX64V3()
+        => Avx2.IsSupported && Bmi1.IsSupported && Bmi2.IsSupported && Fma.IsSupported && Lzcnt.IsSupported;
+
+    private static string GetPackageExtension(string assetName)
+    {
+        if (assetName.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase))
+        {
+            return ".tar.gz";
+        }
+
+        return Path.GetExtension(assetName);
+    }
 
     /// <summary>
     /// Kills any running sing-box processes that match our managed binary path.
@@ -608,6 +657,29 @@ public class KernelManager : IKernelManager
         catch
         {
         }
+    }
+
+    private sealed record Ref1ndReleaseAssetInfo(string TagName, string AssetName, string DownloadUrl);
+
+    private sealed class GitHubReleaseInfo
+    {
+        [JsonPropertyName("tag_name")]
+        public string TagName { get; set; } = string.Empty;
+
+        [JsonPropertyName("prerelease")]
+        public bool Prerelease { get; set; }
+
+        [JsonPropertyName("assets")]
+        public List<GitHubReleaseAssetInfo> Assets { get; set; } = [];
+    }
+
+    private sealed class GitHubReleaseAssetInfo
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("browser_download_url")]
+        public string BrowserDownloadUrl { get; set; } = string.Empty;
     }
 
     public async Task<bool> InstallCustomKernelAsync(string sourcePath)

@@ -125,6 +125,7 @@ public partial class MainViewModel : ViewModelBase
 
         _currentPreferences.KernelDownloadMirror = value;
         _preferencesService.Save(_currentPreferences);
+        _ = RefreshLatestKernelVersionAsync();
     }
 
     public ObservableCollection<NavigationPage> NavigationPages { get; } = new()
@@ -136,7 +137,15 @@ public partial class MainViewModel : ViewModelBase
         NavigationPage.Logs,
         NavigationPage.Settings
     };
-    public ObservableCollection<DownloadMirror> KernelDownloadMirrors { get; } = new(Enum.GetValues<DownloadMirror>());
+    public ObservableCollection<DownloadMirror> KernelDownloadMirrors { get; } = new(
+    [
+        DownloadMirror.GitHub,
+        DownloadMirror.GitHubPreRelease,
+        DownloadMirror.GhProxy,
+        DownloadMirror.GhProxyPreRelease,
+        DownloadMirror.Ref1ndStable,
+        DownloadMirror.Ref1ndTest
+    ]);
     public string KernelPrimaryActionText => HasKernelDownloadFailed ? GetLocalizedRetryLabel() : _localizationService["MainWindow.KernelDialog.Button.Download"];
 
     public DashboardViewModel DashboardViewModel { get; }
@@ -249,7 +258,7 @@ public partial class MainViewModel : ViewModelBase
 
         if (!IsKernelInstalled)
         {
-            var latestVersion = await _kernelManager.GetLatestVersionAsync();
+            var latestVersion = await _kernelManager.GetLatestVersionAsync(SelectedKernelDownloadMirror);
             LatestVersion = latestVersion ?? "unknown";
             ShowKernelDialog = true;
         }
@@ -816,7 +825,7 @@ public partial class MainViewModel : ViewModelBase
     {
         if (!IsKernelInstalled)
         {
-            var latestVersion = await _kernelManager.GetLatestVersionAsync();
+            var latestVersion = await _kernelManager.GetLatestVersionAsync(SelectedKernelDownloadMirror);
             LatestVersion = latestVersion ?? "unknown";
             ConnectionStatus = GetMissingKernelStartMessage();
             ShowKernelDialog = true;
@@ -870,6 +879,24 @@ public partial class MainViewModel : ViewModelBase
             {
                 ConnectionStatus = BuildStartFailureStatus();
             }
+        }
+    }
+
+    private async Task RefreshLatestKernelVersionAsync()
+    {
+        if (IsKernelInstalled)
+        {
+            return;
+        }
+
+        try
+        {
+            var latestVersion = await _kernelManager.GetLatestVersionAsync(SelectedKernelDownloadMirror);
+            LatestVersion = latestVersion ?? "unknown";
+        }
+        catch
+        {
+            LatestVersion = "unknown";
         }
     }
 

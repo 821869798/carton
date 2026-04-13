@@ -154,6 +154,7 @@
 	<x:String x:Key="Settings.Kernel.Version">版本</x:String>
 	<x:String x:Key="Settings.Kernel.Path">路径</x:String>
 	<x:String x:Key="Settings.Kernel.Latest">最新</x:String>
+	<x:String x:Key="Settings.Kernel.Checking">正在检查...</x:String>
 	<x:String x:Key="Settings.Kernel.CheckUpdate">检查更新</x:String>
 	<x:String x:Key="Settings.Kernel.Update">更新</x:String>
 	<x:String x:Key="Settings.Kernel.Install">安装</x:String>
@@ -162,9 +163,11 @@
 	<x:String x:Key="Settings.Kernel.StartingDownload">开始下载...</x:String>
 	<x:String x:Key="Settings.Kernel.Mirror">下载镜像</x:String>
 	<x:String x:Key="Settings.Kernel.Mirror.GitHub">GitHub</x:String>
+	<x:String x:Key="Settings.Kernel.Mirror.GitHubPreRelease">GitHub预发布版</x:String>
 	<x:String x:Key="Settings.Kernel.Mirror.GhProxy">GhProxy</x:String>
+	<x:String x:Key="Settings.Kernel.Mirror.GhProxyPreRelease">GhProxy预发布版</x:String>
 	<x:String x:Key="Settings.Kernel.Mirror.Ref1ndStable">Ref1nd稳定版</x:String>
-	<x:String x:Key="Settings.Kernel.Mirror.Ref1ndTest">Ref1nd测试版</x:String>
+	<x:String x:Key="Settings.Kernel.Mirror.Ref1ndTest">Ref1nd预发布版</x:String>
 	<x:String x:Key="Settings.Kernel.InstallCustom">自定义安装</x:String>
 	<x:String x:Key="Settings.Kernel.SelectCustomExe">选择自定义内核</x:String>
 	<x:String x:Key="Settings.Kernel.InstallingCustom">正在安装内核...</x:String>

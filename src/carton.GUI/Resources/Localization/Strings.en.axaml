@@ -168,6 +168,7 @@
 	<x:String x:Key="Settings.Kernel.Version">Version</x:String>
 	<x:String x:Key="Settings.Kernel.Path">Path</x:String>
 	<x:String x:Key="Settings.Kernel.Latest">Latest</x:String>
+	<x:String x:Key="Settings.Kernel.Checking">Checking...</x:String>
 	<x:String x:Key="Settings.Kernel.CheckUpdate">Check Update</x:String>
 	<x:String x:Key="Settings.Kernel.Update">Update</x:String>
 	<x:String x:Key="Settings.Kernel.Install">Install</x:String>
@@ -176,9 +177,11 @@
 	<x:String x:Key="Settings.Kernel.StartingDownload">Starting download...</x:String>
 	<x:String x:Key="Settings.Kernel.Mirror">Download Mirror</x:String>
 	<x:String x:Key="Settings.Kernel.Mirror.GitHub">GitHub</x:String>
+	<x:String x:Key="Settings.Kernel.Mirror.GitHubPreRelease">GitHub Pre-release</x:String>
 	<x:String x:Key="Settings.Kernel.Mirror.GhProxy">GhProxy</x:String>
+	<x:String x:Key="Settings.Kernel.Mirror.GhProxyPreRelease">GhProxy Pre-release</x:String>
 	<x:String x:Key="Settings.Kernel.Mirror.Ref1ndStable">Ref1nd Stable</x:String>
-	<x:String x:Key="Settings.Kernel.Mirror.Ref1ndTest">Ref1nd Test</x:String>
+	<x:String x:Key="Settings.Kernel.Mirror.Ref1ndTest">Ref1nd Pre-release</x:String>
 	<x:String x:Key="Settings.Kernel.CacheCleanupPolicy">Cache Cleanup</x:String>
 	<x:String x:Key="Settings.Kernel.CacheCleanupPolicy.ClearOnChannelChange">Clear when channel changes</x:String>
 	<x:String x:Key="Settings.Kernel.CacheCleanupPolicy.Never">Never clear</x:String>

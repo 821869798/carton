@@ -9,6 +9,8 @@ public static class KernelCacheCleanupService
         {
             DownloadMirror.Ref1ndStable => KernelInstallChannel.Ref1ndStable,
             DownloadMirror.Ref1ndTest => KernelInstallChannel.Ref1ndTest,
+            DownloadMirror.GitHubPreRelease => KernelInstallChannel.OfficialPreRelease,
+            DownloadMirror.GhProxyPreRelease => KernelInstallChannel.OfficialPreRelease,
             _ => KernelInstallChannel.Official
         };
 

@@ -92,6 +92,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     {
         ClearPendingKernelPackage();
         UpdatePreference(p => p.KernelDownloadMirror = value);
+        _ = RefreshLatestVersionForSelectedMirrorAsync();
     }
 
     [ObservableProperty]
@@ -112,6 +113,8 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     [ObservableProperty]
     private bool _isUpdatingKernel;
 
+    partial void OnIsUpdatingKernelChanged(bool value) => OnPropertyChanged(nameof(CanCheckKernelUpdate));
+
     [ObservableProperty]
     private double _updateProgress;
 
@@ -120,6 +123,11 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
 
     [ObservableProperty]
     private string _latestVersion = string.Empty;
+
+    [ObservableProperty]
+    private bool _isCheckingKernelUpdate;
+
+    partial void OnIsCheckingKernelUpdateChanged(bool value) => OnPropertyChanged(nameof(CanCheckKernelUpdate));
 
     [ObservableProperty]
     private bool _isDataOperationInProgress;
@@ -138,12 +146,21 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     }
 
     public ObservableCollection<ThemeOptionViewModel> Themes { get; } = new();
-    public ObservableCollection<DownloadMirror> KernelDownloadMirrors { get; } = new(Enum.GetValues<DownloadMirror>());
+    public ObservableCollection<DownloadMirror> KernelDownloadMirrors { get; } = new(
+    [
+        DownloadMirror.GitHub,
+        DownloadMirror.GitHubPreRelease,
+        DownloadMirror.GhProxy,
+        DownloadMirror.GhProxyPreRelease,
+        DownloadMirror.Ref1ndStable,
+        DownloadMirror.Ref1ndTest
+    ]);
     public ObservableCollection<KernelCacheCleanupPolicy> KernelCacheCleanupPolicies { get; } = new(Enum.GetValues<KernelCacheCleanupPolicy>());
     public ObservableCollection<LanguageOptionViewModel> Languages { get; } = new();
     public ObservableCollection<UpdateChannelOptionViewModel> UpdateChannels { get; } = new();
     public bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
     public bool HasLoopbackStatus => !string.IsNullOrWhiteSpace(LoopbackStatus);
+    public bool CanCheckKernelUpdate => !IsUpdatingKernel && !IsCheckingKernelUpdate;
     public AppUpdateCoordinator AppUpdate => _appUpdate;
 
     public SettingsViewModel()
@@ -351,14 +368,69 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
             KernelPath = string.Empty;
         }
 
-        var latest = await _kernelManager.GetLatestVersionAsync();
+        var latest = await _kernelManager.GetLatestVersionAsync(SelectedKernelDownloadMirror);
         LatestVersion = latest ?? GetString("Common.Unknown", "unknown");
+    }
+
+    private async Task RefreshLatestVersionForSelectedMirrorAsync(bool showCheckingState = false)
+    {
+        if (_kernelManager == null)
+        {
+            return;
+        }
+
+        if (showCheckingState)
+        {
+            LatestVersion = string.Empty;
+            IsCheckingKernelUpdate = true;
+        }
+
+        try
+        {
+            var latest = await _kernelManager.GetLatestVersionAsync(SelectedKernelDownloadMirror);
+            LatestVersion = latest ?? GetString("Common.Unknown", "unknown");
+        }
+        catch
+        {
+            LatestVersion = GetString("Common.Unknown", "unknown");
+        }
+        finally
+        {
+            if (showCheckingState)
+            {
+                IsCheckingKernelUpdate = false;
+            }
+        }
     }
 
     [RelayCommand]
     private async Task CheckUpdate()
     {
-        await RefreshKernelInfoAsync();
+        if (IsCheckingKernelUpdate)
+        {
+            return;
+        }
+
+        if (_kernelManager == null)
+        {
+            return;
+        }
+
+        var kernelInfo = await _kernelManager.GetInstalledKernelInfoAsync();
+        IsKernelInstalled = kernelInfo != null;
+
+        if (kernelInfo != null)
+        {
+            KernelVersion = kernelInfo.KernelVersion;
+            KernelPath = kernelInfo.Path;
+        }
+        else
+        {
+            KernelVersion = GetString("Settings.Kernel.NotInstalled", "Not installed");
+            KernelPath = string.Empty;
+        }
+
+        await RefreshLatestVersionForSelectedMirrorAsync(showCheckingState: true);
     }
 
     [RelayCommand]
