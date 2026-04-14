@@ -607,7 +607,12 @@ public partial class DashboardViewModel : PageViewModelBase
     [RelayCommand]
     private async Task SelectStartupProfile(DashboardProfileItemViewModel? profile)
     {
-        if (_profileManager == null || profile == null) return;
+        if (_profileManager == null ||
+            profile == null ||
+            _singBoxManager?.State.Status is not (ServiceStatus.Stopped or ServiceStatus.Error))
+        {
+            return;
+        }
 
         foreach (var item in AvailableProfiles)
         {

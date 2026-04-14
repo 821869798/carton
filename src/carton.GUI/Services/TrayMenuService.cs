@@ -379,7 +379,8 @@ public sealed class TrayMenuService : IDisposable
 
     private void SelectProfile(DashboardProfileItemViewModel profile)
     {
-        if (_dashboardViewModel?.SelectStartupProfileCommand == null)
+        if (_dashboardViewModel?.SelectStartupProfileCommand == null ||
+            !CanSwitchProfiles())
         {
             return;
         }
@@ -439,6 +440,10 @@ public sealed class TrayMenuService : IDisposable
                 ReleaseGroupsMenuState();
             }
             RefreshGroupsMenu();
+        }
+        else if (e.PropertyName == nameof(MainViewModel.ServiceStatus))
+        {
+            RefreshProfilesMenu();
         }
         else if (e.PropertyName == nameof(MainViewModel.CurrentProfileName))
         {
@@ -576,6 +581,7 @@ public sealed class TrayMenuService : IDisposable
         var menu = _profilesMenuItem.Menu ?? new NativeMenu();
         _profilesMenuItem.Menu = menu;
         var profiles = _dashboardViewModel.AvailableProfiles;
+        var canSwitchProfiles = CanSwitchProfiles();
 
         if (profiles.Count == 0)
         {
@@ -632,7 +638,7 @@ public sealed class TrayMenuService : IDisposable
                 _profileMenuItems[profile] = item;
             }
 
-            UpdateProfileMenuItem(item, profile);
+            UpdateProfileMenuItem(item, profile, canSwitchProfiles);
             MoveProfileMenuItem(menu, item, i);
         }
     }
@@ -647,10 +653,14 @@ public sealed class TrayMenuService : IDisposable
         return item;
     }
 
-    private static void UpdateProfileMenuItem(NativeMenuItem item, DashboardProfileItemViewModel profile)
+    private static void UpdateProfileMenuItem(
+        NativeMenuItem item,
+        DashboardProfileItemViewModel profile,
+        bool canSwitchProfiles)
     {
         item.Header = profile.Name;
         item.IsChecked = profile.IsSelected;
+        item.IsEnabled = canSwitchProfiles;
     }
 
     private static void MoveProfileMenuItem(NativeMenu menu, NativeMenuItem item, int targetIndex)
@@ -667,6 +677,12 @@ public sealed class TrayMenuService : IDisposable
         }
 
         menu.Items.Insert(targetIndex, item);
+    }
+
+    private bool CanSwitchProfiles()
+    {
+        var serviceStatus = _mainViewModel?.ServiceStatus;
+        return serviceStatus is null or ServiceStatus.Stopped or ServiceStatus.Error;
     }
 
     private int ComputeGroupsMenuHash(IReadOnlyList<GroupMenuSnapshot> groups, bool isConnected)

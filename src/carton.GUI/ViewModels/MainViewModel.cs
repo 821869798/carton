@@ -60,6 +60,9 @@ public partial class MainViewModel : ViewModelBase
     private bool _isConnected;
 
     [ObservableProperty]
+    private ServiceStatus _serviceStatus = ServiceStatus.Stopped;
+
+    [ObservableProperty]
     private string _connectionStatus = string.Empty;
 
     [ObservableProperty]
@@ -344,6 +347,7 @@ public partial class MainViewModel : ViewModelBase
     {
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
+            ServiceStatus = status;
             IsConnected = status == ServiceStatus.Running;
             ConnectionStatus = status switch
             {
