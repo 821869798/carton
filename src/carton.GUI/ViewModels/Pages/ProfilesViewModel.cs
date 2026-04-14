@@ -113,9 +113,13 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     public bool ShowContentAction => IsEditingMode && IsRemoteProfile;
     public bool IsRemoteEditStatusVisible => IsEditingMode && IsRemoteProfile;
     public bool CanEditContent => IsLocalProfile;
+    public bool ShowExternalEditorAction => IsEditingMode && IsLocalProfile;
+    public string UpdateConfigText => GetString("Profiles.Form.UpdateConfig", "更新配置");
     public string ContentActionText => IsContentEditorVisible
         ? GetString("Profiles.Form.Content.Hide", "Hide Content")
         : GetString("Profiles.Form.Content.Show", "View Content");
+    public string OpenExternalText => GetString("Profiles.Form.OpenExternal", "通过外部编辑器打开");
+    public string CopyAsLocalText => GetString("Profiles.Form.CopyAsLocal", "复制为本地配置");
     public bool ShowConfigEditor =>
         ShowCreateLocalContentEditor ||
         (IsEditingMode && IsLocalProfile) ||
@@ -141,6 +145,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         OnPropertyChanged(nameof(ContentActionText));
         OnPropertyChanged(nameof(IsConfigReadOnly));
         OnPropertyChanged(nameof(ShowConfigEditor));
+        OnPropertyChanged(nameof(ShowExternalEditorAction));
     }
 
     partial void OnNewLocalModeChanged(int value)
@@ -174,6 +179,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanSaveProfile));
         OnPropertyChanged(nameof(ShowConfigEditor));
         OnPropertyChanged(nameof(ProfileFormTitle));
+        OnPropertyChanged(nameof(ShowExternalEditorAction));
     }
 
     partial void OnSelectedProfileChanged(ProfileItemViewModel? value)
@@ -546,13 +552,93 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private void ToggleContentEditor()
+    private async Task ToggleContentEditor()
     {
+        if (!IsContentEditorVisible && IsRemoteProfile && _editingProfile != null && _configManager != null)
+        {
+            var configPath = await _configManager.GetConfigPathAsync(_editingProfile.Id, ProfileType.Remote);
+            if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
+            {
+                _toastWriter?.Invoke(GetString("Profiles.Toast.RemoteConfigNotFound", "错误：本地不存在此远程配置，请更新配置"), 3000);
+                return;
+            }
+        }
+
         if (string.IsNullOrWhiteSpace(ConfigContent))
         {
             ConfigContent = "{}";
         }
         IsContentEditorVisible = !IsContentEditorVisible;
+    }
+
+    [RelayCommand]
+    private async Task OpenInExternalEditor()
+    {
+        if (_configManager == null || _editingProfile == null) return;
+
+        var configPath = await _configManager.GetConfigPathAsync(_editingProfile.Id, ProfileType.Local);
+        if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
+        {
+            _toastWriter?.Invoke(GetString("Profiles.Toast.LocalConfigNotFound", "找不到配置文件"), 3000);
+            return;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = configPath,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _toastWriter?.Invoke($"{GetString("Profiles.Toast.OpenFailed", "无法打开文件")}: {ex.Message}", 3000);
+        }
+    }
+
+    [RelayCommand]
+    private async Task CopyAsLocal()
+    {
+        if (_configManager == null || _profileManager == null || _editingProfile == null) return;
+
+        var configPath = await _configManager.GetConfigPathAsync(_editingProfile.Id, ProfileType.Remote);
+        if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
+        {
+            _toastWriter?.Invoke(GetString("Profiles.Toast.RemoteConfigNotFound", "错误：本地不存在此远程配置，请更新配置"), 3000);
+            return;
+        }
+
+        try
+        {
+            var content = await File.ReadAllTextAsync(configPath);
+            string baseName = _editingProfile.Name + " Copy";
+            string newName = baseName;
+            int counter = 1;
+
+            var existingProfiles = await _profileManager.ListAsync();
+            while (existingProfiles.Any(p => string.Equals(p.Name, newName, StringComparison.OrdinalIgnoreCase)))
+            {
+                newName = $"{baseName} {counter++}";
+            }
+
+            var profile = await _profileManager.CreateAsync(new Core.Models.Profile
+            {
+                Name = newName,
+                Type = ProfileType.Local,
+                LastUpdated = DateTime.Now,
+                UpdateInterval = 0,
+                AutoUpdate = false
+            }, content);
+
+            await LoadProfilesAsync();
+            await NotifyProfilesChangedAsync();
+            _toastWriter?.Invoke($"{GetString("Profiles.Toast.CopySuccess", "已复制为")} {newName}", 3000);
+        }
+        catch (Exception ex)
+        {
+            _toastWriter?.Invoke($"{GetString("Profiles.Toast.CopyFailed", "复制失败")}: {ex.Message}", 3000);
+        }
     }
 
     [RelayCommand]
@@ -655,6 +741,23 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         finally
         {
             IsImporting = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task UpdateEditingProfile()
+    {
+        if (_editingProfile != null)
+        {
+            await UpdateProfile(_editingProfile);
+
+            if (_configManager != null)
+            {
+                var content = await _configManager.LoadConfigAsync(_editingProfile.Id, ProfileType.Remote);
+                ConfigContent = content ?? "{}";
+                _initialConfigContent = ConfigContent;
+                RecalculateFormChanged();
+            }
         }
     }
 
@@ -821,6 +924,9 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
 
         OnPropertyChanged(nameof(ProfileFormTitle));
         OnPropertyChanged(nameof(ContentActionText));
+        OnPropertyChanged(nameof(OpenExternalText));
+        OnPropertyChanged(nameof(CopyAsLocalText));
+        OnPropertyChanged(nameof(UpdateConfigText));
     }
 
     private string GetString(string key, string fallback)

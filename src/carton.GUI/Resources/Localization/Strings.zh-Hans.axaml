@@ -83,6 +83,14 @@
   <x:String x:Key="Profiles.Form.CancelButton">取消</x:String>
   <x:String x:Key="Profiles.Form.Title.New">新配置</x:String>
   <x:String x:Key="Profiles.Form.Title.Edit">编辑配置</x:String>
+  <x:String x:Key="Profiles.Form.UpdateConfig">更新配置</x:String>
+  <x:String x:Key="Profiles.Form.OpenExternal">通过外部编辑器打开</x:String>
+  <x:String x:Key="Profiles.Form.CopyAsLocal">复制为本地配置</x:String>
+  <x:String x:Key="Profiles.Toast.LocalConfigNotFound">找不到配置文件</x:String>
+  <x:String x:Key="Profiles.Toast.RemoteConfigNotFound">错误：本地不存在此远程配置，请更新配置</x:String>
+  <x:String x:Key="Profiles.Toast.OpenFailed">无法打开文件</x:String>
+  <x:String x:Key="Profiles.Toast.CopySuccess">已复制为</x:String>
+  <x:String x:Key="Profiles.Toast.CopyFailed">复制失败</x:String>
 
   <x:String x:Key="Dashboard.Section.Configuration">配置</x:String>
 	<x:String x:Key="Dashboard.Field.Port">Mixed 端口</x:String>

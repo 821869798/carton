@@ -242,12 +242,25 @@
 						</Grid>
 
 						<Grid ColumnDefinitions="100,*" ColumnSpacing="12"
-							  IsVisible="{Binding ShowContentAction}">
+							  IsVisible="{Binding ShowExternalEditorAction}">
 							<TextBlock Grid.Column="0" Text="{DynamicResource Profiles.Form.ActionLabel}" VerticalAlignment="Center"/>
 							<Button Grid.Column="1"
-									Content="{Binding ContentActionText}"
-									Command="{Binding ToggleContentEditorCommand}"
+									Content="{Binding OpenExternalText}"
+									Command="{Binding OpenInExternalEditorCommand}"
 									HorizontalAlignment="Left"/>
+						</Grid>
+
+						<Grid ColumnDefinitions="100,*" ColumnSpacing="12"
+							  IsVisible="{Binding ShowContentAction}">
+							<TextBlock Grid.Column="0" Text="{DynamicResource Profiles.Form.ActionLabel}" VerticalAlignment="Center"/>
+							<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+								<Button Content="{Binding ContentActionText}"
+										Command="{Binding ToggleContentEditorCommand}"/>
+								<Button Content="{Binding CopyAsLocalText}"
+										Command="{Binding CopyAsLocalCommand}"/>
+								<Button Content="{Binding UpdateConfigText}"
+										Command="{Binding UpdateEditingProfileCommand}"/>
+							</StackPanel>
 						</Grid>
 
 						<TextBlock Text="{DynamicResource Profiles.Form.ContentLabel}"
