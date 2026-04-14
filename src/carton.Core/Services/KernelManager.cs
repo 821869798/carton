@@ -420,8 +420,59 @@ public class KernelManager : IKernelManager
     private async Task<List<GitHubReleaseInfo>> GetGitHubReleaseListAsync(string apiUrl)
     {
         var response = await _httpClient.GetStringAsync(apiUrl);
-        return JsonSerializer.Deserialize<List<GitHubReleaseInfo>>(response) ?? [];
+        using var document = JsonDocument.Parse(response);
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var releases = new List<GitHubReleaseInfo>();
+        foreach (var releaseElement in document.RootElement.EnumerateArray())
+        {
+            if (releaseElement.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var release = new GitHubReleaseInfo
+            {
+                TagName = TryGetStringProperty(releaseElement, "tag_name"),
+                Prerelease = TryGetBooleanProperty(releaseElement, "prerelease")
+            };
+
+            if (releaseElement.TryGetProperty("assets", out var assetsElement) &&
+                assetsElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var assetElement in assetsElement.EnumerateArray())
+                {
+                    if (assetElement.ValueKind != JsonValueKind.Object)
+                    {
+                        continue;
+                    }
+
+                    release.Assets.Add(new GitHubReleaseAssetInfo
+                    {
+                        Name = TryGetStringProperty(assetElement, "name"),
+                        BrowserDownloadUrl = TryGetStringProperty(assetElement, "browser_download_url")
+                    });
+                }
+            }
+
+            releases.Add(release);
+        }
+
+        return releases;
     }
+
+    private static string TryGetStringProperty(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString() ?? string.Empty
+            : string.Empty;
+
+    private static bool TryGetBooleanProperty(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var property) &&
+           property.ValueKind is JsonValueKind.True or JsonValueKind.False &&
+           property.GetBoolean();
 
     private async Task<Ref1ndReleaseAssetInfo?> GetRef1ndReleaseAssetAsync(PlatformInfo platform, DownloadMirror mirror)
     {
