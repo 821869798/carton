@@ -57,11 +57,16 @@ public class KernelManager : IKernelManager
     public bool IsKernelInstalled => File.Exists(_kernelPath);
     public string KernelPath => _kernelPath;
 
+    private const int GitHubReleasesPageSize = 100;
+    private const int GitHubReleasesMaxPages = 3;
+    private const string ForceGitHubApiFailEnvironmentVariable = "CARTON_FORCE_GITHUB_API_FAIL";
     private const string GitHubApiUrl = "https://api.github.com/repos/SagerNet/sing-box/releases/latest";
     private const string GitHubDownloadUrl = "https://github.com/SagerNet/sing-box/releases/download";
-    private const string GitHubReleasesApiUrl = "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=20";
+    private const string GitHubReleasesPageUrl = "https://github.com/SagerNet/sing-box/releases";
+    private static readonly string GitHubReleasesApiUrl = $"https://api.github.com/repos/SagerNet/sing-box/releases?per_page={GitHubReleasesPageSize}";
 
-    private const string Ref1ndReleasesApiUrl = "https://api.github.com/repos/reF1nd/sing-box-releases/releases?per_page=20";
+    private const string Ref1ndReleasesPageUrl = "https://github.com/reF1nd/sing-box-releases/releases";
+    private static readonly string Ref1ndReleasesApiUrl = $"https://api.github.com/repos/reF1nd/sing-box-releases/releases?per_page={GitHubReleasesPageSize}";
 
     public KernelManager(string baseDirectory)
     {
@@ -380,7 +385,7 @@ public class KernelManager : IKernelManager
     {
         try
         {
-            var response = await _httpClient.GetStringAsync(GitHubApiUrl);
+            var response = await GetApiStringAsync(GitHubApiUrl);
             using var document = JsonDocument.Parse(response);
             if (document.RootElement.TryGetProperty("tag_name", out var tagElement) &&
                 tagElement.ValueKind == JsonValueKind.String)
@@ -406,59 +411,90 @@ public class KernelManager : IKernelManager
 
     private async Task<string?> GetLatestOfficialPreReleaseVersionAsync()
     {
-        var releases = await GetGitHubReleaseListAsync(GitHubReleasesApiUrl);
-        return releases.FirstOrDefault(item => item.Prerelease)?.TagName;
+        try
+        {
+            var releases = await GetGitHubReleaseListAsync(GitHubReleasesApiUrl);
+            return SelectLatestRelease(releases, wantPrerelease: true)?.TagName;
+        }
+        catch
+        {
+            return await GetLatestVersionFromReleasesPageAsync(GitHubReleasesPageUrl, wantPrerelease: true);
+        }
     }
 
     private async Task<string?> GetLatestRef1ndVersionAsync(DownloadMirror mirror)
     {
-        var releases = await GetGitHubReleaseListAsync(Ref1ndReleasesApiUrl);
         var wantPrerelease = mirror == DownloadMirror.Ref1ndTest;
-        return releases.FirstOrDefault(item => item.Prerelease == wantPrerelease)?.TagName;
+
+        try
+        {
+            var releases = await GetGitHubReleaseListAsync(Ref1ndReleasesApiUrl);
+            return SelectLatestRelease(releases, wantPrerelease)?.TagName;
+        }
+        catch
+        {
+            return await GetLatestVersionFromReleasesPageAsync(Ref1ndReleasesPageUrl, wantPrerelease);
+        }
     }
 
     private async Task<List<GitHubReleaseInfo>> GetGitHubReleaseListAsync(string apiUrl)
     {
-        var response = await _httpClient.GetStringAsync(apiUrl);
-        using var document = JsonDocument.Parse(response);
-        if (document.RootElement.ValueKind != JsonValueKind.Array)
-        {
-            return [];
-        }
-
         var releases = new List<GitHubReleaseInfo>();
-        foreach (var releaseElement in document.RootElement.EnumerateArray())
+        for (var page = 1; page <= GitHubReleasesMaxPages; page++)
         {
-            if (releaseElement.ValueKind != JsonValueKind.Object)
+            var response = await GetApiStringAsync(AppendPageParameter(apiUrl, page));
+            using var document = JsonDocument.Parse(response);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
             {
-                continue;
+                break;
             }
 
-            var release = new GitHubReleaseInfo
+            var releaseElements = document.RootElement;
+            if (releaseElements.GetArrayLength() == 0)
             {
-                TagName = TryGetStringProperty(releaseElement, "tag_name"),
-                Prerelease = TryGetBooleanProperty(releaseElement, "prerelease")
-            };
+                break;
+            }
 
-            if (releaseElement.TryGetProperty("assets", out var assetsElement) &&
-                assetsElement.ValueKind == JsonValueKind.Array)
+            foreach (var releaseElement in releaseElements.EnumerateArray())
             {
-                foreach (var assetElement in assetsElement.EnumerateArray())
+                if (releaseElement.ValueKind != JsonValueKind.Object ||
+                    TryGetBooleanProperty(releaseElement, "draft"))
                 {
-                    if (assetElement.ValueKind != JsonValueKind.Object)
-                    {
-                        continue;
-                    }
-
-                    release.Assets.Add(new GitHubReleaseAssetInfo
-                    {
-                        Name = TryGetStringProperty(assetElement, "name"),
-                        BrowserDownloadUrl = TryGetStringProperty(assetElement, "browser_download_url")
-                    });
+                    continue;
                 }
+
+                var release = new GitHubReleaseInfo
+                {
+                    TagName = TryGetStringProperty(releaseElement, "tag_name"),
+                    Name = TryGetStringProperty(releaseElement, "name"),
+                    Prerelease = TryGetBooleanProperty(releaseElement, "prerelease")
+                };
+
+                if (releaseElement.TryGetProperty("assets", out var assetsElement) &&
+                    assetsElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var assetElement in assetsElement.EnumerateArray())
+                    {
+                        if (assetElement.ValueKind != JsonValueKind.Object)
+                        {
+                            continue;
+                        }
+
+                        release.Assets.Add(new GitHubReleaseAssetInfo
+                        {
+                            Name = TryGetStringProperty(assetElement, "name"),
+                            BrowserDownloadUrl = TryGetStringProperty(assetElement, "browser_download_url")
+                        });
+                    }
+                }
+
+                releases.Add(release);
             }
 
-            releases.Add(release);
+            if (releaseElements.GetArrayLength() < GitHubReleasesPageSize)
+            {
+                break;
+            }
         }
 
         return releases;
@@ -483,7 +519,7 @@ public class KernelManager : IKernelManager
         }
 
         var wantPrerelease = mirror == DownloadMirror.Ref1ndTest;
-        var release = releases.FirstOrDefault(item => item.Prerelease == wantPrerelease);
+        var release = SelectLatestRelease(releases, wantPrerelease);
         if (release == null || string.IsNullOrWhiteSpace(release.TagName))
         {
             return null;
@@ -569,6 +605,105 @@ public class KernelManager : IKernelManager
         }
 
         return Path.GetExtension(assetName);
+    }
+
+    private async Task<string?> GetLatestVersionFromReleasesPageAsync(string releasesPageUrl, bool wantPrerelease)
+    {
+        var html = await _httpClient.GetStringAsync(releasesPageUrl);
+        var matches = Regex.Matches(
+            html,
+            @"/releases/tag/(?<tag>[^""#?&/]+)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (matches.Count == 0)
+        {
+            return null;
+        }
+
+        var seenTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match match in matches)
+        {
+            var tag = Uri.UnescapeDataString(match.Groups["tag"].Value);
+            if (string.IsNullOrWhiteSpace(tag) || !seenTags.Add(tag))
+            {
+                continue;
+            }
+
+            if (wantPrerelease == IsLikelyPrereleaseTag(tag))
+            {
+                return tag;
+            }
+        }
+
+        return null;
+    }
+
+    private static GitHubReleaseInfo? SelectLatestRelease(IEnumerable<GitHubReleaseInfo> releases, bool wantPrerelease)
+    {
+        foreach (var release in releases)
+        {
+            if (string.IsNullOrWhiteSpace(release.TagName))
+            {
+                continue;
+            }
+
+            if (wantPrerelease == IsLikelyPrerelease(release))
+            {
+                return release;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsLikelyPrerelease(GitHubReleaseInfo release)
+        => release.Prerelease ||
+           IsLikelyPrereleaseTag(release.TagName) ||
+           IsLikelyPrereleaseTag(release.Name);
+
+    private static bool IsLikelyPrereleaseTag(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        return Regex.IsMatch(
+            value,
+            @"(?:^|[.\-_])(?:alpha|beta|preview|pre|rc)(?:[.\-_]?\d+)?(?:$|[.\-_])",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    private static bool ShouldForceGitHubApiFailure()
+        => string.Equals(
+            Environment.GetEnvironmentVariable(ForceGitHubApiFailEnvironmentVariable),
+            "1",
+            StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsGitHubApiUrl(string url)
+        => Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+           string.Equals(uri.Host, "api.github.com", StringComparison.OrdinalIgnoreCase);
+
+    private static void ThrowIfSimulatingGitHubApiFailure(string url)
+    {
+        if (ShouldForceGitHubApiFailure() && IsGitHubApiUrl(url))
+        {
+            throw new HttpRequestException(
+                $"Simulated GitHub API failure via {ForceGitHubApiFailEnvironmentVariable}",
+                null,
+                System.Net.HttpStatusCode.Forbidden);
+        }
+    }
+
+    private async Task<string> GetApiStringAsync(string url)
+    {
+        ThrowIfSimulatingGitHubApiFailure(url);
+        return await _httpClient.GetStringAsync(url);
+    }
+
+    private static string AppendPageParameter(string apiUrl, int page)
+    {
+        var separator = apiUrl.Contains('?', StringComparison.Ordinal) ? "&" : "?";
+        return $"{apiUrl}{separator}page={page}";
     }
 
     /// <summary>
@@ -716,6 +851,9 @@ public class KernelManager : IKernelManager
     {
         [JsonPropertyName("tag_name")]
         public string TagName { get; set; } = string.Empty;
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
 
         [JsonPropertyName("prerelease")]
         public bool Prerelease { get; set; }

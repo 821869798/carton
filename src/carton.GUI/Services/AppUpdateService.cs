@@ -8,6 +8,7 @@ using System.Net.Http.Headers;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using NuGet.Versioning;
@@ -74,6 +75,7 @@ public sealed record AppUpdateDownloadProgress(
 
 public sealed class AppUpdateService : IAppUpdateService
 {
+    private const string ForceGitHubApiFailEnvironmentVariable = "CARTON_FORCE_GITHUB_API_FAIL";
     private readonly string _repositoryUrl;
     private readonly string? _token;
     private readonly Action<string>? _log;
@@ -160,6 +162,12 @@ public sealed class AppUpdateService : IAppUpdateService
             return null;
         }
 
+        if (ShouldForceGitHubApiFailure())
+        {
+            Log($"Skipping Velopack GitHub source check because {ForceGitHubApiFailEnvironmentVariable}=1");
+            return new AppUpdateResult(releaseInfo.Version, releaseInfo.Body, channel, null!, releaseInfo);
+        }
+
         var manager = CreateManager(channel, allowVersionDowngrade: true);
         try
         {
@@ -191,90 +199,100 @@ public sealed class AppUpdateService : IAppUpdateService
         var wantsPrerelease = IsPrereleaseChannel(channel);
         const int pageSize = 50;
         const int maxPages = 5;
-
-        for (var page = 1; page <= maxPages; page++)
+        try
         {
-            var request = new HttpRequestMessage(
-                HttpMethod.Get,
-                $"https://api.github.com/repos/{_repoOwner}/{_repoName}/releases?per_page={pageSize}&page={page}");
-
-            using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
+            for (var page = 1; page <= maxPages; page++)
             {
-                var message = $"GitHub releases fetch failed: {(int)response.StatusCode} {response.ReasonPhrase}";
-                Log(message);
-                throw new HttpRequestException(message, null, response.StatusCode);
-            }
-
-            await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            using var document = await JsonDocument.ParseAsync(contentStream, cancellationToken: cancellationToken).ConfigureAwait(false);
-            var releases = document.RootElement;
-            if (releases.ValueKind != JsonValueKind.Array || releases.GetArrayLength() == 0)
-            {
-                return null;
-            }
-
-            foreach (var releaseElement in releases.EnumerateArray())
-            {
-                var isDraft = releaseElement.TryGetProperty("draft", out var draftProp) && draftProp.GetBoolean();
-                if (isDraft)
+                var apiUrl = $"https://api.github.com/repos/{_repoOwner}/{_repoName}/releases?per_page={pageSize}&page={page}";
+                using var response = await SendGitHubApiRequestAsync(HttpMethod.Get, apiUrl, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
                 {
-                    continue;
+                    var message = $"GitHub releases fetch failed: {(int)response.StatusCode} {response.ReasonPhrase}";
+                    Log(message);
+                    throw new HttpRequestException(message, null, response.StatusCode);
                 }
 
-                var isPrerelease = releaseElement.TryGetProperty("prerelease", out var prereleaseProp) &&
-                                   prereleaseProp.GetBoolean();
-                if (wantsPrerelease != isPrerelease)
+                await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                using var document = await JsonDocument.ParseAsync(contentStream, cancellationToken: cancellationToken).ConfigureAwait(false);
+                var releases = document.RootElement;
+                if (releases.ValueKind != JsonValueKind.Array || releases.GetArrayLength() == 0)
                 {
-                    continue;
+                    return null;
                 }
 
-                var tag = releaseElement.TryGetProperty("tag_name", out var tagProp)
-                    ? tagProp.GetString() ?? string.Empty
-                    : string.Empty;
-                if (string.IsNullOrWhiteSpace(tag))
+                foreach (var releaseElement in releases.EnumerateArray())
                 {
-                    continue;
-                }
-
-                var version = NormalizeVersion(tag);
-                var name = releaseElement.TryGetProperty("name", out var nameProp)
-                    ? nameProp.GetString() ?? tag
-                    : tag;
-                var body = releaseElement.TryGetProperty("body", out var bodyProp)
-                    ? bodyProp.GetString() ?? string.Empty
-                    : string.Empty;
-                var publishedAt = releaseElement.TryGetProperty("published_at", out var publishedProp)
-                    ? ParseDateTime(publishedProp)
-                    : DateTimeOffset.MinValue;
-
-                var assets = new List<GitHubAssetInfo>();
-                if (releaseElement.TryGetProperty("assets", out var assetsElement) && assetsElement.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var asset in assetsElement.EnumerateArray())
+                    var isDraft = releaseElement.TryGetProperty("draft", out var draftProp) && draftProp.GetBoolean();
+                    if (isDraft)
                     {
-                        var downloadUrl = asset.TryGetProperty("browser_download_url", out var urlProp)
-                            ? urlProp.GetString() ?? string.Empty
-                            : string.Empty;
-                        if (string.IsNullOrWhiteSpace(downloadUrl))
-                        {
-                            continue;
-                        }
-
-                        assets.Add(new GitHubAssetInfo(
-                            asset.TryGetProperty("name", out var assetNameProp) ? assetNameProp.GetString() ?? string.Empty : string.Empty,
-                            downloadUrl,
-                            asset.TryGetProperty("size", out var sizeProp) ? sizeProp.GetInt64() : 0));
+                        continue;
                     }
+
+                    var tag = releaseElement.TryGetProperty("tag_name", out var tagProp)
+                        ? tagProp.GetString() ?? string.Empty
+                        : string.Empty;
+                    if (string.IsNullOrWhiteSpace(tag))
+                    {
+                        continue;
+                    }
+
+                    var isPrerelease = releaseElement.TryGetProperty("prerelease", out var prereleaseProp) &&
+                                       prereleaseProp.GetBoolean();
+                    var name = releaseElement.TryGetProperty("name", out var nameProp)
+                        ? nameProp.GetString() ?? tag
+                        : tag;
+                    var resolvedPrerelease = IsLikelyPrerelease(isPrerelease, tag, name);
+                    if (wantsPrerelease != resolvedPrerelease)
+                    {
+                        continue;
+                    }
+
+                    var version = NormalizeVersion(tag);
+                    var body = releaseElement.TryGetProperty("body", out var bodyProp)
+                        ? bodyProp.GetString() ?? string.Empty
+                        : string.Empty;
+                    var publishedAt = releaseElement.TryGetProperty("published_at", out var publishedProp)
+                        ? ParseDateTime(publishedProp)
+                        : DateTimeOffset.MinValue;
+
+                    var assets = new List<GitHubAssetInfo>();
+                    if (releaseElement.TryGetProperty("assets", out var assetsElement) && assetsElement.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var asset in assetsElement.EnumerateArray())
+                        {
+                            var downloadUrl = asset.TryGetProperty("browser_download_url", out var urlProp)
+                                ? urlProp.GetString() ?? string.Empty
+                                : string.Empty;
+                            if (string.IsNullOrWhiteSpace(downloadUrl))
+                            {
+                                continue;
+                            }
+
+                            assets.Add(new GitHubAssetInfo(
+                                asset.TryGetProperty("name", out var assetNameProp) ? assetNameProp.GetString() ?? string.Empty : string.Empty,
+                                downloadUrl,
+                                asset.TryGetProperty("size", out var sizeProp) ? sizeProp.GetInt64() : 0));
+                        }
+                    }
+
+                    return new GitHubReleaseInfo(tag, version, resolvedPrerelease, name, body, assets, publishedAt);
                 }
 
-                return new GitHubReleaseInfo(tag, version, isPrerelease, name, body, assets, publishedAt);
+                if (releases.GetArrayLength() < pageSize)
+                {
+                    break;
+                }
             }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            Log($"GitHub API release lookup failed, falling back to releases page: {ex.Message}");
+        }
 
-            if (releases.GetArrayLength() < pageSize)
-            {
-                break;
-            }
+        var fallbackRelease = await GetLatestReleaseInfoFromReleasesPageAsync(wantsPrerelease, cancellationToken).ConfigureAwait(false);
+        if (fallbackRelease != null)
+        {
+            return fallbackRelease;
         }
 
         Log($"No matching GitHub release found for channel={channel}");
@@ -290,6 +308,12 @@ public sealed class AppUpdateService : IAppUpdateService
         if (update == null)
         {
             throw new ArgumentNullException(nameof(update));
+        }
+
+        if (ShouldForceGitHubApiFailure())
+        {
+            throw new InvalidOperationException(
+                $"Download is disabled while {ForceGitHubApiFailEnvironmentVariable}=1 because the check is running in simulated fallback mode.");
         }
 
         var totalBytes = ResolveDownloadSize(update);
@@ -529,6 +553,98 @@ public sealed class AppUpdateService : IAppUpdateService
 
     private static bool IsPrereleaseChannel(string? channel)
         => string.Equals(channel, "beta", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsLikelyPrerelease(bool isPrerelease, string? tag, string? name)
+        => isPrerelease || IsLikelyPrereleaseTag(tag) || IsLikelyPrereleaseTag(name);
+
+    private static bool IsLikelyPrereleaseTag(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        return Regex.IsMatch(
+            value,
+            @"(?:^|[.\-_])(?:alpha|beta|preview|pre|rc)(?:[.\-_]?\d+)?(?:$|[.\-_])",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    private static bool ShouldForceGitHubApiFailure()
+        => string.Equals(
+            Environment.GetEnvironmentVariable(ForceGitHubApiFailEnvironmentVariable),
+            "1",
+            StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsGitHubApiUrl(string url)
+        => Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+           string.Equals(uri.Host, "api.github.com", StringComparison.OrdinalIgnoreCase);
+
+    private async Task<HttpResponseMessage> SendGitHubApiRequestAsync(
+        HttpMethod method,
+        string url,
+        CancellationToken cancellationToken)
+    {
+        if (ShouldForceGitHubApiFailure() && IsGitHubApiUrl(url))
+        {
+            throw new HttpRequestException(
+                $"Simulated GitHub API failure via {ForceGitHubApiFailEnvironmentVariable}",
+                null,
+                System.Net.HttpStatusCode.Forbidden);
+        }
+
+        var request = new HttpRequestMessage(method, url);
+        return await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<GitHubReleaseInfo?> GetLatestReleaseInfoFromReleasesPageAsync(
+        bool wantsPrerelease,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var response = await _httpClient.GetAsync(ReleasesPageUrl, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+
+        var html = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var matches = Regex.Matches(
+            html,
+            @"/" + Regex.Escape(_repoOwner) + "/" + Regex.Escape(_repoName) + @"/releases/tag/(?<tag>[^""#?&/]+)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (matches.Count == 0)
+        {
+            return null;
+        }
+
+        var seenTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match match in matches)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var tag = Uri.UnescapeDataString(match.Groups["tag"].Value);
+            if (string.IsNullOrWhiteSpace(tag) || !seenTags.Add(tag))
+            {
+                continue;
+            }
+
+            var isPrerelease = IsLikelyPrereleaseTag(tag);
+            if (wantsPrerelease != isPrerelease)
+            {
+                continue;
+            }
+
+            return new GitHubReleaseInfo(
+                tag,
+                NormalizeVersion(tag),
+                isPrerelease,
+                tag,
+                string.Empty,
+                [],
+                DateTimeOffset.MinValue);
+        }
+
+        return null;
+    }
 
     private static string ResolveVelopackChannel(string? channel)
     {
