@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using carton.Core.Models;
+using carton.Core.Utilities;
 
 namespace carton.Core.Services;
 
@@ -85,6 +86,7 @@ public class KernelManager : IKernelManager
         if (!File.Exists(_kernelPath))
         {
             _installedKernel = null;
+            CartonApplicationInfo.SetSingBoxVersion(null);
             return null;
         }
 
@@ -98,6 +100,9 @@ public class KernelManager : IKernelManager
                 InstallTime = File.GetCreationTime(_kernelPath),
                 Platform = PlatformInfo.Current
             };
+
+            CartonApplicationInfo.SetSingBoxVersion(version);
+
             return _installedKernel;
         }
         catch
@@ -935,6 +940,7 @@ public class KernelManager : IKernelManager
             }
 
             _installedKernel = null;
+            CartonApplicationInfo.SetSingBoxVersion(null);
             StatusChanged?.Invoke(this, "Kernel uninstalled");
             return Task.FromResult(true);
         }

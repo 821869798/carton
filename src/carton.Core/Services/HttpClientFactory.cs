@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using carton.Core.Utilities;
 
 namespace carton.Core.Services;
 
@@ -8,6 +9,7 @@ namespace carton.Core.Services;
 /// </summary>
 public static class HttpClientFactory
 {
+    private const string UserAgentHeaderName = "User-Agent";
     private static HttpClient _localApi = null!;
     private static string _appVersion = "1.0";
     public static string LocalApiAddress { get; private set; } = string.Empty;
@@ -17,6 +19,7 @@ public static class HttpClientFactory
     static HttpClientFactory()
     {
         UpdateLocalApi("127.0.0.1", 9090, null);
+        CartonApplicationInfo.SingBoxVersionChanged += OnSingBoxVersionChanged;
     }
 
     /// <summary>
@@ -93,6 +96,24 @@ public static class HttpClientFactory
 
     private static void ConfigureExternalClient(HttpClient client)
     {
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", $"carton/{_appVersion} (sing-box 1.13.0; sing-box/1.13.0)");
+        client.DefaultRequestHeaders.TryAddWithoutValidation(UserAgentHeaderName, BuildExternalUserAgent());
+    }
+
+    private static string BuildExternalUserAgent()
+    {
+        var kernelVersion = CartonApplicationInfo.SingBoxVersion ?? CartonApplicationInfo.DefaultSingBoxVersion;
+        return $"carton/{_appVersion} (sing-box {kernelVersion}; sing-box/{kernelVersion})";
+    }
+
+    private static void OnSingBoxVersionChanged(string? _)
+    {
+        var client = _external;
+        if (client == null)
+        {
+            return;
+        }
+
+        client.DefaultRequestHeaders.Remove(UserAgentHeaderName);
+        client.DefaultRequestHeaders.TryAddWithoutValidation(UserAgentHeaderName, BuildExternalUserAgent());
     }
 }
