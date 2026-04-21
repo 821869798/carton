@@ -526,7 +526,7 @@ public class KernelManager : IKernelManager
 
     private async Task<string?> DownloadRef1ndPackageAsync(PlatformInfo platform, string tagName, DownloadMirror mirror, string channelLabel)
     {
-        foreach (var candidate in GetRef1ndAssetCandidates(platform, tagName, mirror))
+        foreach (var candidate in GetRef1ndAssetCandidates(platform, tagName))
         {
             var tempExt = GetPackageExtension(candidate);
             var tempFile = Path.Combine(Path.GetTempPath(), $"sing-box-ref1nd-{Guid.NewGuid():N}{tempExt}");
@@ -547,107 +547,26 @@ public class KernelManager : IKernelManager
         return null;
     }
 
-    private static string[] GetRef1ndAssetCandidates(PlatformInfo platform, string tagName, DownloadMirror mirror)
+    private static string[] GetRef1ndAssetCandidates(PlatformInfo platform, string tagName)
     {
         var preferV3 = SupportsX64V3();
         var preferredLinuxLibc = IsLikelyMuslLinux() ? "musl" : "glibc";
         var alternateLinuxLibc = preferredLinuxLibc == "glibc" ? "musl" : "glibc";
         var version = tagName.TrimStart('v');
-        var channel = mirror == DownloadMirror.Ref1ndTest ? "test" : "stable";
-        var candidates = new List<string>();
-
-        switch (platform.OS, platform.Arch)
+        return (platform.OS, platform.Arch) switch
         {
-            case ("windows", "amd64"):
-                AddCandidates(candidates, preferV3
-                    ? [
-                        $"sing-box-ref1nd-{channel}-windows-amd64-v3.exe",
-                        $"sing-box-ref1nd-{channel}-windows-amd64v3.exe",
-                        $"sing-box-ref1nd-{channel}-windows-amd64-v1.exe",
-                        $"sing-box-ref1nd-{channel}-windows-amd64.exe",
-                        $"sing-box-{version}-windows-amd64v3.zip",
-                        $"sing-box-{version}-windows-amd64.zip"
-                    ]
-                    : [
-                        $"sing-box-ref1nd-{channel}-windows-amd64-v1.exe",
-                        $"sing-box-ref1nd-{channel}-windows-amd64.exe",
-                        $"sing-box-ref1nd-{channel}-windows-amd64-v3.exe",
-                        $"sing-box-ref1nd-{channel}-windows-amd64v3.exe",
-                        $"sing-box-{version}-windows-amd64.zip",
-                        $"sing-box-{version}-windows-amd64v3.zip"
-                    ]);
-                break;
-            case ("windows", "arm64"):
-                AddCandidates(candidates,
-                [
-                    $"sing-box-ref1nd-{channel}-windows-arm64.exe",
-                    $"sing-box-{version}-windows-arm64.zip"
-                ]);
-                break;
-            case ("linux", "amd64"):
-                AddCandidates(candidates, preferV3
-                    ? [
-                        $"sing-box-ref1nd-{channel}-linux-amd64-v3.tar.gz",
-                        $"sing-box-ref1nd-{channel}-linux-amd64v3.tar.gz",
-                        $"sing-box-ref1nd-{channel}-linux-amd64-v1.tar.gz",
-                        $"sing-box-ref1nd-{channel}-linux-amd64.tar.gz"
-                    ]
-                    : [
-                        $"sing-box-ref1nd-{channel}-linux-amd64-v1.tar.gz",
-                        $"sing-box-ref1nd-{channel}-linux-amd64.tar.gz",
-                        $"sing-box-ref1nd-{channel}-linux-amd64-v3.tar.gz",
-                        $"sing-box-ref1nd-{channel}-linux-amd64v3.tar.gz"
-                    ]);
-                AddCandidates(candidates, BuildLinuxAssetCandidates(version, preferV3 ? "amd64v3" : "amd64", preferV3 ? "amd64" : "amd64v3", preferredLinuxLibc, alternateLibc: alternateLinuxLibc));
-                break;
-            case ("linux", "arm64"):
-                AddCandidates(candidates,
-                [
-                    $"sing-box-ref1nd-{channel}-linux-arm64.tar.gz"
-                ]);
-                AddCandidates(candidates, BuildLinuxAssetCandidates(version, "arm64", null, preferredLinuxLibc, alternateLibc: alternateLinuxLibc));
-                break;
-            case ("darwin", "amd64"):
-                AddCandidates(candidates, preferV3
-                    ? [
-                        $"sing-box-ref1nd-{channel}-darwin-amd64-v3.tar.gz",
-                        $"sing-box-ref1nd-{channel}-darwin-amd64v3.tar.gz",
-                        $"sing-box-ref1nd-{channel}-darwin-amd64-v1.tar.gz",
-                        $"sing-box-ref1nd-{channel}-darwin-amd64.tar.gz",
-                        $"sing-box-{version}-darwin-amd64v3.tar.gz",
-                        $"sing-box-{version}-darwin-amd64.tar.gz"
-                    ]
-                    : [
-                        $"sing-box-ref1nd-{channel}-darwin-amd64-v1.tar.gz",
-                        $"sing-box-ref1nd-{channel}-darwin-amd64.tar.gz",
-                        $"sing-box-ref1nd-{channel}-darwin-amd64-v3.tar.gz",
-                        $"sing-box-ref1nd-{channel}-darwin-amd64v3.tar.gz",
-                        $"sing-box-{version}-darwin-amd64.tar.gz",
-                        $"sing-box-{version}-darwin-amd64v3.tar.gz"
-                    ]);
-                break;
-            case ("darwin", "arm64"):
-                AddCandidates(candidates,
-                [
-                    $"sing-box-ref1nd-{channel}-darwin-arm64.tar.gz",
-                    $"sing-box-{version}-darwin-arm64.tar.gz"
-                ]);
-                break;
-        }
-
-        return candidates.ToArray();
-    }
-
-    private static void AddCandidates(List<string> candidates, IEnumerable<string> additions)
-    {
-        foreach (var candidate in additions)
-        {
-            if (!string.IsNullOrWhiteSpace(candidate) &&
-                !candidates.Contains(candidate, StringComparer.OrdinalIgnoreCase))
-            {
-                candidates.Add(candidate);
-            }
-        }
+            ("windows", "amd64") => preferV3
+                ? [$"sing-box-{version}-windows-amd64v3.zip", $"sing-box-{version}-windows-amd64.zip"]
+                : [$"sing-box-{version}-windows-amd64.zip", $"sing-box-{version}-windows-amd64v3.zip"],
+            ("windows", "arm64") => [$"sing-box-{version}-windows-arm64.zip"],
+            ("linux", "amd64") => BuildLinuxAssetCandidates(version, preferV3 ? "amd64v3" : "amd64", preferV3 ? "amd64" : "amd64v3", preferredLinuxLibc, alternateLinuxLibc),
+            ("linux", "arm64") => BuildLinuxAssetCandidates(version, "arm64", null, preferredLinuxLibc, alternateLinuxLibc),
+            ("darwin", "amd64") => preferV3
+                ? [$"sing-box-{version}-darwin-amd64v3.tar.gz", $"sing-box-{version}-darwin-amd64.tar.gz"]
+                : [$"sing-box-{version}-darwin-amd64.tar.gz", $"sing-box-{version}-darwin-amd64v3.tar.gz"],
+            ("darwin", "arm64") => [$"sing-box-{version}-darwin-arm64.tar.gz"],
+            _ => []
+        };
     }
 
     private static string[] BuildLinuxAssetCandidates(string version, string primaryArch, string? fallbackArch, string preferredLibc, string alternateLibc)
