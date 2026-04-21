@@ -195,6 +195,7 @@ public partial class MainViewModel : ViewModelBase
 
         _kernelManager.DownloadProgressChanged += OnDownloadProgress;
         _kernelManager.StatusChanged += OnKernelStatusChanged;
+        _kernelManager.GitHubApiFallbackOccurred += OnKernelGitHubApiFallbackOccurred;
 
         var singBoxPath = _kernelManager.KernelPath;
         _singBoxManager = new SingBoxManager(singBoxPath, workingDirectory);
@@ -208,6 +209,7 @@ public partial class MainViewModel : ViewModelBase
         DashboardViewModel = new DashboardViewModel(_singBoxManager, _kernelManager, _profileManager, _configManager, _preferencesService, ShowToast, _logStore.AddLog);
         _lazyGroupsViewModel = new Lazy<GroupsViewModel>(() => new GroupsViewModel(_singBoxManager, _preferencesService));
         _appUpdateService = new AppUpdateService("https://github.com/821869798/carton", null, _logStore.AddLog);
+        _appUpdateService.GitHubApiFallbackOccurred += OnAppUpdateGitHubApiFallbackOccurred;
         _appUpdateCoordinator = new AppUpdateCoordinator(_appUpdateService, _localizationService);
         _appUpdateCoordinator.PropertyChanged += OnAppUpdateCoordinatorPropertyChanged;
         _transientPageUnloadTimer = new DispatcherTimer
@@ -341,6 +343,24 @@ public partial class MainViewModel : ViewModelBase
             KernelStatus = status;
             DownloadStatus = status;
         });
+    }
+
+    private void OnKernelGitHubApiFallbackOccurred(object? sender, EventArgs e)
+    {
+        ShowToast(
+            GetString(
+                "Toast.GitHubFallback.Kernel",
+                "GitHub API is unavailable. sing-box release lookup has switched to the releases page."),
+            3600);
+    }
+
+    private void OnAppUpdateGitHubApiFallbackOccurred(object? sender, EventArgs e)
+    {
+        ShowToast(
+            GetString(
+                "Toast.GitHubFallback.AppUpdate",
+                "GitHub API is unavailable. Carton update lookup has switched to the releases page."),
+            3600);
     }
 
     private void OnStatusChanged(object? sender, ServiceStatus status)
@@ -1149,6 +1169,8 @@ public partial class MainViewModel : ViewModelBase
             _settingsViewModel?.Dispose();
             _settingsViewModel = null;
             _appUpdateCoordinator.PropertyChanged -= OnAppUpdateCoordinatorPropertyChanged;
+            _kernelManager.GitHubApiFallbackOccurred -= OnKernelGitHubApiFallbackOccurred;
+            _appUpdateService.GitHubApiFallbackOccurred -= OnAppUpdateGitHubApiFallbackOccurred;
 
             if (_singBoxManager is IDisposable disposable)
             {

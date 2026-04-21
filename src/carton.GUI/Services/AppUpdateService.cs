@@ -20,6 +20,8 @@ namespace carton.GUI.Services;
 
 public interface IAppUpdateService
 {
+    event EventHandler? GitHubApiFallbackOccurred;
+
     string CurrentVersion { get; }
 
     bool IsUpdatePendingRestart { get; }
@@ -76,6 +78,7 @@ public sealed record AppUpdateDownloadProgress(
 public sealed class AppUpdateService : IAppUpdateService
 {
     private const string ForceGitHubApiFailEnvironmentVariable = "CARTON_FORCE_GITHUB_API_FAIL";
+    private static readonly TimeSpan GitHubLookupTimeout = TimeSpan.FromSeconds(6);
     private readonly string _repositoryUrl;
     private readonly string? _token;
     private readonly Action<string>? _log;
@@ -87,6 +90,8 @@ public sealed class AppUpdateService : IAppUpdateService
 
     private VelopackAsset? _stagedRelease;
     private string? _stagedChannel;
+
+    public event EventHandler? GitHubApiFallbackOccurred;
 
     public AppUpdateService(string repositoryUrl, string? token = null, Action<string>? log = null)
     {
@@ -104,7 +109,10 @@ public sealed class AppUpdateService : IAppUpdateService
         _log = log;
         _locator = new Lazy<IVelopackLocator>(() =>
             VelopackLocator.Current ?? VelopackLocator.CreateDefaultForPlatform());
-        _httpClient = new HttpClient();
+        _httpClient = new HttpClient
+        {
+            Timeout = GitHubLookupTimeout
+        };
         _httpClient.DefaultRequestHeaders.UserAgent.Add(
             new ProductInfoHeaderValue("carton", Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0"));
         if (!string.IsNullOrWhiteSpace(_token))
@@ -287,6 +295,7 @@ public sealed class AppUpdateService : IAppUpdateService
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             Log($"GitHub API release lookup failed, falling back to releases page: {ex.Message}");
+            GitHubApiFallbackOccurred?.Invoke(this, EventArgs.Empty);
         }
 
         var fallbackRelease = await GetLatestReleaseInfoFromReleasesPageAsync(wantsPrerelease, cancellationToken).ConfigureAwait(false);

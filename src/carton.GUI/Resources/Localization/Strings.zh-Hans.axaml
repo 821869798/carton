@@ -91,6 +91,8 @@
   <x:String x:Key="Profiles.Toast.OpenFailed">无法打开文件</x:String>
   <x:String x:Key="Profiles.Toast.CopySuccess">已复制为</x:String>
   <x:String x:Key="Profiles.Toast.CopyFailed">复制失败</x:String>
+  <x:String x:Key="Toast.GitHubFallback.Kernel">GitHub API 不可用，已切换到 releases 页面继续查询 sing-box 发布信息。</x:String>
+  <x:String x:Key="Toast.GitHubFallback.AppUpdate">GitHub API 不可用，已切换到 releases 页面继续查询 Carton 更新。</x:String>
 
   <x:String x:Key="Dashboard.Section.Configuration">配置</x:String>
 	<x:String x:Key="Dashboard.Field.Port">Mixed 端口</x:String>

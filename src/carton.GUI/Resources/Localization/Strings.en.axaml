@@ -91,6 +91,8 @@
   <x:String x:Key="Profiles.Toast.OpenFailed">Failed to open file</x:String>
   <x:String x:Key="Profiles.Toast.CopySuccess">Copied to</x:String>
   <x:String x:Key="Profiles.Toast.CopyFailed">Copy failed</x:String>
+  <x:String x:Key="Toast.GitHubFallback.Kernel">GitHub API is unavailable. sing-box release lookup has switched to the releases page.</x:String>
+  <x:String x:Key="Toast.GitHubFallback.AppUpdate">GitHub API is unavailable. Carton update lookup has switched to the releases page.</x:String>
   <x:String x:Key="Profiles.Status.Updating">Updating...</x:String>
   <x:String x:Key="Profiles.Status.UpdateSucceeded">Update successful</x:String>
   <x:String x:Key="Profiles.Status.UpdateSucceededViaProxy">Update successful via mixed proxy</x:String>

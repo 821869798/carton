@@ -14,6 +14,7 @@ public interface IKernelManager
 {
     event EventHandler<DownloadProgress>? DownloadProgressChanged;
     event EventHandler<string>? StatusChanged;
+    event EventHandler? GitHubApiFallbackOccurred;
 
     KernelInfo? InstalledKernel { get; }
     bool IsKernelInstalled { get; }
@@ -53,6 +54,7 @@ public class KernelManager : IKernelManager
 
     public event EventHandler<DownloadProgress>? DownloadProgressChanged;
     public event EventHandler<string>? StatusChanged;
+    public event EventHandler? GitHubApiFallbackOccurred;
 
     public KernelInfo? InstalledKernel => _installedKernel;
     public bool IsKernelInstalled => File.Exists(_kernelPath);
@@ -60,12 +62,14 @@ public class KernelManager : IKernelManager
 
     private const int GitHubReleasesPageSize = 100;
     private const int GitHubReleasesMaxPages = 3;
+    private static readonly TimeSpan GitHubLookupTimeout = TimeSpan.FromSeconds(6);
     private const string ForceGitHubApiFailEnvironmentVariable = "CARTON_FORCE_GITHUB_API_FAIL";
     private const string GitHubApiUrl = "https://api.github.com/repos/SagerNet/sing-box/releases/latest";
     private const string GitHubDownloadUrl = "https://github.com/SagerNet/sing-box/releases/download";
     private const string GitHubReleasesPageUrl = "https://github.com/SagerNet/sing-box/releases";
     private static readonly string GitHubReleasesApiUrl = $"https://api.github.com/repos/SagerNet/sing-box/releases?per_page={GitHubReleasesPageSize}";
 
+    private const string Ref1ndDownloadUrl = "https://github.com/reF1nd/sing-box-releases/releases/download";
     private const string Ref1ndReleasesPageUrl = "https://github.com/reF1nd/sing-box-releases/releases";
     private static readonly string Ref1ndReleasesApiUrl = $"https://api.github.com/repos/reF1nd/sing-box-releases/releases?per_page={GitHubReleasesPageSize}";
 
@@ -266,25 +270,27 @@ public class KernelManager : IKernelManager
             if (mirror is DownloadMirror.Ref1ndStable or DownloadMirror.Ref1ndTest)
             {
                 var platform = PlatformInfo.Current;
-                var releaseAsset = await GetRef1ndReleaseAssetAsync(platform, mirror);
-                if (releaseAsset == null)
+                var ref1ndTag = await GetLatestRef1ndVersionAsync(mirror);
+                if (string.IsNullOrWhiteSpace(ref1ndTag))
+                {
+                    StatusChanged?.Invoke(this, "Failed to get latest version");
+                    return null;
+                }
+
+                var channelLabel = GetRef1ndChannelLabel(mirror);
+                var tempFile = await DownloadRef1ndPackageAsync(platform, ref1ndTag, mirror, channelLabel);
+                if (string.IsNullOrWhiteSpace(tempFile))
                 {
                     StatusChanged?.Invoke(this, $"ref1nd channel does not support platform: {platform.OS}-{platform.Arch}");
                     return null;
                 }
 
-                var channelLabel = GetRef1ndChannelLabel(mirror);
-                StatusChanged?.Invoke(this, $"Downloading ref1nd sing-box {releaseAsset.TagName} ({channelLabel})...");
-
-                var tempExt = GetPackageExtension(releaseAsset.AssetName);
-                var tempFile = Path.Combine(Path.GetTempPath(), $"sing-box-ref1nd-{Guid.NewGuid():N}{tempExt}");
-                await DownloadFileAsync(releaseAsset.DownloadUrl, tempFile);
-                StatusChanged?.Invoke(this, $"Downloaded ref1nd sing-box {releaseAsset.TagName} ({channelLabel})");
+                StatusChanged?.Invoke(this, $"Downloaded ref1nd sing-box {ref1ndTag} ({channelLabel})");
 
                 return new KernelPackageDownloadResult
                 {
                     TempFilePath = tempFile,
-                    VersionLabel = releaseAsset.TagName,
+                    VersionLabel = ref1ndTag,
                     SourceChannel = mirror == DownloadMirror.Ref1ndTest
                         ? KernelInstallChannel.Ref1ndTest
                         : KernelInstallChannel.Ref1ndStable
@@ -400,9 +406,10 @@ public class KernelManager : IKernelManager
         }
         catch
         {
+            GitHubApiFallbackOccurred?.Invoke(this, EventArgs.Empty);
             // Fallback: follow the /releases/latest redirect to get the tag.
             using var request = new HttpRequestMessage(HttpMethod.Head, "https://github.com/SagerNet/sing-box/releases/latest");
-            using var response = await _httpClient.SendAsync(request);
+            using var response = await SendWithGitHubLookupTimeoutAsync(request);
             var finalUrl = response.RequestMessage?.RequestUri?.ToString();
 
             if (finalUrl != null && finalUrl.Contains("/releases/tag/"))
@@ -423,6 +430,7 @@ public class KernelManager : IKernelManager
         }
         catch
         {
+            GitHubApiFallbackOccurred?.Invoke(this, EventArgs.Empty);
             return await GetLatestVersionFromReleasesPageAsync(GitHubReleasesPageUrl, wantPrerelease: true);
         }
     }
@@ -438,6 +446,7 @@ public class KernelManager : IKernelManager
         }
         catch
         {
+            GitHubApiFallbackOccurred?.Invoke(this, EventArgs.Empty);
             return await GetLatestVersionFromReleasesPageAsync(Ref1ndReleasesPageUrl, wantPrerelease);
         }
     }
@@ -515,57 +524,130 @@ public class KernelManager : IKernelManager
            property.ValueKind is JsonValueKind.True or JsonValueKind.False &&
            property.GetBoolean();
 
-    private async Task<Ref1ndReleaseAssetInfo?> GetRef1ndReleaseAssetAsync(PlatformInfo platform, DownloadMirror mirror)
+    private async Task<string?> DownloadRef1ndPackageAsync(PlatformInfo platform, string tagName, DownloadMirror mirror, string channelLabel)
     {
-        var releases = await GetGitHubReleaseListAsync(Ref1ndReleasesApiUrl);
-        if (releases.Count == 0)
+        foreach (var candidate in GetRef1ndAssetCandidates(platform, tagName, mirror))
         {
-            return null;
-        }
+            var tempExt = GetPackageExtension(candidate);
+            var tempFile = Path.Combine(Path.GetTempPath(), $"sing-box-ref1nd-{Guid.NewGuid():N}{tempExt}");
+            var downloadUrl = $"{Ref1ndDownloadUrl}/{tagName}/{candidate}";
 
-        var wantPrerelease = mirror == DownloadMirror.Ref1ndTest;
-        var release = SelectLatestRelease(releases, wantPrerelease);
-        if (release == null || string.IsNullOrWhiteSpace(release.TagName))
-        {
-            return null;
-        }
-
-        var version = release.TagName.TrimStart('v');
-        foreach (var candidate in GetRef1ndAssetCandidates(platform, version))
-        {
-            var asset = release.Assets.FirstOrDefault(item =>
-                string.Equals(item.Name, candidate, StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(item.BrowserDownloadUrl));
-
-            if (asset != null)
+            try
             {
-                return new Ref1ndReleaseAssetInfo(release.TagName, asset.Name, asset.BrowserDownloadUrl);
+                StatusChanged?.Invoke(this, $"Downloading ref1nd sing-box {tagName} ({channelLabel})...");
+                await DownloadFileAsync(downloadUrl, tempFile);
+                return tempFile;
+            }
+            catch
+            {
+                TryDeleteFile(tempFile);
             }
         }
 
         return null;
     }
 
-    private static string[] GetRef1ndAssetCandidates(PlatformInfo platform, string version)
+    private static string[] GetRef1ndAssetCandidates(PlatformInfo platform, string tagName, DownloadMirror mirror)
     {
         var preferV3 = SupportsX64V3();
         var preferredLinuxLibc = IsLikelyMuslLinux() ? "musl" : "glibc";
         var alternateLinuxLibc = preferredLinuxLibc == "glibc" ? "musl" : "glibc";
+        var version = tagName.TrimStart('v');
+        var channel = mirror == DownloadMirror.Ref1ndTest ? "test" : "stable";
+        var candidates = new List<string>();
 
-        return (platform.OS, platform.Arch) switch
+        switch (platform.OS, platform.Arch)
         {
-            ("windows", "amd64") => preferV3
-                ? [$"sing-box-{version}-windows-amd64v3.zip", $"sing-box-{version}-windows-amd64.zip"]
-                : [$"sing-box-{version}-windows-amd64.zip", $"sing-box-{version}-windows-amd64v3.zip"],
-            ("windows", "arm64") => [$"sing-box-{version}-windows-arm64.zip"],
-            ("linux", "amd64") => BuildLinuxAssetCandidates(version, preferV3 ? "amd64v3" : "amd64", preferV3 ? "amd64" : "amd64v3", preferredLinuxLibc, alternateLinuxLibc),
-            ("linux", "arm64") => BuildLinuxAssetCandidates(version, "arm64", null, preferredLinuxLibc, alternateLinuxLibc),
-            ("darwin", "amd64") => preferV3
-                ? [$"sing-box-{version}-darwin-amd64v3.tar.gz", $"sing-box-{version}-darwin-amd64.tar.gz"]
-                : [$"sing-box-{version}-darwin-amd64.tar.gz", $"sing-box-{version}-darwin-amd64v3.tar.gz"],
-            ("darwin", "arm64") => [$"sing-box-{version}-darwin-arm64.tar.gz"],
-            _ => []
-        };
+            case ("windows", "amd64"):
+                AddCandidates(candidates, preferV3
+                    ? [
+                        $"sing-box-ref1nd-{channel}-windows-amd64-v3.exe",
+                        $"sing-box-ref1nd-{channel}-windows-amd64v3.exe",
+                        $"sing-box-ref1nd-{channel}-windows-amd64-v1.exe",
+                        $"sing-box-ref1nd-{channel}-windows-amd64.exe",
+                        $"sing-box-{version}-windows-amd64v3.zip",
+                        $"sing-box-{version}-windows-amd64.zip"
+                    ]
+                    : [
+                        $"sing-box-ref1nd-{channel}-windows-amd64-v1.exe",
+                        $"sing-box-ref1nd-{channel}-windows-amd64.exe",
+                        $"sing-box-ref1nd-{channel}-windows-amd64-v3.exe",
+                        $"sing-box-ref1nd-{channel}-windows-amd64v3.exe",
+                        $"sing-box-{version}-windows-amd64.zip",
+                        $"sing-box-{version}-windows-amd64v3.zip"
+                    ]);
+                break;
+            case ("windows", "arm64"):
+                AddCandidates(candidates,
+                [
+                    $"sing-box-ref1nd-{channel}-windows-arm64.exe",
+                    $"sing-box-{version}-windows-arm64.zip"
+                ]);
+                break;
+            case ("linux", "amd64"):
+                AddCandidates(candidates, preferV3
+                    ? [
+                        $"sing-box-ref1nd-{channel}-linux-amd64-v3.tar.gz",
+                        $"sing-box-ref1nd-{channel}-linux-amd64v3.tar.gz",
+                        $"sing-box-ref1nd-{channel}-linux-amd64-v1.tar.gz",
+                        $"sing-box-ref1nd-{channel}-linux-amd64.tar.gz"
+                    ]
+                    : [
+                        $"sing-box-ref1nd-{channel}-linux-amd64-v1.tar.gz",
+                        $"sing-box-ref1nd-{channel}-linux-amd64.tar.gz",
+                        $"sing-box-ref1nd-{channel}-linux-amd64-v3.tar.gz",
+                        $"sing-box-ref1nd-{channel}-linux-amd64v3.tar.gz"
+                    ]);
+                AddCandidates(candidates, BuildLinuxAssetCandidates(version, preferV3 ? "amd64v3" : "amd64", preferV3 ? "amd64" : "amd64v3", preferredLinuxLibc, alternateLibc: alternateLinuxLibc));
+                break;
+            case ("linux", "arm64"):
+                AddCandidates(candidates,
+                [
+                    $"sing-box-ref1nd-{channel}-linux-arm64.tar.gz"
+                ]);
+                AddCandidates(candidates, BuildLinuxAssetCandidates(version, "arm64", null, preferredLinuxLibc, alternateLibc: alternateLinuxLibc));
+                break;
+            case ("darwin", "amd64"):
+                AddCandidates(candidates, preferV3
+                    ? [
+                        $"sing-box-ref1nd-{channel}-darwin-amd64-v3.tar.gz",
+                        $"sing-box-ref1nd-{channel}-darwin-amd64v3.tar.gz",
+                        $"sing-box-ref1nd-{channel}-darwin-amd64-v1.tar.gz",
+                        $"sing-box-ref1nd-{channel}-darwin-amd64.tar.gz",
+                        $"sing-box-{version}-darwin-amd64v3.tar.gz",
+                        $"sing-box-{version}-darwin-amd64.tar.gz"
+                    ]
+                    : [
+                        $"sing-box-ref1nd-{channel}-darwin-amd64-v1.tar.gz",
+                        $"sing-box-ref1nd-{channel}-darwin-amd64.tar.gz",
+                        $"sing-box-ref1nd-{channel}-darwin-amd64-v3.tar.gz",
+                        $"sing-box-ref1nd-{channel}-darwin-amd64v3.tar.gz",
+                        $"sing-box-{version}-darwin-amd64.tar.gz",
+                        $"sing-box-{version}-darwin-amd64v3.tar.gz"
+                    ]);
+                break;
+            case ("darwin", "arm64"):
+                AddCandidates(candidates,
+                [
+                    $"sing-box-ref1nd-{channel}-darwin-arm64.tar.gz",
+                    $"sing-box-{version}-darwin-arm64.tar.gz"
+                ]);
+                break;
+        }
+
+        return candidates.ToArray();
+    }
+
+    private static void AddCandidates(List<string> candidates, IEnumerable<string> additions)
+    {
+        foreach (var candidate in additions)
+        {
+            if (!string.IsNullOrWhiteSpace(candidate) &&
+                !candidates.Contains(candidate, StringComparer.OrdinalIgnoreCase))
+            {
+                candidates.Add(candidate);
+            }
+        }
     }
 
     private static string[] BuildLinuxAssetCandidates(string version, string primaryArch, string? fallbackArch, string preferredLibc, string alternateLibc)
@@ -614,7 +696,7 @@ public class KernelManager : IKernelManager
 
     private async Task<string?> GetLatestVersionFromReleasesPageAsync(string releasesPageUrl, bool wantPrerelease)
     {
-        var html = await _httpClient.GetStringAsync(releasesPageUrl);
+        var html = await GetStringWithGitHubLookupTimeoutAsync(releasesPageUrl);
         var matches = Regex.Matches(
             html,
             @"/releases/tag/(?<tag>[^""#?&/]+)",
@@ -702,7 +784,21 @@ public class KernelManager : IKernelManager
     private async Task<string> GetApiStringAsync(string url)
     {
         ThrowIfSimulatingGitHubApiFailure(url);
-        return await _httpClient.GetStringAsync(url);
+        return await GetStringWithGitHubLookupTimeoutAsync(url);
+    }
+
+    private async Task<HttpResponseMessage> SendWithGitHubLookupTimeoutAsync(HttpRequestMessage request)
+    {
+        using var timeoutCts = new CancellationTokenSource(GitHubLookupTimeout);
+        return await _httpClient.SendAsync(request, timeoutCts.Token);
+    }
+
+    private async Task<string> GetStringWithGitHubLookupTimeoutAsync(string url)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        using var response = await SendWithGitHubLookupTimeoutAsync(request);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
     }
 
     private static string AppendPageParameter(string apiUrl, int page)
@@ -849,8 +945,6 @@ public class KernelManager : IKernelManager
         {
         }
     }
-
-    private sealed record Ref1ndReleaseAssetInfo(string TagName, string AssetName, string DownloadUrl);
 
     private sealed class GitHubReleaseInfo
     {
