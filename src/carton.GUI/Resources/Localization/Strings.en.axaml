@@ -199,7 +199,8 @@
 
 	<x:String x:Key="Settings.Section.General">General</x:String>
 	<x:String x:Key="Settings.General.StartAtLogin">Start at Login</x:String>
-	<x:String x:Key="Settings.General.AutoStartOnLaunch">Auto start Carton when opened</x:String>
+	<x:String x:Key="Settings.General.StartHiddenAtLogin">Start hidden to tray at login</x:String>
+	<x:String x:Key="Settings.General.AutoStartOnLaunch">Auto start kernel when Carton opens</x:String>
 	<x:String x:Key="Settings.General.AutoDisconnectConnectionsOnNodeSwitch">Auto disconnect connections on node switch (extra API interrupt)</x:String>
 	<x:String x:Key="Settings.General.RemoteConfigProxy">Use proxy for remote config updates</x:String>
 	<x:String x:Key="Settings.General.RemoteConfigProxy.Description">Takes effect after sing-box starts.</x:String>

@@ -3,6 +3,7 @@ namespace carton.Core.Models;
 public class AppPreferences
 {
     public bool StartAtLogin { get; set; }
+    public bool StartHiddenAtLogin { get; set; }
     public bool AutoStartOnLaunch { get; set; }
     public bool AutoDisconnectConnectionsOnNodeSwitch { get; set; } = false;
     public bool UseProxyForRemoteConfigUpdates { get; set; }

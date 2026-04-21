@@ -8,9 +8,13 @@ namespace carton;
 
 sealed class Program
 {
+    public static AppLaunchOptions LaunchOptions { get; private set; } = AppLaunchOptions.Default;
+
     [STAThread]
     public static void Main(string[] args)
     {
+        LaunchOptions = AppLaunchOptions.Parse(args);
+
         VelopackApp.Build()
             .SetArgs(args)
             .Run();

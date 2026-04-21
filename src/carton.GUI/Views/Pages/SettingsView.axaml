@@ -124,6 +124,10 @@
             <TextBlock Grid.Column="0" Text="{DynamicResource Settings.General.StartAtLogin}" VerticalAlignment="Center"/>
             <ToggleSwitch Grid.Column="1" Classes="OnlySwitch" IsChecked="{Binding StartAtLogin}"/>
           </Grid>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" IsEnabled="{Binding StartAtLogin}">
+            <TextBlock Grid.Column="0" Text="{DynamicResource Settings.General.StartHiddenAtLogin}" VerticalAlignment="Center"/>
+            <ToggleSwitch Grid.Column="1" Classes="OnlySwitch" IsChecked="{Binding StartHiddenAtLogin}"/>
+          </Grid>
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
             <TextBlock Grid.Column="0" Text="{DynamicResource Settings.General.AutoStartOnLaunch}" VerticalAlignment="Center"/>
             <ToggleSwitch Grid.Column="1" Classes="OnlySwitch" IsChecked="{Binding AutoStartOnLaunch}"/>

@@ -44,6 +44,9 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     private bool _autoStartOnLaunch;
 
     [ObservableProperty]
+    private bool _startHiddenAtLogin;
+
+    [ObservableProperty]
     private bool _autoDisconnectConnectionsOnNodeSwitch = true;
 
     [ObservableProperty]
@@ -75,8 +78,14 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
 
     partial void OnStartAtLoginChanged(bool value)
     {
-        _startupService?.ApplyStartAtLoginPreference(value);
+        _startupService?.ApplyStartAtLoginPreference(value, StartHiddenAtLogin);
         UpdatePreference(p => p.StartAtLogin = value);
+    }
+
+    partial void OnStartHiddenAtLoginChanged(bool value)
+    {
+        _startupService?.ApplyStartAtLoginPreference(StartAtLogin, value);
+        UpdatePreference(p => p.StartHiddenAtLogin = value);
     }
 
     partial void OnAutoStartOnLaunchChanged(bool value) => UpdatePreference(p => p.AutoStartOnLaunch = value);
@@ -317,6 +326,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
 
         _suppressPreferenceUpdates = true;
         StartAtLogin = _currentPreferences.StartAtLogin;
+        StartHiddenAtLogin = _currentPreferences.StartHiddenAtLogin;
         AutoStartOnLaunch = _currentPreferences.AutoStartOnLaunch;
         AutoDisconnectConnectionsOnNodeSwitch = _currentPreferences.AutoDisconnectConnectionsOnNodeSwitch;
         SelectedTheme = _currentPreferences.Theme;
@@ -330,7 +340,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         _suppressPreferenceUpdates = false;
         _appUpdate.Configure(SelectedUpdateChannel);
         _localizationService?.SetLanguage(_currentPreferences.Language);
-        _startupService?.ApplyStartAtLoginPreference(StartAtLogin);
+        _startupService?.ApplyStartAtLoginPreference(StartAtLogin, StartHiddenAtLogin);
     }
 
     private void OnDownloadProgress(object? sender, DownloadProgress e)

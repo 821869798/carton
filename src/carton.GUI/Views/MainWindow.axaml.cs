@@ -6,6 +6,7 @@ namespace carton.Views;
 public partial class MainWindow : Window
 {
     private bool _allowClose;
+    private bool _hideOnFirstOpen;
 
     public MainWindow()
     {
@@ -18,6 +19,15 @@ public partial class MainWindow : Window
     public void AllowClose()
     {
         _allowClose = true;
+    }
+
+    public void StartHiddenToTray()
+    {
+        _hideOnFirstOpen = true;
+        if (IsVisible)
+        {
+            HideOnFirstOpen();
+        }
     }
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)
@@ -34,6 +44,12 @@ public partial class MainWindow : Window
 
     private void OnOpened(object? sender, System.EventArgs e)
     {
+        if (_hideOnFirstOpen)
+        {
+            HideOnFirstOpen();
+            return;
+        }
+
         NotifyWindowVisible(IsVisible && WindowState != WindowState.Minimized);
     }
 
@@ -51,5 +67,12 @@ public partial class MainWindow : Window
         {
             viewModel.SetWindowVisible(isVisible);
         }
+    }
+
+    private void HideOnFirstOpen()
+    {
+        _hideOnFirstOpen = false;
+        NotifyWindowVisible(false);
+        Hide();
     }
 }

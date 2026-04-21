@@ -60,6 +60,10 @@ public partial class App : Application
             SingleInstanceService.RegisterMainWindow(mainWindow);
             _trayMenuService = new TrayMenuService();
             _trayMenuService.Initialize(this, desktop, mainWindow, viewModel);
+            if (Program.LaunchOptions.StartHidden)
+            {
+                mainWindow.StartHiddenToTray();
+            }
             desktop.Exit += OnDesktopExit;
         }
 
