@@ -1,15 +1,18 @@
 using System;
+using System.IO;
 using System.IO.Pipes;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using carton.Core.Utilities;
 
 namespace carton.GUI.Services;
 
 public static class SingleInstanceService
 {
     private static Mutex? _mutex;
+    private static FileStream? _lockFileStream;
     private static bool _ownsMutex;
     private static string _mutexName = string.Empty;
     private static string _pipeName = string.Empty;
@@ -20,8 +23,8 @@ public static class SingleInstanceService
     {
         _mutexName = BuildMutexName(instanceKey);
         _pipeName = BuildPipeName(instanceKey);
-        _mutex = new Mutex(true, _mutexName, out _ownsMutex);
-        if (!_ownsMutex)
+
+        if (!TryAcquireSingleInstanceLock(instanceKey))
         {
             return false;
         }
@@ -52,6 +55,21 @@ public static class SingleInstanceService
     {
         _listenerCts?.Cancel();
         _listenerCts = null;
+
+        if (_lockFileStream != null)
+        {
+            try
+            {
+                _lockFileStream.Dispose();
+            }
+            catch
+            {
+                // ignored
+            }
+
+            _lockFileStream = null;
+        }
+
         if (_ownsMutex && _mutex != null)
         {
             try
@@ -82,6 +100,36 @@ public static class SingleInstanceService
     private static string BuildPipeName(string instanceKey)
     {
         return $"carton-{instanceKey}-pipe";
+    }
+
+    private static bool TryAcquireSingleInstanceLock(string instanceKey)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            _mutex = new Mutex(true, _mutexName, out _ownsMutex);
+            return _ownsMutex;
+        }
+
+        return TryAcquireFileLock(instanceKey);
+    }
+
+    private static bool TryAcquireFileLock(string instanceKey)
+    {
+        try
+        {
+            var lockDirectory = Path.Combine(PathHelper.GetAppDataPath(), ".locks");
+            Directory.CreateDirectory(lockDirectory);
+            var lockFilePath = Path.Combine(lockDirectory, $"carton-{instanceKey}.lock");
+            _lockFileStream = new FileStream(lockFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            _ownsMutex = true;
+            return true;
+        }
+        catch (IOException)
+        {
+            _ownsMutex = false;
+            _lockFileStream = null;
+            return false;
+        }
     }
 
     private static async Task NotifyExistingInstanceAsync()
@@ -156,6 +204,8 @@ public static class SingleInstanceService
 
         window.Activate();
         window.Focus();
+        window.Topmost = true;
+        window.Topmost = false;
 #if WINDOWS
         if (OperatingSystem.IsWindows())
         {
