@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.Input;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -41,6 +42,10 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
     [ObservableProperty]
     private LogEntryViewModel? _selectedLog;
 
+    public ObservableCollection<LogEntryViewModel> SelectedLogs { get; } = new();
+
+    private bool CanCopySelectedLog => SelectedLogs.Count > 0 || SelectedLog != null;
+
     [ObservableProperty]
     private bool _isAutoScrollToLatest = true;
 
@@ -55,6 +60,7 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
         InitializeSourceFilters();
         _localizationService.LanguageChanged += OnLanguageChanged;
         _logStore.EntriesChanged += OnEntriesChanged;
+        SelectedLogs.CollectionChanged += (_, _) => CopySelectedLogCommand.NotifyCanExecuteChanged();
     }
 
     public void OnNavigatedTo()
@@ -111,18 +117,40 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
         _logStore.Clear();
     }
 
-    [RelayCommand]
+    partial void OnSelectedLogChanged(LogEntryViewModel? value)
+    {
+        CopySelectedLogCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanCopySelectedLog))]
     private async Task CopySelectedLog()
     {
-        if (SelectedLog == null) return;
-
-        var line = $"[{SelectedLog.Time}] [{SelectedLog.Level}] {SelectedLog.Message}";
-        if (!string.IsNullOrWhiteSpace(SelectedLog.SourceDisplayName))
+        var selectedLogs = GetSelectedLogsInDisplayOrder();
+        if (selectedLogs.Length == 0)
         {
-            line = $"[{SelectedLog.Time}] [{SelectedLog.SourceDisplayName}] [{SelectedLog.Level}] {SelectedLog.Message}";
+            return;
         }
 
-        await CopyTextToClipboardAsync(line);
+        var sb = new StringBuilder();
+        foreach (var log in selectedLogs)
+        {
+            sb.AppendLine(FormatLogLine(log));
+        }
+
+        await CopyTextToClipboardAsync(sb.ToString().TrimEnd('\r', '\n'));
+    }
+
+    private LogEntryViewModel[] GetSelectedLogsInDisplayOrder()
+    {
+        if (SelectedLogs.Count == 0)
+        {
+            return SelectedLog != null
+                ? new[] { SelectedLog }
+                : Array.Empty<LogEntryViewModel>();
+        }
+
+        var selectedSet = SelectedLogs.ToHashSet();
+        return Logs.Where(selectedSet.Contains).ToArray();
     }
 
     [RelayCommand]
@@ -133,10 +161,10 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
         var sb = new StringBuilder();
         foreach (var log in Logs)
         {
-            sb.Append('[').Append(log.Time).Append("] [").Append(log.SourceDisplayName).Append("] [").Append(log.Level).Append("] ").Append(log.Message).AppendLine();
+            sb.AppendLine(FormatLogLine(log));
         }
 
-        await CopyTextToClipboardAsync(sb.ToString());
+        await CopyTextToClipboardAsync(sb.ToString().TrimEnd('\r', '\n'));
     }
 
     private void OnEntriesChanged(object? sender, EventArgs e)
@@ -162,6 +190,7 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
 
     private void ReleaseVisibleLogs()
     {
+        SelectedLogs.Clear();
         Logs.Clear();
         SelectedLog = null;
     }
@@ -259,6 +288,7 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
 
         if (!selectedExists)
         {
+            SelectedLogs.Clear();
             SelectedLog = null;
         }
         else if (matchedSelectedLog != null && !ReferenceEquals(SelectedLog, matchedSelectedLog))
@@ -383,6 +413,13 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
             LogSource.SingBox => singBoxSourceDisplayName,
             _ => source.ToString()
         };
+    }
+
+    private static string FormatLogLine(LogEntryViewModel log)
+    {
+        return string.IsNullOrWhiteSpace(log.SourceDisplayName)
+            ? $"[{log.Time}] [{log.Level}] {log.Message}"
+            : $"[{log.Time}] [{log.SourceDisplayName}] [{log.Level}] {log.Message}";
     }
 
     private static async Task CopyTextToClipboardAsync(string text)

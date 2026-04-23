@@ -44,6 +44,12 @@ public partial class LogsView : UserControl
     private void OnAttachedToVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
     {
         _logsListBox ??= this.FindControl<ListBox>("LogsListBox");
+        if (_logsListBox != null)
+        {
+            _logsListBox.SelectionChanged -= OnLogsListBoxSelectionChanged;
+            _logsListBox.SelectionChanged += OnLogsListBoxSelectionChanged;
+        }
+
         EnsureScrollViewerHooked();
         UpdateActiveState();
     }
@@ -52,6 +58,11 @@ public partial class LogsView : UserControl
     {
         _isViewActive = false;
         DetachViewModel();
+        if (_logsListBox != null)
+        {
+            _logsListBox.SelectionChanged -= OnLogsListBoxSelectionChanged;
+        }
+
         if (_scrollViewer != null)
         {
             _scrollViewer.PropertyChanged -= OnScrollViewerPropertyChanged;
@@ -69,6 +80,11 @@ public partial class LogsView : UserControl
         {
             AttachViewModel(DataContext as LogsViewModel);
         }
+    }
+
+    private void OnLogsListBoxSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        SyncSelectionToViewModel();
     }
 
     private void OnControlPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
@@ -116,6 +132,7 @@ public partial class LogsView : UserControl
             _viewModel.Logs.CollectionChanged += OnLogsCollectionChanged;
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
             _autoScrollToBottom = _viewModel.IsAutoScrollToLatest;
+            SyncSelectionToViewModel();
         }
     }
 
@@ -153,15 +170,18 @@ public partial class LogsView : UserControl
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(LogsViewModel.IsAutoScrollToLatest) || _viewModel == null)
+        if (_viewModel == null)
         {
             return;
         }
 
-        _autoScrollToBottom = _viewModel.IsAutoScrollToLatest;
-        if (_autoScrollToBottom)
+        if (e.PropertyName == nameof(LogsViewModel.IsAutoScrollToLatest))
         {
-            RequestScrollToBottom();
+            _autoScrollToBottom = _viewModel.IsAutoScrollToLatest;
+            if (_autoScrollToBottom)
+            {
+                RequestScrollToBottom();
+            }
         }
     }
 
@@ -276,6 +296,25 @@ public partial class LogsView : UserControl
         }
 
         return false;
+    }
+
+    private void SyncSelectionToViewModel()
+    {
+        if (_viewModel == null || _logsListBox == null)
+        {
+            return;
+        }
+
+        _viewModel.SelectedLogs.Clear();
+        if (_logsListBox.SelectedItems != null)
+        {
+            foreach (var log in _logsListBox.SelectedItems.OfType<LogEntryViewModel>())
+            {
+                _viewModel.SelectedLogs.Add(log);
+            }
+        }
+
+        _viewModel.SelectedLog = _logsListBox.SelectedItem as LogEntryViewModel;
     }
 
     private static bool IsAtBottom(ScrollViewer scrollViewer)
