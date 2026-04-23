@@ -196,6 +196,7 @@ public partial class MainViewModel : ViewModelBase
         _kernelManager.DownloadProgressChanged += OnDownloadProgress;
         _kernelManager.StatusChanged += OnKernelStatusChanged;
         _kernelManager.GitHubApiFallbackOccurred += OnKernelGitHubApiFallbackOccurred;
+        _kernelManager.InstalledKernelChanged += OnInstalledKernelChanged;
 
         var singBoxPath = _kernelManager.KernelPath;
         _singBoxManager = new SingBoxManager(singBoxPath, workingDirectory);
@@ -269,7 +270,7 @@ public partial class MainViewModel : ViewModelBase
         }
         else
         {
-            KernelStatus = $"sing-box {kernelInfo!.KernelVersion}";
+            ApplyInstalledKernelInfo(kernelInfo);
         }
 
         await _singBoxManager.SyncRunningStateAsync();
@@ -343,6 +344,11 @@ public partial class MainViewModel : ViewModelBase
             KernelStatus = status;
             DownloadStatus = status;
         });
+    }
+
+    private void OnInstalledKernelChanged(object? sender, KernelInfo? kernelInfo)
+    {
+        Dispatcher.UIThread.Post(() => ApplyInstalledKernelInfo(kernelInfo));
     }
 
     private void OnKernelGitHubApiFallbackOccurred(object? sender, EventArgs e)
@@ -924,6 +930,14 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    private void ApplyInstalledKernelInfo(KernelInfo? kernelInfo)
+    {
+        IsKernelInstalled = kernelInfo != null;
+        KernelStatus = kernelInfo == null
+            ? string.Empty
+            : CartonApplicationInfo.FormatSingBoxStatus(kernelInfo.KernelVersion);
+    }
+
     private async Task<string?> EnsureProfileConfigPathForStartAsync(Profile profile)
     {
         var configPath = await _configManager.GetConfigPathAsync(profile.Id, profile.Type);
@@ -1049,7 +1063,7 @@ public partial class MainViewModel : ViewModelBase
             IsKernelInstalled = true;
             ShowKernelDialog = false;
             var kernelInfo = await _kernelManager.GetInstalledKernelInfoAsync();
-            KernelStatus = $"sing-box {kernelInfo?.KernelVersion ?? "installed"}";
+            ApplyInstalledKernelInfo(kernelInfo);
         }
         else
         {
@@ -1168,6 +1182,9 @@ public partial class MainViewModel : ViewModelBase
             _connectionsViewModel = null;
             _settingsViewModel?.Dispose();
             _settingsViewModel = null;
+            _kernelManager.DownloadProgressChanged -= OnDownloadProgress;
+            _kernelManager.StatusChanged -= OnKernelStatusChanged;
+            _kernelManager.InstalledKernelChanged -= OnInstalledKernelChanged;
             _appUpdateCoordinator.PropertyChanged -= OnAppUpdateCoordinatorPropertyChanged;
             _kernelManager.GitHubApiFallbackOccurred -= OnKernelGitHubApiFallbackOccurred;
             _appUpdateService.GitHubApiFallbackOccurred -= OnAppUpdateGitHubApiFallbackOccurred;

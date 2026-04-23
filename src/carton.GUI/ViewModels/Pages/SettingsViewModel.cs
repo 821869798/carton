@@ -15,6 +15,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using carton.Core.Services;
 using carton.Core.Models;
+using carton.Core.Utilities;
 using carton.GUI.Models;
 using carton.GUI.Services;
 
@@ -202,6 +203,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
 
         _kernelManager.DownloadProgressChanged += OnDownloadProgress;
         _kernelManager.StatusChanged += OnKernelStatusChanged;
+        _kernelManager.InstalledKernelChanged += OnInstalledKernelChanged;
         InitializeLanguages();
         InitializeUpdateChannels();
         UpdateLocalizedTexts();
@@ -306,6 +308,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         {
             _kernelManager.DownloadProgressChanged -= OnDownloadProgress;
             _kernelManager.StatusChanged -= OnKernelStatusChanged;
+            _kernelManager.InstalledKernelChanged -= OnInstalledKernelChanged;
         }
 
         if (_localizationService != null)
@@ -365,18 +368,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         if (_kernelManager == null) return;
 
         var kernelInfo = await _kernelManager.GetInstalledKernelInfoAsync();
-        IsKernelInstalled = kernelInfo != null;
-
-        if (kernelInfo != null)
-        {
-            KernelVersion = kernelInfo.KernelVersion;
-            KernelPath = kernelInfo.Path;
-        }
-        else
-        {
-            KernelVersion = GetString("Settings.Kernel.NotInstalled", "Not installed");
-            KernelPath = string.Empty;
-        }
+        ApplyInstalledKernelInfo(kernelInfo);
 
         var latest = await _kernelManager.GetLatestVersionAsync(SelectedKernelDownloadMirror);
         LatestVersion = latest ?? GetString("Common.Unknown", "unknown");
@@ -427,18 +419,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         }
 
         var kernelInfo = await _kernelManager.GetInstalledKernelInfoAsync();
-        IsKernelInstalled = kernelInfo != null;
-
-        if (kernelInfo != null)
-        {
-            KernelVersion = kernelInfo.KernelVersion;
-            KernelPath = kernelInfo.Path;
-        }
-        else
-        {
-            KernelVersion = GetString("Settings.Kernel.NotInstalled", "Not installed");
-            KernelPath = string.Empty;
-        }
+        ApplyInstalledKernelInfo(kernelInfo);
 
         await RefreshLatestVersionForSelectedMirrorAsync(showCheckingState: true);
     }
@@ -479,6 +460,26 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
             PersistPreferences();
             await RefreshKernelInfoAsync();
         }
+    }
+
+    private void OnInstalledKernelChanged(object? sender, KernelInfo? kernelInfo)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyInstalledKernelInfo(kernelInfo));
+    }
+
+    private void ApplyInstalledKernelInfo(KernelInfo? kernelInfo)
+    {
+        IsKernelInstalled = kernelInfo != null;
+
+        if (kernelInfo != null)
+        {
+            KernelVersion = kernelInfo.KernelVersion;
+            KernelPath = kernelInfo.Path;
+            return;
+        }
+
+        KernelVersion = GetString("Settings.Kernel.NotInstalled", "Not installed");
+        KernelPath = string.Empty;
     }
 
     [RelayCommand]

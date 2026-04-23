@@ -5,12 +5,12 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using carton.Core.Utilities;
 using NuGet.Versioning;
 using Velopack;
 using Velopack.Locators;
@@ -114,13 +114,13 @@ public sealed class AppUpdateService : IAppUpdateService
             Timeout = GitHubLookupTimeout
         };
         _httpClient.DefaultRequestHeaders.UserAgent.Add(
-            new ProductInfoHeaderValue("carton", Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0"));
+            new ProductInfoHeaderValue("carton", CartonApplicationInfo.Version));
         if (!string.IsNullOrWhiteSpace(_token))
         {
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _token);
         }
 
-        CurrentVersion = ResolveCurrentVersion() ?? "0.0.0";
+        CurrentVersion = CartonApplicationInfo.Version;
         _supportsInAppUpdates = DetermineSupportsInAppUpdates();
     }
 
@@ -507,29 +507,6 @@ public sealed class AppUpdateService : IAppUpdateService
     private bool IsRemoteVersionDifferent(string remoteVersion)
     {
         return !string.Equals(remoteVersion, CurrentVersion, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string? ResolveCurrentVersion()
-    {
-        var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
-        if (assembly == null)
-        {
-            return null;
-        }
-
-        var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-        if (!string.IsNullOrWhiteSpace(informational))
-        {
-            return StripBuildMetadata(informational);
-        }
-
-        return assembly.GetName().Version?.ToString();
-    }
-
-    private static string StripBuildMetadata(string version)
-    {
-        var plusIndex = version.IndexOf('+');
-        return plusIndex >= 0 ? version[..plusIndex] : version;
     }
 
     private static (string owner, string repo) ParseRepository(string repositoryUrl)

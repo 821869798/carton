@@ -32,6 +32,8 @@ public static class HttpClientFactory
         {
             _appVersion = appVersion;
         }
+
+        RefreshExternalUserAgent();
     }
 
     /// <summary>
@@ -101,11 +103,14 @@ public static class HttpClientFactory
 
     private static string BuildExternalUserAgent()
     {
-        var kernelVersion = CartonApplicationInfo.SingBoxVersion ?? CartonApplicationInfo.DefaultSingBoxVersion;
+        var kernelVersion = CartonApplicationInfo.EffectiveSingBoxVersion;
         return $"carton/{_appVersion} (sing-box {kernelVersion}; sing-box/{kernelVersion})";
     }
 
     private static void OnSingBoxVersionChanged(string? _)
+        => RefreshExternalUserAgent();
+
+    private static void RefreshExternalUserAgent()
     {
         var client = _external;
         if (client == null)

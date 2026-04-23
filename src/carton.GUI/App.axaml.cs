@@ -6,6 +6,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using carton.Core.Models;
 using carton.Core.Services;
+using carton.Core.Utilities;
 using carton.GUI.Models;
 using carton.GUI.Services;
 using carton.ViewModels;
@@ -15,7 +16,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 
 namespace carton;
 
@@ -30,15 +30,7 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
-        var appVersion = Assembly.GetEntryAssembly()
-            ?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-            ?.InformationalVersion
-            ?? Assembly.GetEntryAssembly()?.GetName().Version?.ToString()
-            ?? "1.0";
-        // strip build metadata (e.g. "+sha")
-        var plusIndex = appVersion.IndexOf('+');
-        if (plusIndex >= 0) appVersion = appVersion[..plusIndex];
-        HttpClientFactory.Initialize(appVersion);
+        HttpClientFactory.Initialize(CartonApplicationInfo.Version);
         var preferences = LoadOrCreatePreferences();
         LocalizationService.Instance.Initialize(preferences.Language);
         ThemeService.Instance.Initialize(preferences.Theme);

@@ -6,6 +6,7 @@ namespace carton.Core.Utilities;
 public static class CartonApplicationInfo
 {
     private const string DefaultVersion = "0.0.0";
+    public const string UnknownSingBoxVersion = "unknown";
     public const string DefaultSingBoxVersion = "1.13.0";
     private static readonly Lazy<string> VersionLazy = new(ResolveVersion);
     private static readonly object SingBoxVersionLock = new();
@@ -14,6 +15,13 @@ public static class CartonApplicationInfo
 
     public static string Version => VersionLazy.Value;
     public static string? SingBoxVersion => Volatile.Read(ref _singBoxVersion);
+    public static string EffectiveSingBoxVersion => SingBoxVersion ?? DefaultSingBoxVersion;
+
+    public static string FormatSingBoxVersion(string? version)
+        => NormalizeSingBoxVersion(version) ?? UnknownSingBoxVersion;
+
+    public static string FormatSingBoxStatus(string? version)
+        => $"sing-box {FormatSingBoxVersion(version)}";
 
     public static void SetSingBoxVersion(string? version)
     {
@@ -52,7 +60,7 @@ public static class CartonApplicationInfo
         }
     }
 
-    private static string? NormalizeSingBoxVersion(string? version)
+    public static string? NormalizeSingBoxVersion(string? version)
     {
         if (string.IsNullOrWhiteSpace(version))
         {

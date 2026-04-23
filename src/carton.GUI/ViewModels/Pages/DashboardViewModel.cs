@@ -411,6 +411,7 @@ public partial class DashboardViewModel : PageViewModelBase
         _remoteConfigUpdateService = new RemoteConfigUpdateService(configManager, profileManager, preferencesService);
         _toastWriter = toastWriter;
         _logWriter = logWriter;
+        _kernelManager.InstalledKernelChanged += OnInstalledKernelChanged;
         _singBoxManager.StatusChanged += OnStatusChanged;
         _singBoxManager.TrafficUpdated += OnTrafficUpdated;
         _singBoxManager.MemoryUpdated += OnMemoryUpdated;
@@ -1377,12 +1378,22 @@ public partial class DashboardViewModel : PageViewModelBase
         try
         {
             var info = await _kernelManager.GetInstalledKernelInfoAsync();
-            KernelVersion = info?.KernelVersion ?? GetString("Common.Unknown", "unknown");
+            ApplyInstalledKernelInfo(info);
         }
         catch
         {
-            KernelVersion = GetString("Common.Unknown", "unknown");
+            ApplyInstalledKernelInfo(null);
         }
+    }
+
+    private void OnInstalledKernelChanged(object? sender, KernelInfo? kernelInfo)
+    {
+        Dispatcher.UIThread.Post(() => ApplyInstalledKernelInfo(kernelInfo));
+    }
+
+    private void ApplyInstalledKernelInfo(KernelInfo? kernelInfo)
+    {
+        KernelVersion = kernelInfo?.KernelVersion ?? GetString("Common.Unknown", CartonApplicationInfo.UnknownSingBoxVersion);
     }
 
     private bool CanRefreshLiveMetrics()

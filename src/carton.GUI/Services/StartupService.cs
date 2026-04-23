@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Text;
 using Microsoft.Win32;
 
@@ -22,13 +23,13 @@ public sealed class StartupService : IStartupService
 
     public void ApplyStartAtLoginPreference(bool enabled, bool startHidden = false)
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (OperatingSystem.IsWindows())
         {
             ApplyWindowsStartAtLoginPreference(enabled, startHidden);
             return;
         }
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        if (OperatingSystem.IsLinux())
         {
             ApplyLinuxStartAtLoginPreference(enabled, startHidden);
         }
@@ -36,12 +37,12 @@ public sealed class StartupService : IStartupService
 
     public bool IsStartAtLoginEnabled()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (OperatingSystem.IsWindows())
         {
             return IsWindowsStartAtLoginEnabled();
         }
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        if (OperatingSystem.IsLinux())
         {
             return IsLinuxStartAtLoginEnabled();
         }
@@ -49,6 +50,7 @@ public sealed class StartupService : IStartupService
         return false;
     }
 
+    [SupportedOSPlatform("windows")]
     private static void ApplyWindowsStartAtLoginPreference(bool enabled, bool startHidden)
     {
         try
@@ -87,6 +89,7 @@ public sealed class StartupService : IStartupService
         }
     }
 
+    [SupportedOSPlatform("windows")]
     private static bool IsWindowsStartAtLoginEnabled()
     {
         try
@@ -105,6 +108,7 @@ public sealed class StartupService : IStartupService
         }
     }
 
+    [SupportedOSPlatform("linux")]
     private static void ApplyLinuxStartAtLoginPreference(bool enabled, bool startHidden)
     {
         try
@@ -149,6 +153,7 @@ public sealed class StartupService : IStartupService
         }
     }
 
+    [SupportedOSPlatform("linux")]
     private static bool IsLinuxStartAtLoginEnabled()
     {
         try
@@ -168,6 +173,7 @@ public sealed class StartupService : IStartupService
         }
     }
 
+    [SupportedOSPlatform("linux")]
     private static string? GetLinuxAutostartDesktopFilePath()
     {
         var configRoot = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
@@ -190,6 +196,7 @@ public sealed class StartupService : IStartupService
         return Path.Combine(configRoot, "autostart", LinuxDesktopFileName);
     }
 
+    [SupportedOSPlatform("linux")]
     private static string? GetLinuxStartupExecutablePath()
     {
         // AppImage runs from a transient mount point, so autostart must use the original file path.
@@ -211,6 +218,7 @@ public sealed class StartupService : IStartupService
             : null;
     }
 
+    [SupportedOSPlatform("linux")]
     private static bool IsValidLinuxStartupExecutable(string? path)
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
@@ -255,7 +263,7 @@ public sealed class StartupService : IStartupService
             " ",
             arguments
                 .Where(static argument => !string.IsNullOrWhiteSpace(argument))
-                .Select(EscapeDesktopEntryArgument));
+                .Select(static argument => EscapeDesktopEntryArgument(argument!)));
     }
 
     private static string EscapeDesktopEntryArgument(string value)

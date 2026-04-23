@@ -15,6 +15,7 @@ public interface IKernelManager
     event EventHandler<DownloadProgress>? DownloadProgressChanged;
     event EventHandler<string>? StatusChanged;
     event EventHandler? GitHubApiFallbackOccurred;
+    event EventHandler<KernelInfo?>? InstalledKernelChanged;
 
     KernelInfo? InstalledKernel { get; }
     bool IsKernelInstalled { get; }
@@ -55,6 +56,7 @@ public class KernelManager : IKernelManager
     public event EventHandler<DownloadProgress>? DownloadProgressChanged;
     public event EventHandler<string>? StatusChanged;
     public event EventHandler? GitHubApiFallbackOccurred;
+    public event EventHandler<KernelInfo?>? InstalledKernelChanged;
 
     public KernelInfo? InstalledKernel => _installedKernel;
     public bool IsKernelInstalled => File.Exists(_kernelPath);
@@ -89,30 +91,34 @@ public class KernelManager : IKernelManager
     {
         if (!File.Exists(_kernelPath))
         {
-            _installedKernel = null;
-            CartonApplicationInfo.SetSingBoxVersion(null);
-            return null;
+            return SetInstalledKernel(null, null);
         }
 
         try
         {
             var version = await GetInstalledVersionAsync();
-            _installedKernel = new KernelInfo
+            var kernelInfo = new KernelInfo
             {
-                KernelVersion = version ?? "unknown",
+                KernelVersion = CartonApplicationInfo.FormatSingBoxVersion(version),
                 Path = _kernelPath,
                 InstallTime = File.GetCreationTime(_kernelPath),
                 Platform = PlatformInfo.Current
             };
 
-            CartonApplicationInfo.SetSingBoxVersion(version);
-
-            return _installedKernel;
+            return SetInstalledKernel(kernelInfo, version);
         }
         catch
         {
             return null;
         }
+    }
+
+    private KernelInfo? SetInstalledKernel(KernelInfo? kernelInfo, string? version)
+    {
+        _installedKernel = kernelInfo;
+        CartonApplicationInfo.SetSingBoxVersion(version);
+        InstalledKernelChanged?.Invoke(this, kernelInfo);
+        return kernelInfo;
     }
 
     private async Task<string?> GetInstalledVersionAsync()
@@ -952,8 +958,7 @@ public class KernelManager : IKernelManager
                 File.Delete(_kernelPath);
             }
 
-            _installedKernel = null;
-            CartonApplicationInfo.SetSingBoxVersion(null);
+            SetInstalledKernel(null, null);
             StatusChanged?.Invoke(this, "Kernel uninstalled");
             return Task.FromResult(true);
         }
