@@ -87,7 +87,7 @@
             </Grid>
           </Grid>
 
-          <ProgressBar IsIndeterminate="False"
+          <ProgressBar IsIndeterminate="{Binding IsKernelProgressIndeterminate}"
                        Value="{Binding UpdateProgress}"
                        Maximum="100"
                        IsVisible="{Binding IsUpdatingKernel}"

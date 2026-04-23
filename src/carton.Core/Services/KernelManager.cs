@@ -46,6 +46,7 @@ public sealed class KernelPackageDownloadResult
 
 public class KernelManager : IKernelManager
 {
+    private const string WindowsNaiveProxyRuntimeDll = "libcronet.dll";
     private readonly string _binDirectory;
     private readonly string _kernelPath;
     private readonly HttpClient _httpClient = HttpClientFactory.External;
@@ -114,6 +115,9 @@ public class KernelManager : IKernelManager
         return kernelInfo;
     }
 
+    private string GetKernelWorkingDirectory()
+        => Path.GetDirectoryName(_kernelPath) ?? _binDirectory;
+
     private async Task<string?> GetInstalledVersionAsync()
     {
         if (!File.Exists(_kernelPath)) return null;
@@ -126,6 +130,7 @@ public class KernelManager : IKernelManager
                 {
                     FileName = _kernelPath,
                     Arguments = "version",
+                    WorkingDirectory = GetKernelWorkingDirectory(),
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -355,6 +360,7 @@ public class KernelManager : IKernelManager
             {
                 StatusChanged?.Invoke(this, "Installing...");
                 await KillRunningKernelAsync();
+                CleanupWindowsRuntimeSidecars();
                 var destination = Path.Combine(_binDirectory, "sing-box.exe");
                 File.Move(package.TempFilePath, destination, overwrite: true);
             }
@@ -694,13 +700,32 @@ public class KernelManager : IKernelManager
         if (platform.OS == "windows")
         {
             using var archive = ZipFile.OpenRead(archivePath);
-            foreach (var entry in archive.Entries)
+            var singBoxEntry = archive.Entries.FirstOrDefault(entry =>
+                !string.IsNullOrWhiteSpace(entry.Name) &&
+                entry.FullName.EndsWith("sing-box.exe", StringComparison.OrdinalIgnoreCase));
+
+            if (singBoxEntry == null)
             {
-                if (entry.FullName.EndsWith("sing-box.exe"))
-                {
-                    entry.ExtractToFile(Path.Combine(destination, "sing-box.exe"), true);
-                    return;
-                }
+                throw new FileNotFoundException("sing-box.exe was not found in the archive.");
+            }
+
+            var runtimeDirectory = GetArchiveEntryDirectory(singBoxEntry.FullName);
+            var runtimeEntries = archive.Entries.Where(entry =>
+                    !string.IsNullOrWhiteSpace(entry.Name) &&
+                    string.Equals(GetArchiveEntryDirectory(entry.FullName), runtimeDirectory, StringComparison.OrdinalIgnoreCase) &&
+                    IsWindowsRuntimeCompanion(entry.Name))
+                .ToList();
+
+            if (runtimeEntries.Count == 0)
+            {
+                throw new FileNotFoundException("No Windows runtime files were found in the archive.");
+            }
+
+            CleanupWindowsRuntimeSidecars();
+
+            foreach (var entry in runtimeEntries)
+            {
+                entry.ExtractToFile(Path.Combine(destination, entry.Name), true);
             }
         }
         else
@@ -773,6 +798,32 @@ public class KernelManager : IKernelManager
         }
     }
 
+    private void CleanupWindowsRuntimeSidecars()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        TryDeleteFile(Path.Combine(_binDirectory, "sing-box.exe"));
+
+        foreach (var dllPath in Directory.EnumerateFiles(_binDirectory, "*.dll", SearchOption.TopDirectoryOnly))
+        {
+            TryDeleteFile(dllPath);
+        }
+    }
+
+    private static string GetArchiveEntryDirectory(string fullName)
+    {
+        var normalized = fullName.Replace('\\', '/').Trim('/');
+        var lastSlash = normalized.LastIndexOf('/');
+        return lastSlash >= 0 ? normalized[..lastSlash] : string.Empty;
+    }
+
+    private static bool IsWindowsRuntimeCompanion(string fileName)
+        => fileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+           fileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase);
+
     private sealed record GitHubAtomRelease(string Tag, string Title);
 
     public async Task<bool> InstallCustomKernelAsync(string sourcePath)
@@ -789,6 +840,12 @@ public class KernelManager : IKernelManager
 
             var platform = PlatformInfo.Current;
             var targetExe = _kernelPath;
+            var targetDirectory = Path.GetDirectoryName(targetExe) ?? _binDirectory;
+            var sourceDirectory = Path.GetDirectoryName(sourcePath);
+            var sourceNaiveProxyRuntime = string.IsNullOrWhiteSpace(sourceDirectory)
+                ? null
+                : Path.Combine(sourceDirectory, WindowsNaiveProxyRuntimeDll);
+            var targetNaiveProxyRuntime = Path.Combine(targetDirectory, WindowsNaiveProxyRuntimeDll);
 
             // Kill running processes if any
             try
@@ -811,6 +868,15 @@ public class KernelManager : IKernelManager
             catch { }
 
             File.Copy(sourcePath, targetExe, true);
+
+            if (OperatingSystem.IsWindows())
+            {
+                if (!string.IsNullOrWhiteSpace(sourceNaiveProxyRuntime) && File.Exists(sourceNaiveProxyRuntime))
+                {
+                    TryDeleteFile(targetNaiveProxyRuntime);
+                    File.Copy(sourceNaiveProxyRuntime, targetNaiveProxyRuntime, true);
+                }
+            }
 
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
@@ -863,6 +929,7 @@ public class KernelManager : IKernelManager
                 {
                     FileName = _kernelPath,
                     Arguments = "version",
+                    WorkingDirectory = GetKernelWorkingDirectory(),
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     CreateNoWindow = true

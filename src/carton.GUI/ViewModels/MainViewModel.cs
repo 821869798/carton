@@ -43,6 +43,8 @@ public partial class MainViewModel : ViewModelBase
     private bool _isSessionDurationRefreshActive;
     private bool _suppressPreferenceUpdates;
     private int _sessionStartTimeMeasureHourDigits = 2;
+    private bool _isInteractionBlocked;
+    private string _interactionBlockedMessage = string.Empty;
 
     [ObservableProperty]
     private PageViewModelBase _currentPage;
@@ -112,6 +114,8 @@ public partial class MainViewModel : ViewModelBase
     public MainViewModel? KernelDialogHost => ShowKernelDialog ? this : null;
     public AppUpdateCoordinator AppUpdate => _appUpdateCoordinator;
     public AppUpdateCoordinator? AppUpdateDialogHost => !ShowKernelDialog && AppUpdate.ShowStartupUpdateDialog ? AppUpdate : null;
+    public bool IsInteractionBlocked => _isInteractionBlocked;
+    public string InteractionBlockedMessage => _interactionBlockedMessage;
 
     partial void OnShowKernelDialogChanged(bool value)
     {
@@ -604,17 +608,42 @@ public partial class MainViewModel : ViewModelBase
     public SettingsViewModel EnsureSettingsViewModel()
     {
         _settingsInactiveAtUtc = null;
-        _settingsViewModel ??= new SettingsViewModel(
-            _configManager,
-            _profileManager,
-            _kernelManager,
-            _singBoxManager,
-            _preferencesService,
-            _localizationService,
-            _themeService,
-            new StartupService(),
-            _appUpdateCoordinator);
+        if (_settingsViewModel == null)
+        {
+            _settingsViewModel = new SettingsViewModel(
+                _configManager,
+                _profileManager,
+                _kernelManager,
+                _singBoxManager,
+                _preferencesService,
+                _localizationService,
+                _themeService,
+                new StartupService(),
+                _appUpdateCoordinator,
+                ShowToast);
+            _settingsViewModel.PropertyChanged += OnSettingsViewModelPropertyChanged;
+            UpdateInteractionBlockState();
+        }
+
         return _settingsViewModel;
+    }
+
+    private void OnSettingsViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(e.PropertyName) ||
+            e.PropertyName == nameof(SettingsViewModel.IsBlockingUi) ||
+            e.PropertyName == nameof(SettingsViewModel.BlockingUiMessage))
+        {
+            UpdateInteractionBlockState();
+        }
+    }
+
+    private void UpdateInteractionBlockState()
+    {
+        _isInteractionBlocked = _settingsViewModel?.IsBlockingUi == true;
+        _interactionBlockedMessage = _settingsViewModel?.BlockingUiMessage ?? string.Empty;
+        OnPropertyChanged(nameof(IsInteractionBlocked));
+        OnPropertyChanged(nameof(InteractionBlockedMessage));
     }
 
     private void OnAppUpdateCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -1161,6 +1190,10 @@ public partial class MainViewModel : ViewModelBase
             _connectionsViewModel?.Dispose();
             _connectionsViewModel = null;
             _settingsViewModel?.Dispose();
+            if (_settingsViewModel != null)
+            {
+                _settingsViewModel.PropertyChanged -= OnSettingsViewModelPropertyChanged;
+            }
             _settingsViewModel = null;
             _kernelManager.DownloadProgressChanged -= OnDownloadProgress;
             _kernelManager.StatusChanged -= OnKernelStatusChanged;

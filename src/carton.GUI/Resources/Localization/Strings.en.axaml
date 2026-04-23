@@ -297,6 +297,11 @@
   <x:String x:Key="Settings.Kernel.ReplaceDialog.ReplaceNow">Replace Now</x:String>
   <x:String x:Key="Settings.Kernel.ReplaceDialog.Continue">Continue</x:String>
   <x:String x:Key="Settings.Kernel.ReplaceDialog.Later">Later</x:String>
+  <x:String x:Key="Settings.Kernel.CustomMissingLibcronetDialog.Title">Missing libcronet.dll</x:String>
+  <x:String x:Key="Settings.Kernel.CustomMissingLibcronetDialog.Message">libcronet.dll was not found next to the selected kernel executable. Missing this file may prevent the NaiveProxy protocol from working correctly. Continue installing this kernel?</x:String>
+  <x:String x:Key="Settings.Kernel.CustomMissingLibcronetDialog.Continue">Continue</x:String>
+  <x:String x:Key="Settings.Kernel.CustomMissingLibcronetDialog.Cancel">Cancel</x:String>
+  <x:String x:Key="Settings.Kernel.CustomInstall.SuccessToast">Custom kernel installed: {0}</x:String>
 
   <x:String x:Key="Common.Unknown">unknown</x:String>
 </ResourceDictionary>

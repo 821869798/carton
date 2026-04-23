@@ -278,6 +278,11 @@
   <x:String x:Key="Settings.Kernel.ReplaceDialog.ReplaceNow">立即替换</x:String>
   <x:String x:Key="Settings.Kernel.ReplaceDialog.Continue">继续</x:String>
   <x:String x:Key="Settings.Kernel.ReplaceDialog.Later">稍后</x:String>
+  <x:String x:Key="Settings.Kernel.CustomMissingLibcronetDialog.Title">缺少 libcronet.dll</x:String>
+  <x:String x:Key="Settings.Kernel.CustomMissingLibcronetDialog.Message">所选内核可执行文件同目录下没有找到 libcronet.dll。缺少该文件可能会影响 NaiveProxy 协议的正常运行，是否继续安装这个内核？</x:String>
+  <x:String x:Key="Settings.Kernel.CustomMissingLibcronetDialog.Continue">继续安装</x:String>
+  <x:String x:Key="Settings.Kernel.CustomMissingLibcronetDialog.Cancel">取消</x:String>
+  <x:String x:Key="Settings.Kernel.CustomInstall.SuccessToast">自定义内核安装完成：{0}</x:String>
 
   <x:String x:Key="Common.Unknown">未知</x:String>
 	<x:String x:Key="Dashboard.KernelStatus.Title">内核和状态</x:String>

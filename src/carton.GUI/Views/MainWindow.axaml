@@ -361,6 +361,28 @@
         </DataTemplate>
       </ContentControl.ContentTemplate>
     </ContentControl>
+
+    <Grid Grid.Row="0"
+          Grid.RowSpan="2"
+          IsVisible="{Binding IsInteractionBlocked}"
+          Background="#66000000">
+      <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+              CornerRadius="8"
+              Padding="20"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Center"
+              MinWidth="300"
+              MaxWidth="420">
+        <StackPanel Spacing="12">
+          <ProgressBar IsIndeterminate="True"
+                       Height="4"/>
+          <TextBlock Text="{Binding InteractionBlockedMessage}"
+                     TextWrapping="Wrap"
+                     TextAlignment="Center"
+                     HorizontalAlignment="Center"/>
+        </StackPanel>
+      </Border>
+    </Grid>
   </Grid>
 
 </Window>

@@ -23,6 +23,8 @@ namespace carton.ViewModels;
 
 public partial class SettingsViewModel : PageViewModelBase, IDisposable
 {
+    private const string WindowsNaiveProxyRuntimeDll = "libcronet.dll";
+    private readonly Action<string, int>? _toastWriter;
     private readonly IConfigManager? _configManager;
     private readonly IProfileManager? _profileManager;
     private readonly IKernelManager? _kernelManager;
@@ -126,6 +128,15 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     partial void OnIsUpdatingKernelChanged(bool value) => OnPropertyChanged(nameof(CanCheckKernelUpdate));
 
     [ObservableProperty]
+    private bool _isKernelProgressIndeterminate;
+
+    [ObservableProperty]
+    private bool _isBlockingUi;
+
+    [ObservableProperty]
+    private string _blockingUiMessage = string.Empty;
+
+    [ObservableProperty]
     private double _updateProgress;
 
     [ObservableProperty]
@@ -189,7 +200,8 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         ILocalizationService localizationService,
         IThemeService themeService,
         IStartupService startupService,
-        AppUpdateCoordinator appUpdateCoordinator) : this()
+        AppUpdateCoordinator appUpdateCoordinator,
+        Action<string, int>? toastWriter = null) : this()
     {
         _configManager = configManager;
         _profileManager = profileManager;
@@ -200,6 +212,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         _themeService = themeService;
         _startupService = startupService;
         _appUpdate = appUpdateCoordinator ?? new AppUpdateCoordinator();
+        _toastWriter = toastWriter;
 
         _kernelManager.DownloadProgressChanged += OnDownloadProgress;
         _kernelManager.StatusChanged += OnKernelStatusChanged;
@@ -507,20 +520,35 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         var file = files.FirstOrDefault();
         if (file == null) return;
 
+        if (!await ConfirmCustomWindowsKernelWithoutNaiveProxyRuntimeAsync(file.Path.LocalPath, window))
+        {
+            return;
+        }
+
         IsUpdatingKernel = true;
+        IsKernelProgressIndeterminate = true;
+        UpdateProgress = 0;
         UpdateStatus = GetString("Settings.Kernel.InstallingCustom", "Installing custom kernel...");
+        IsBlockingUi = true;
+        BlockingUiMessage = UpdateStatus;
         var hadInstalledKernel = _kernelManager.IsKernelInstalled;
 
         var readyToReplace = await PrepareForKernelReplacementAsync(requirePromptWhenRunning: true, promptAfterDownload: false);
         if (!readyToReplace)
         {
             IsUpdatingKernel = false;
+            IsKernelProgressIndeterminate = false;
+            IsBlockingUi = false;
+            BlockingUiMessage = string.Empty;
             return;
         }
 
-        var success = await _kernelManager.InstallCustomKernelAsync(file.Path.LocalPath);
+        var success = await Task.Run(() => _kernelManager.InstallCustomKernelAsync(file.Path.LocalPath));
 
         IsUpdatingKernel = false;
+        IsKernelProgressIndeterminate = false;
+        IsBlockingUi = false;
+        BlockingUiMessage = string.Empty;
 
         if (success)
         {
@@ -532,6 +560,11 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
             KernelCacheCleanupService.RecordInstalledChannel(_currentPreferences, KernelInstallChannel.Custom);
             PersistPreferences();
             await RefreshKernelInfoAsync();
+            _toastWriter?.Invoke(
+                string.Format(
+                    GetString("Settings.Kernel.CustomInstall.SuccessToast", "Custom kernel installed: {0}"),
+                    KernelVersion),
+                2600);
         }
     }
 
@@ -722,6 +755,75 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
             {
                 message,
                 buttons
+            }
+        };
+
+        return await dialog.ShowDialog<bool>(owner);
+    }
+
+    private async Task<bool> ConfirmCustomWindowsKernelWithoutNaiveProxyRuntimeAsync(string executablePath, Window owner)
+    {
+        if (!IsWindows)
+        {
+            return true;
+        }
+
+        var sourceDirectory = Path.GetDirectoryName(executablePath);
+        if (!string.IsNullOrWhiteSpace(sourceDirectory) &&
+            File.Exists(Path.Combine(sourceDirectory, WindowsNaiveProxyRuntimeDll)))
+        {
+            return true;
+        }
+
+        var dialog = new Window
+        {
+            Width = 500,
+            Height = 230,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Title = GetString("Settings.Kernel.CustomMissingLibcronetDialog.Title", "Missing libcronet.dll")
+        };
+
+        var message = new TextBlock
+        {
+            Text = GetString(
+                "Settings.Kernel.CustomMissingLibcronetDialog.Message",
+                "libcronet.dll was not found next to the selected kernel executable. NaiveProxy may not work correctly without it. Continue installing this kernel?"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 16)
+        };
+
+        var continueButton = new Button
+        {
+            Content = GetString("Settings.Kernel.CustomMissingLibcronetDialog.Continue", "Continue"),
+            MinWidth = 110
+        };
+        continueButton.Click += (_, _) => dialog.Close(true);
+
+        var cancelButton = new Button
+        {
+            Content = GetString("Settings.Kernel.CustomMissingLibcronetDialog.Cancel", "Cancel"),
+            MinWidth = 90
+        };
+        cancelButton.Click += (_, _) => dialog.Close(false);
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(20),
+            Children =
+            {
+                message,
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Spacing = 8,
+                    Children =
+                    {
+                        cancelButton,
+                        continueButton
+                    }
+                }
             }
         };
 
