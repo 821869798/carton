@@ -195,6 +195,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
                     StandardErrorEncoding = Encoding.UTF8
                 }
             };
+            ApplyLinuxLibrarySearchPath(_process.StartInfo);
 
             _process.OutputDataReceived += (_, e) =>
             {
@@ -276,6 +277,41 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
             SetError(error);
             return false;
         }
+    }
+
+    private void ApplyLinuxLibrarySearchPath(ProcessStartInfo startInfo)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            return;
+        }
+
+        var libraryDirectory = Path.GetDirectoryName(_singBoxPath);
+        if (string.IsNullOrWhiteSpace(libraryDirectory))
+        {
+            return;
+        }
+
+        var current = Environment.GetEnvironmentVariable("LD_LIBRARY_PATH");
+        startInfo.Environment["LD_LIBRARY_PATH"] = string.IsNullOrWhiteSpace(current)
+            ? libraryDirectory
+            : $"{libraryDirectory}:{current}";
+    }
+
+    private string BuildLinuxLibrarySearchPathPrefix()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            return string.Empty;
+        }
+
+        var libraryDirectory = Path.GetDirectoryName(_singBoxPath);
+        if (string.IsNullOrWhiteSpace(libraryDirectory))
+        {
+            return string.Empty;
+        }
+
+        return $"export LD_LIBRARY_PATH={QuoteShellArg(libraryDirectory)}${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}; ";
     }
 
     public async Task StopAsync()

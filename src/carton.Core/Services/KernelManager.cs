@@ -118,6 +118,19 @@ public class KernelManager : IKernelManager
     private string GetKernelWorkingDirectory()
         => Path.GetDirectoryName(_kernelPath) ?? _binDirectory;
 
+    private void ApplyLinuxLibrarySearchPath(ProcessStartInfo startInfo)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            return;
+        }
+
+        var current = Environment.GetEnvironmentVariable("LD_LIBRARY_PATH");
+        startInfo.Environment["LD_LIBRARY_PATH"] = string.IsNullOrWhiteSpace(current)
+            ? _binDirectory
+            : $"{_binDirectory}:{current}";
+    }
+
     private async Task<string?> GetInstalledVersionAsync()
     {
         if (!File.Exists(_kernelPath)) return null;
@@ -137,6 +150,7 @@ public class KernelManager : IKernelManager
                     CreateNoWindow = true
                 }
             };
+            ApplyLinuxLibrarySearchPath(process.StartInfo);
 
             process.Start();
             var stdoutTask = process.StandardOutput.ReadToEndAsync();
@@ -750,7 +764,16 @@ public class KernelManager : IKernelManager
             var singBoxFile = Directory.GetFiles(tempDir, "sing-box", SearchOption.AllDirectories).FirstOrDefault();
             if (singBoxFile != null)
             {
+                var sourceDirectory = Path.GetDirectoryName(singBoxFile);
                 File.Copy(singBoxFile, Path.Combine(destination, "sing-box"), true);
+
+                if (!string.IsNullOrWhiteSpace(sourceDirectory))
+                {
+                    foreach (var soFile in Directory.EnumerateFiles(sourceDirectory, "*.so*", SearchOption.TopDirectoryOnly))
+                    {
+                        File.Copy(soFile, Path.Combine(destination, Path.GetFileName(soFile)), true);
+                    }
+                }
             }
 
             Directory.Delete(tempDir, true);
@@ -935,6 +958,7 @@ public class KernelManager : IKernelManager
                     CreateNoWindow = true
                 }
             };
+            ApplyLinuxLibrarySearchPath(process.StartInfo);
 
             process.Start();
             await process.WaitForExitAsync();

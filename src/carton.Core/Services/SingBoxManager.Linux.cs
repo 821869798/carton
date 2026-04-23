@@ -91,7 +91,7 @@ public partial class SingBoxManager
     private async Task<ElevatedStartResult> StartElevatedOnLinuxAsync(string configPath, string logPath)
     {
         var shellCommand =
-            $"{QuoteShellArg(_singBoxPath)} run -c {QuoteShellArg(configPath)} < /dev/null >> {QuoteShellArg(logPath)} 2>&1 & echo $!";
+            $"{BuildLinuxLibrarySearchPathPrefix()}{QuoteShellArg(_singBoxPath)} run -c {QuoteShellArg(configPath)} < /dev/null >> {QuoteShellArg(logPath)} 2>&1 & echo $!";
 
         var startInfo = new ProcessStartInfo
         {
