@@ -2,9 +2,8 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics.X86;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using carton.Core.Models;
 using carton.Core.Utilities;
 
@@ -14,7 +13,6 @@ public interface IKernelManager
 {
     event EventHandler<DownloadProgress>? DownloadProgressChanged;
     event EventHandler<string>? StatusChanged;
-    event EventHandler? GitHubApiFallbackOccurred;
     event EventHandler<KernelInfo?>? InstalledKernelChanged;
 
     KernelInfo? InstalledKernel { get; }
@@ -55,25 +53,20 @@ public class KernelManager : IKernelManager
 
     public event EventHandler<DownloadProgress>? DownloadProgressChanged;
     public event EventHandler<string>? StatusChanged;
-    public event EventHandler? GitHubApiFallbackOccurred;
     public event EventHandler<KernelInfo?>? InstalledKernelChanged;
 
     public KernelInfo? InstalledKernel => _installedKernel;
     public bool IsKernelInstalled => File.Exists(_kernelPath);
     public string KernelPath => _kernelPath;
 
-    private const int GitHubReleasesPageSize = 100;
-    private const int GitHubReleasesMaxPages = 3;
     private static readonly TimeSpan GitHubLookupTimeout = TimeSpan.FromSeconds(6);
-    private const string ForceGitHubApiFailEnvironmentVariable = "CARTON_FORCE_GITHUB_API_FAIL";
-    private const string GitHubApiUrl = "https://api.github.com/repos/SagerNet/sing-box/releases/latest";
     private const string GitHubDownloadUrl = "https://github.com/SagerNet/sing-box/releases/download";
     private const string GitHubReleasesPageUrl = "https://github.com/SagerNet/sing-box/releases";
-    private static readonly string GitHubReleasesApiUrl = $"https://api.github.com/repos/SagerNet/sing-box/releases?per_page={GitHubReleasesPageSize}";
+    private const string GitHubReleasesAtomUrl = "https://github.com/SagerNet/sing-box/releases.atom";
 
     private const string Ref1ndDownloadUrl = "https://github.com/reF1nd/sing-box-releases/releases/download";
     private const string Ref1ndReleasesPageUrl = "https://github.com/reF1nd/sing-box-releases/releases";
-    private static readonly string Ref1ndReleasesApiUrl = $"https://api.github.com/repos/reF1nd/sing-box-releases/releases?per_page={GitHubReleasesPageSize}";
+    private const string Ref1ndReleasesAtomUrl = "https://github.com/reF1nd/sing-box-releases/releases.atom";
 
     public KernelManager(string baseDirectory)
     {
@@ -399,136 +392,26 @@ public class KernelManager : IKernelManager
         => mirror is DownloadMirror.GitHubPreRelease or DownloadMirror.GhProxyPreRelease;
 
     private async Task<string?> GetLatestOfficialReleaseVersionAsync()
-    {
-        try
-        {
-            var response = await GetApiStringAsync(GitHubApiUrl);
-            using var document = JsonDocument.Parse(response);
-            if (document.RootElement.TryGetProperty("tag_name", out var tagElement) &&
-                tagElement.ValueKind == JsonValueKind.String)
-            {
-                return tagElement.GetString();
-            }
-        }
-        catch
-        {
-            GitHubApiFallbackOccurred?.Invoke(this, EventArgs.Empty);
-            // Fallback: follow the /releases/latest redirect to get the tag.
-            using var request = new HttpRequestMessage(HttpMethod.Head, "https://github.com/SagerNet/sing-box/releases/latest");
-            using var response = await SendWithGitHubLookupTimeoutAsync(request);
-            var finalUrl = response.RequestMessage?.RequestUri?.ToString();
-
-            if (finalUrl != null && finalUrl.Contains("/releases/tag/"))
-            {
-                return finalUrl[(finalUrl.LastIndexOf('/') + 1)..];
-            }
-        }
-
-        return null;
-    }
+        => await GetLatestVersionFromReleaseFeedAsync(
+            GitHubReleasesAtomUrl,
+            GitHubReleasesPageUrl,
+            wantPrerelease: false);
 
     private async Task<string?> GetLatestOfficialPreReleaseVersionAsync()
-    {
-        try
-        {
-            var releases = await GetGitHubReleaseListAsync(GitHubReleasesApiUrl);
-            return SelectLatestRelease(releases, wantPrerelease: true)?.TagName;
-        }
-        catch
-        {
-            GitHubApiFallbackOccurred?.Invoke(this, EventArgs.Empty);
-            return await GetLatestVersionFromReleasesPageAsync(GitHubReleasesPageUrl, wantPrerelease: true);
-        }
-    }
+        => await GetLatestVersionFromReleaseFeedAsync(
+            GitHubReleasesAtomUrl,
+            GitHubReleasesPageUrl,
+            wantPrerelease: true);
 
     private async Task<string?> GetLatestRef1ndVersionAsync(DownloadMirror mirror)
     {
         var wantPrerelease = mirror == DownloadMirror.Ref1ndTest;
 
-        try
-        {
-            var releases = await GetGitHubReleaseListAsync(Ref1ndReleasesApiUrl);
-            return SelectLatestRelease(releases, wantPrerelease)?.TagName;
-        }
-        catch
-        {
-            GitHubApiFallbackOccurred?.Invoke(this, EventArgs.Empty);
-            return await GetLatestVersionFromReleasesPageAsync(Ref1ndReleasesPageUrl, wantPrerelease);
-        }
+        return await GetLatestVersionFromReleaseFeedAsync(
+            Ref1ndReleasesAtomUrl,
+            Ref1ndReleasesPageUrl,
+            wantPrerelease);
     }
-
-    private async Task<List<GitHubReleaseInfo>> GetGitHubReleaseListAsync(string apiUrl)
-    {
-        var releases = new List<GitHubReleaseInfo>();
-        for (var page = 1; page <= GitHubReleasesMaxPages; page++)
-        {
-            var response = await GetApiStringAsync(AppendPageParameter(apiUrl, page));
-            using var document = JsonDocument.Parse(response);
-            if (document.RootElement.ValueKind != JsonValueKind.Array)
-            {
-                break;
-            }
-
-            var releaseElements = document.RootElement;
-            if (releaseElements.GetArrayLength() == 0)
-            {
-                break;
-            }
-
-            foreach (var releaseElement in releaseElements.EnumerateArray())
-            {
-                if (releaseElement.ValueKind != JsonValueKind.Object ||
-                    TryGetBooleanProperty(releaseElement, "draft"))
-                {
-                    continue;
-                }
-
-                var release = new GitHubReleaseInfo
-                {
-                    TagName = TryGetStringProperty(releaseElement, "tag_name"),
-                    Name = TryGetStringProperty(releaseElement, "name"),
-                    Prerelease = TryGetBooleanProperty(releaseElement, "prerelease")
-                };
-
-                if (releaseElement.TryGetProperty("assets", out var assetsElement) &&
-                    assetsElement.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var assetElement in assetsElement.EnumerateArray())
-                    {
-                        if (assetElement.ValueKind != JsonValueKind.Object)
-                        {
-                            continue;
-                        }
-
-                        release.Assets.Add(new GitHubReleaseAssetInfo
-                        {
-                            Name = TryGetStringProperty(assetElement, "name"),
-                            BrowserDownloadUrl = TryGetStringProperty(assetElement, "browser_download_url")
-                        });
-                    }
-                }
-
-                releases.Add(release);
-            }
-
-            if (releaseElements.GetArrayLength() < GitHubReleasesPageSize)
-            {
-                break;
-            }
-        }
-
-        return releases;
-    }
-
-    private static string TryGetStringProperty(JsonElement element, string propertyName)
-        => element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
-            ? property.GetString() ?? string.Empty
-            : string.Empty;
-
-    private static bool TryGetBooleanProperty(JsonElement element, string propertyName)
-        => element.TryGetProperty(propertyName, out var property) &&
-           property.ValueKind is JsonValueKind.True or JsonValueKind.False &&
-           property.GetBoolean();
 
     private async Task<string?> DownloadRef1ndPackageAsync(PlatformInfo platform, string tagName, DownloadMirror mirror, string channelLabel)
     {
@@ -649,28 +532,80 @@ public class KernelManager : IKernelManager
         return null;
     }
 
-    private static GitHubReleaseInfo? SelectLatestRelease(IEnumerable<GitHubReleaseInfo> releases, bool wantPrerelease)
+    private async Task<string?> GetLatestVersionFromReleaseFeedAsync(
+        string atomFeedUrl,
+        string releasesPageUrl,
+        bool wantPrerelease)
     {
-        foreach (var release in releases)
+        try
         {
-            if (string.IsNullOrWhiteSpace(release.TagName))
+            var atom = await GetStringWithGitHubLookupTimeoutAsync(atomFeedUrl);
+            foreach (var release in ParseReleaseAtomFeed(atom))
+            {
+                if (string.IsNullOrWhiteSpace(release.Tag))
+                {
+                    continue;
+                }
+
+                if (MatchesPrereleasePreference(release, wantPrerelease))
+                {
+                    return release.Tag;
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return await GetLatestVersionFromReleasesPageAsync(releasesPageUrl, wantPrerelease);
+    }
+
+    private static IEnumerable<GitHubAtomRelease> ParseReleaseAtomFeed(string atom)
+    {
+        var document = XDocument.Parse(atom);
+        XNamespace atomNamespace = "http://www.w3.org/2005/Atom";
+
+        foreach (var entry in document.Descendants(atomNamespace + "entry"))
+        {
+            var tag = TryExtractReleaseTag(entry.Element(atomNamespace + "id")?.Value);
+            foreach (var link in entry.Elements(atomNamespace + "link"))
+            {
+                var href = link.Attribute("href")?.Value;
+                tag ??= TryExtractReleaseTag(href);
+            }
+
+            if (string.IsNullOrWhiteSpace(tag))
             {
                 continue;
             }
 
-            if (wantPrerelease == IsLikelyPrerelease(release))
-            {
-                return release;
-            }
+            yield return new GitHubAtomRelease(
+                tag,
+                entry.Element(atomNamespace + "title")?.Value ?? string.Empty);
         }
-
-        return null;
     }
 
-    private static bool IsLikelyPrerelease(GitHubReleaseInfo release)
-        => release.Prerelease ||
-           IsLikelyPrereleaseTag(release.TagName) ||
-           IsLikelyPrereleaseTag(release.Name);
+    private static string? TryExtractReleaseTag(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var match = Regex.Match(
+            value,
+            @"/releases/tag/(?<tag>[^#?&/]+)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success
+            ? Uri.UnescapeDataString(match.Groups["tag"].Value)
+            : null;
+    }
+
+    private static bool MatchesPrereleasePreference(GitHubAtomRelease release, bool wantPrerelease)
+    {
+        var isPrerelease = IsLikelyPrereleaseTag(release.Tag) || IsLikelyPrereleaseTag(release.Title);
+        return wantPrerelease == isPrerelease;
+    }
 
     private static bool IsLikelyPrereleaseTag(string? value)
     {
@@ -685,33 +620,6 @@ public class KernelManager : IKernelManager
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
-    private static bool ShouldForceGitHubApiFailure()
-        => string.Equals(
-            Environment.GetEnvironmentVariable(ForceGitHubApiFailEnvironmentVariable),
-            "1",
-            StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsGitHubApiUrl(string url)
-        => Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
-           string.Equals(uri.Host, "api.github.com", StringComparison.OrdinalIgnoreCase);
-
-    private static void ThrowIfSimulatingGitHubApiFailure(string url)
-    {
-        if (ShouldForceGitHubApiFailure() && IsGitHubApiUrl(url))
-        {
-            throw new HttpRequestException(
-                $"Simulated GitHub API failure via {ForceGitHubApiFailEnvironmentVariable}",
-                null,
-                System.Net.HttpStatusCode.Forbidden);
-        }
-    }
-
-    private async Task<string> GetApiStringAsync(string url)
-    {
-        ThrowIfSimulatingGitHubApiFailure(url);
-        return await GetStringWithGitHubLookupTimeoutAsync(url);
-    }
-
     private async Task<HttpResponseMessage> SendWithGitHubLookupTimeoutAsync(HttpRequestMessage request)
     {
         using var timeoutCts = new CancellationTokenSource(GitHubLookupTimeout);
@@ -724,12 +632,6 @@ public class KernelManager : IKernelManager
         using var response = await SendWithGitHubLookupTimeoutAsync(request);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
-    }
-
-    private static string AppendPageParameter(string apiUrl, int page)
-    {
-        var separator = apiUrl.Contains('?', StringComparison.Ordinal) ? "&" : "?";
-        return $"{apiUrl}{separator}page={page}";
     }
 
     /// <summary>
@@ -871,29 +773,7 @@ public class KernelManager : IKernelManager
         }
     }
 
-    private sealed class GitHubReleaseInfo
-    {
-        [JsonPropertyName("tag_name")]
-        public string TagName { get; set; } = string.Empty;
-
-        [JsonPropertyName("name")]
-        public string Name { get; set; } = string.Empty;
-
-        [JsonPropertyName("prerelease")]
-        public bool Prerelease { get; set; }
-
-        [JsonPropertyName("assets")]
-        public List<GitHubReleaseAssetInfo> Assets { get; set; } = [];
-    }
-
-    private sealed class GitHubReleaseAssetInfo
-    {
-        [JsonPropertyName("name")]
-        public string Name { get; set; } = string.Empty;
-
-        [JsonPropertyName("browser_download_url")]
-        public string BrowserDownloadUrl { get; set; } = string.Empty;
-    }
+    private sealed record GitHubAtomRelease(string Tag, string Title);
 
     public async Task<bool> InstallCustomKernelAsync(string sourcePath)
     {

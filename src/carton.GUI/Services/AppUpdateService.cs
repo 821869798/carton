@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using carton.Core.Utilities;
 using NuGet.Versioning;
 using Velopack;
@@ -20,8 +21,6 @@ namespace carton.GUI.Services;
 
 public interface IAppUpdateService
 {
-    event EventHandler? GitHubApiFallbackOccurred;
-
     string CurrentVersion { get; }
 
     bool IsUpdatePendingRestart { get; }
@@ -77,10 +76,8 @@ public sealed record AppUpdateDownloadProgress(
 
 public sealed class AppUpdateService : IAppUpdateService
 {
-    private const string ForceGitHubApiFailEnvironmentVariable = "CARTON_FORCE_GITHUB_API_FAIL";
     private static readonly TimeSpan GitHubLookupTimeout = TimeSpan.FromSeconds(6);
     private readonly string _repositoryUrl;
-    private readonly string? _token;
     private readonly Action<string>? _log;
     private readonly Lazy<IVelopackLocator> _locator;
     private readonly HttpClient _httpClient;
@@ -90,8 +87,6 @@ public sealed class AppUpdateService : IAppUpdateService
 
     private VelopackAsset? _stagedRelease;
     private string? _stagedChannel;
-
-    public event EventHandler? GitHubApiFallbackOccurred;
 
     public AppUpdateService(string repositoryUrl, string? token = null, Action<string>? log = null)
     {
@@ -105,7 +100,6 @@ public sealed class AppUpdateService : IAppUpdateService
         _repoOwner = repo.owner;
         _repoName = repo.repo;
         _repositoryUrl = $"https://github.com/{_repoOwner}/{_repoName}";
-        _token = token;
         _log = log;
         _locator = new Lazy<IVelopackLocator>(() =>
             VelopackLocator.Current ?? VelopackLocator.CreateDefaultForPlatform());
@@ -115,10 +109,6 @@ public sealed class AppUpdateService : IAppUpdateService
         };
         _httpClient.DefaultRequestHeaders.UserAgent.Add(
             new ProductInfoHeaderValue("carton", CartonApplicationInfo.Version));
-        if (!string.IsNullOrWhiteSpace(_token))
-        {
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _token);
-        }
 
         CurrentVersion = CartonApplicationInfo.Version;
         _supportsInAppUpdates = DetermineSupportsInAppUpdates();
@@ -170,16 +160,10 @@ public sealed class AppUpdateService : IAppUpdateService
             return null;
         }
 
-        if (ShouldForceGitHubApiFailure())
-        {
-            Log($"Skipping Velopack GitHub source check because {ForceGitHubApiFailEnvironmentVariable}=1");
-            return new AppUpdateResult(releaseInfo.Version, releaseInfo.Body, channel, null!, releaseInfo);
-        }
-
-        var manager = CreateManager(channel, allowVersionDowngrade: true);
+        var manager = CreateManager(channel, releaseInfo, allowVersionDowngrade: true);
         try
         {
-            Log($"Checking Velopack feed for updates (channel={channel}, allowVersionDowngrade={true})");
+            Log($"Checking Velopack feed from release assets (channel={channel}, tag={releaseInfo.Tag}, allowVersionDowngrade={true})");
 
             var info = await manager.CheckForUpdatesAsync().ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
@@ -205,97 +189,17 @@ public sealed class AppUpdateService : IAppUpdateService
         CancellationToken cancellationToken = default)
     {
         var wantsPrerelease = IsPrereleaseChannel(channel);
-        const int pageSize = 50;
-        const int maxPages = 5;
         try
         {
-            for (var page = 1; page <= maxPages; page++)
+            var atomRelease = await GetLatestReleaseInfoFromAtomFeedAsync(wantsPrerelease, cancellationToken).ConfigureAwait(false);
+            if (atomRelease != null)
             {
-                var apiUrl = $"https://api.github.com/repos/{_repoOwner}/{_repoName}/releases?per_page={pageSize}&page={page}";
-                using var response = await SendGitHubApiRequestAsync(HttpMethod.Get, apiUrl, cancellationToken).ConfigureAwait(false);
-                if (!response.IsSuccessStatusCode)
-                {
-                    var message = $"GitHub releases fetch failed: {(int)response.StatusCode} {response.ReasonPhrase}";
-                    Log(message);
-                    throw new HttpRequestException(message, null, response.StatusCode);
-                }
-
-                await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                using var document = await JsonDocument.ParseAsync(contentStream, cancellationToken: cancellationToken).ConfigureAwait(false);
-                var releases = document.RootElement;
-                if (releases.ValueKind != JsonValueKind.Array || releases.GetArrayLength() == 0)
-                {
-                    return null;
-                }
-
-                foreach (var releaseElement in releases.EnumerateArray())
-                {
-                    var isDraft = releaseElement.TryGetProperty("draft", out var draftProp) && draftProp.GetBoolean();
-                    if (isDraft)
-                    {
-                        continue;
-                    }
-
-                    var tag = releaseElement.TryGetProperty("tag_name", out var tagProp)
-                        ? tagProp.GetString() ?? string.Empty
-                        : string.Empty;
-                    if (string.IsNullOrWhiteSpace(tag))
-                    {
-                        continue;
-                    }
-
-                    var isPrerelease = releaseElement.TryGetProperty("prerelease", out var prereleaseProp) &&
-                                       prereleaseProp.GetBoolean();
-                    var name = releaseElement.TryGetProperty("name", out var nameProp)
-                        ? nameProp.GetString() ?? tag
-                        : tag;
-                    var resolvedPrerelease = IsLikelyPrerelease(isPrerelease, tag, name);
-                    if (wantsPrerelease != resolvedPrerelease)
-                    {
-                        continue;
-                    }
-
-                    var version = NormalizeVersion(tag);
-                    var body = releaseElement.TryGetProperty("body", out var bodyProp)
-                        ? bodyProp.GetString() ?? string.Empty
-                        : string.Empty;
-                    var publishedAt = releaseElement.TryGetProperty("published_at", out var publishedProp)
-                        ? ParseDateTime(publishedProp)
-                        : DateTimeOffset.MinValue;
-
-                    var assets = new List<GitHubAssetInfo>();
-                    if (releaseElement.TryGetProperty("assets", out var assetsElement) && assetsElement.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var asset in assetsElement.EnumerateArray())
-                        {
-                            var downloadUrl = asset.TryGetProperty("browser_download_url", out var urlProp)
-                                ? urlProp.GetString() ?? string.Empty
-                                : string.Empty;
-                            if (string.IsNullOrWhiteSpace(downloadUrl))
-                            {
-                                continue;
-                            }
-
-                            assets.Add(new GitHubAssetInfo(
-                                asset.TryGetProperty("name", out var assetNameProp) ? assetNameProp.GetString() ?? string.Empty : string.Empty,
-                                downloadUrl,
-                                asset.TryGetProperty("size", out var sizeProp) ? sizeProp.GetInt64() : 0));
-                        }
-                    }
-
-                    return new GitHubReleaseInfo(tag, version, resolvedPrerelease, name, body, assets, publishedAt);
-                }
-
-                if (releases.GetArrayLength() < pageSize)
-                {
-                    break;
-                }
+                return atomRelease;
             }
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
         {
-            Log($"GitHub API release lookup failed, falling back to releases page: {ex.Message}");
-            GitHubApiFallbackOccurred?.Invoke(this, EventArgs.Empty);
+            Log($"GitHub releases Atom lookup failed, falling back to releases page: {ex.Message}");
         }
 
         var fallbackRelease = await GetLatestReleaseInfoFromReleasesPageAsync(wantsPrerelease, cancellationToken).ConfigureAwait(false);
@@ -319,14 +223,8 @@ public sealed class AppUpdateService : IAppUpdateService
             throw new ArgumentNullException(nameof(update));
         }
 
-        if (ShouldForceGitHubApiFailure())
-        {
-            throw new InvalidOperationException(
-                $"Download is disabled while {ForceGitHubApiFailEnvironmentVariable}=1 because the check is running in simulated fallback mode.");
-        }
-
         var totalBytes = ResolveDownloadSize(update);
-        var manager = CreateManager(channel);
+        var manager = CreateManager(channel, update.ReleaseInfo);
         try
         {
             Log($"Downloading update {update.Version} (channel={channel})");
@@ -379,7 +277,10 @@ public sealed class AppUpdateService : IAppUpdateService
         }
     }
 
-    private UpdateManager CreateManager(string? channel, bool allowVersionDowngrade = false)
+    private UpdateManager CreateManager(
+        string? channel,
+        GitHubReleaseInfo? releaseInfo = null,
+        bool allowVersionDowngrade = false)
     {
         var normalizedChannel = ResolveVelopackChannel(channel);
 
@@ -390,7 +291,11 @@ public sealed class AppUpdateService : IAppUpdateService
             MaximumDeltasBeforeFallback = 2
         };
 
-        var source = new GithubSource(_repositoryUrl, _token ?? string.Empty, IsPrereleaseChannel(channel), null);
+        var downloader = new HttpClientFileDownloader();
+        var source = new SimpleWebSource(
+            GetReleaseDownloadBaseUrl(releaseInfo?.Tag),
+            downloader,
+            GitHubLookupTimeout.TotalMinutes);
         return new UpdateManager(source, options, _locator.Value);
     }
 
@@ -537,6 +442,22 @@ public sealed class AppUpdateService : IAppUpdateService
         return normalized;
     }
 
+    private string GetReleasesAtomUrl()
+        => $"{_repositoryUrl}/releases.atom";
+
+    private string GetReleaseDownloadBaseUrl(string? tag)
+    {
+        var resolvedTag = string.IsNullOrWhiteSpace(tag)
+            ? GetDefaultReleaseTag()
+            : tag.Trim();
+        return $"{_repositoryUrl}/releases/download/{Uri.EscapeDataString(resolvedTag)}";
+    }
+
+    private string GetDefaultReleaseTag()
+        => CurrentVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase)
+            ? CurrentVersion
+            : $"v{CurrentVersion}";
+
     private static bool IsPrereleaseChannel(string? channel)
         => string.Equals(channel, "beta", StringComparison.OrdinalIgnoreCase);
 
@@ -554,33 +475,6 @@ public sealed class AppUpdateService : IAppUpdateService
             value,
             @"(?:^|[.\-_])(?:alpha|beta|preview|pre|rc)(?:[.\-_]?\d+)?(?:$|[.\-_])",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    }
-
-    private static bool ShouldForceGitHubApiFailure()
-        => string.Equals(
-            Environment.GetEnvironmentVariable(ForceGitHubApiFailEnvironmentVariable),
-            "1",
-            StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsGitHubApiUrl(string url)
-        => Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
-           string.Equals(uri.Host, "api.github.com", StringComparison.OrdinalIgnoreCase);
-
-    private async Task<HttpResponseMessage> SendGitHubApiRequestAsync(
-        HttpMethod method,
-        string url,
-        CancellationToken cancellationToken)
-    {
-        if (ShouldForceGitHubApiFailure() && IsGitHubApiUrl(url))
-        {
-            throw new HttpRequestException(
-                $"Simulated GitHub API failure via {ForceGitHubApiFailEnvironmentVariable}",
-                null,
-                System.Net.HttpStatusCode.Forbidden);
-        }
-
-        var request = new HttpRequestMessage(method, url);
-        return await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<GitHubReleaseInfo?> GetLatestReleaseInfoFromReleasesPageAsync(
@@ -632,6 +526,102 @@ public sealed class AppUpdateService : IAppUpdateService
         return null;
     }
 
+    private async Task<GitHubReleaseInfo?> GetLatestReleaseInfoFromAtomFeedAsync(
+        bool wantsPrerelease,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var response = await _httpClient.GetAsync(GetReleasesAtomUrl(), cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+
+        var atom = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var release in ParseReleaseAtomFeed(atom))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (wantsPrerelease != release.IsPrerelease)
+            {
+                continue;
+            }
+
+            return new GitHubReleaseInfo(
+                release.Tag,
+                NormalizeVersion(release.Tag),
+                release.IsPrerelease,
+                string.IsNullOrWhiteSpace(release.Title) ? release.Tag : release.Title,
+                release.Body,
+                [],
+                release.PublishedAt);
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<GitHubAtomReleaseInfo> ParseReleaseAtomFeed(string atom)
+    {
+        var document = XDocument.Parse(atom);
+        XNamespace atomNamespace = "http://www.w3.org/2005/Atom";
+
+        foreach (var entry in document.Descendants(atomNamespace + "entry"))
+        {
+            var title = entry.Element(atomNamespace + "title")?.Value?.Trim() ?? string.Empty;
+            var tag = TryExtractReleaseTag(entry.Element(atomNamespace + "id")?.Value);
+            foreach (var link in entry.Elements(atomNamespace + "link"))
+            {
+                tag ??= TryExtractReleaseTag(link.Attribute("href")?.Value);
+            }
+
+            if (string.IsNullOrWhiteSpace(tag))
+            {
+                continue;
+            }
+
+            var body = NormalizeReleaseBody(
+                entry.Element(atomNamespace + "content")?.Value,
+                entry.Element(atomNamespace + "summary")?.Value);
+
+            yield return new GitHubAtomReleaseInfo(
+                tag,
+                title,
+                body,
+                IsLikelyPrerelease(false, tag, title),
+                ParseAtomDateTime(
+                    entry.Element(atomNamespace + "published")?.Value,
+                    entry.Element(atomNamespace + "updated")?.Value));
+        }
+    }
+
+    private static string? TryExtractReleaseTag(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var match = Regex.Match(
+            value,
+            @"/releases/tag/(?<tag>[^""#?&/]+)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success
+            ? Uri.UnescapeDataString(match.Groups["tag"].Value)
+            : null;
+    }
+
+    private static string NormalizeReleaseBody(string? htmlContent, string? summary)
+    {
+        var content = string.IsNullOrWhiteSpace(htmlContent) ? summary : htmlContent;
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return string.Empty;
+        }
+
+        var normalized = Regex.Replace(content, @"<br\s*/?>", "\n", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        normalized = Regex.Replace(normalized, @"</p\s*>", "\n\n", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        normalized = Regex.Replace(normalized, @"<[^>]+>", string.Empty, RegexOptions.CultureInvariant);
+        return WebUtility.HtmlDecode(normalized).Trim();
+    }
+
     private static string ResolveVelopackChannel(string? channel)
     {
         var channelSuffix = IsPrereleaseChannel(channel) ? "beta" : "release";
@@ -673,14 +663,23 @@ public sealed class AppUpdateService : IAppUpdateService
         return "unknown";
     }
 
-    private static DateTimeOffset ParseDateTime(JsonElement element)
+    private static DateTimeOffset ParseAtomDateTime(params string?[] values)
     {
-        if (element.ValueKind == JsonValueKind.String &&
-            DateTimeOffset.TryParse(element.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto))
+        foreach (var value in values)
         {
-            return dto;
+            if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto))
+            {
+                return dto;
+            }
         }
 
         return DateTimeOffset.MinValue;
     }
+
+    private sealed record GitHubAtomReleaseInfo(
+        string Tag,
+        string Title,
+        string Body,
+        bool IsPrerelease,
+        DateTimeOffset PublishedAt);
 }
