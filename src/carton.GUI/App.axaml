@@ -62,6 +62,23 @@
       <Setter Property="CornerRadius" Value="4"/>
     </Style>
 
+    <Style Selector="TextBox.jsonConfigEditorInput">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Foreground" Value="Transparent"/>
+    </Style>
+
+    <Style Selector="TextBox.jsonConfigEditorInput:pointerover">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+
+    <Style Selector="TextBox.jsonConfigEditorInput:focus">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+
     <Style Selector="ComboBox">
       <Setter Property="CornerRadius" Value="4"/>
     </Style>

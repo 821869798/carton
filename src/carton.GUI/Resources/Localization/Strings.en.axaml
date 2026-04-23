@@ -84,8 +84,13 @@
   <x:String x:Key="Profiles.Form.Title.New">New Profile</x:String>
   <x:String x:Key="Profiles.Form.Title.Edit">Edit Profile</x:String>
   <x:String x:Key="Profiles.Form.UpdateConfig">Update Config</x:String>
+  <x:String x:Key="Profiles.Form.FormatJson">Format</x:String>
+  <x:String x:Key="Profiles.Form.ValidateJson">Validate JSON</x:String>
   <x:String x:Key="Profiles.Form.OpenExternal">Open in External Editor</x:String>
   <x:String x:Key="Profiles.Form.CopyAsLocal">Copy as Local</x:String>
+  <x:String x:Key="Profiles.Toast.JsonFormatSuccess">JSON formatted</x:String>
+  <x:String x:Key="Profiles.Toast.JsonValid">JSON syntax is valid</x:String>
+  <x:String x:Key="Profiles.Toast.JsonInvalid">Invalid JSON</x:String>
   <x:String x:Key="Profiles.Toast.LocalConfigNotFound">Config file not found</x:String>
   <x:String x:Key="Profiles.Toast.RemoteConfigNotFound">Error: Remote config not found locally, please update config</x:String>
   <x:String x:Key="Profiles.Toast.OpenFailed">Failed to open file</x:String>

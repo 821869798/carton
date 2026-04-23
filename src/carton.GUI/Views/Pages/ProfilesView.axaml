@@ -56,7 +56,7 @@
 
 	<Grid RowDefinitions="Auto,Auto,*">
 		<Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="6">
-			<Grid ColumnDefinitions="Auto,*">
+			<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
 				<Button Grid.Column="0"
 						Classes="iconButton"
 						Command="{Binding GoBackCommand}"
@@ -72,6 +72,26 @@
 						   FontSize="20"
 						   FontWeight="SemiBold"
 						   VerticalAlignment="Center"/>
+				<StackPanel Grid.Column="2"
+							Orientation="Horizontal"
+							Spacing="6"
+							IsVisible="{Binding ShowConfigFullscreenView}">
+					<Button Classes="iconButton"
+							Command="{Binding FormatConfigJsonCommand}"
+							IsEnabled="{Binding !IsConfigReadOnly}"
+							ToolTip.Tip="{Binding FormatJsonText}">
+						<PathIcon Width="14"
+								  Height="14"
+								  Data="M4 5H20V7H4V5ZM4 9H16V11H4V9ZM4 13H20V15H4V13ZM4 17H16V19H4V17Z"/>
+					</Button>
+					<Button Classes="iconButton"
+							Command="{Binding ValidateConfigJsonCommand}"
+							ToolTip.Tip="{Binding ValidateJsonText}">
+						<PathIcon Width="14"
+								  Height="14"
+								  Data="M9 16.17L4.83 12L3.41 13.41L9 19L21 7L19.59 5.59L9 16.17Z"/>
+					</Button>
+				</StackPanel>
 			</Grid>
 		</Border>
 
@@ -298,22 +318,15 @@
 				  Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
 				  Panel.ZIndex="10">
 				<Grid Margin="12">
-					<Border
+					<Border x:Name="ConfigEditorHost"
 							Background="{DynamicResource SystemControlBackgroundBaseLowBrush}"
 							BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
 							BorderThickness="1"
 							CornerRadius="10"
-							Padding="8">
-						<TextBox Text="{Binding ConfigContent}"
-								 AcceptsReturn="True"
-								 TextWrapping="NoWrap"
-								 FontFamily="monospace"
-								 FontSize="12"
-								 IsReadOnly="{Binding IsConfigReadOnly}"
-								 ScrollViewer.HorizontalScrollBarVisibility="Auto"
-								 ScrollViewer.VerticalScrollBarVisibility="Auto"
-								 HorizontalAlignment="Stretch"
-								 VerticalAlignment="Stretch"/>
+							ClipToBounds="True">
+						<ContentControl x:Name="LazyConfigEditorHost"
+										HorizontalAlignment="Stretch"
+										VerticalAlignment="Stretch"/>
 					</Border>
 				</Grid>
 			</Grid>

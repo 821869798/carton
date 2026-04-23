@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Globalization;
+using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using carton.Core.Services;
@@ -114,6 +115,8 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     public bool IsRemoteEditStatusVisible => IsEditingMode && IsRemoteProfile;
     public bool CanEditContent => IsLocalProfile;
     public bool ShowExternalEditorAction => IsEditingMode && IsLocalProfile;
+    public string FormatJsonText => GetString("Profiles.Form.FormatJson", "Format");
+    public string ValidateJsonText => GetString("Profiles.Form.ValidateJson", "Validate JSON");
     public string UpdateConfigText => GetString("Profiles.Form.UpdateConfig", "更新配置");
     public string ContentActionText => IsContentEditorVisible
         ? GetString("Profiles.Form.Content.Hide", "Hide Content")
@@ -586,6 +589,40 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     }
 
     [RelayCommand]
+    private void FormatConfigJson()
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(ConfigContent);
+            ConfigContent = JsonSerializer.Serialize(
+                document.RootElement,
+                new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+            _toastWriter?.Invoke(GetString("Profiles.Toast.JsonFormatSuccess", "JSON formatted"), 1800);
+        }
+        catch (JsonException ex)
+        {
+            _toastWriter?.Invoke(FormatJsonError(ex), 3200);
+        }
+    }
+
+    [RelayCommand]
+    private void ValidateConfigJson()
+    {
+        try
+        {
+            using var _ = JsonDocument.Parse(ConfigContent);
+            _toastWriter?.Invoke(GetString("Profiles.Toast.JsonValid", "JSON syntax is valid"), 1800);
+        }
+        catch (JsonException ex)
+        {
+            _toastWriter?.Invoke(FormatJsonError(ex), 3600);
+        }
+    }
+
+    [RelayCommand]
     private async Task OpenInExternalEditor()
     {
         if (_configManager == null || _editingProfile == null) return;
@@ -941,6 +978,8 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         OnPropertyChanged(nameof(OpenExternalText));
         OnPropertyChanged(nameof(CopyAsLocalText));
         OnPropertyChanged(nameof(UpdateConfigText));
+        OnPropertyChanged(nameof(FormatJsonText));
+        OnPropertyChanged(nameof(ValidateJsonText));
     }
 
     private string GetString(string key, string fallback)
@@ -954,6 +993,17 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         return type == ProfileType.Local
             ? GetString("Profiles.Form.Type.Local", "Local")
             : GetString("Profiles.Form.Type.Remote", "Remote");
+    }
+
+    private string FormatJsonError(JsonException ex)
+    {
+        var prefix = GetString("Profiles.Toast.JsonInvalid", "Invalid JSON");
+        if (ex.LineNumber.HasValue && ex.BytePositionInLine.HasValue)
+        {
+            return $"{prefix}: line {ex.LineNumber.Value + 1}, column {ex.BytePositionInLine.Value + 1} - {ex.Message}";
+        }
+
+        return $"{prefix}: {ex.Message}";
     }
 }
 
