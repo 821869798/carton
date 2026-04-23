@@ -110,7 +110,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     public bool ShowLocalFileModeSelector => IsCreatingMode && IsLocalProfile;
     public bool ShowLocalImportFilePicker => IsCreatingMode && IsLocalImportMode;
     public bool ShowCreateLocalContentEditor => IsCreatingMode && IsLocalProfile && NewLocalMode == 0;
-    public bool ShowContentAction => IsEditingMode && IsRemoteProfile;
+    public bool ShowContentAction => IsEditingMode;
     public bool IsRemoteEditStatusVisible => IsEditingMode && IsRemoteProfile;
     public bool CanEditContent => IsLocalProfile;
     public bool ShowExternalEditorAction => IsEditingMode && IsLocalProfile;
@@ -120,10 +120,8 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         : GetString("Profiles.Form.Content.Show", "View Content");
     public string OpenExternalText => GetString("Profiles.Form.OpenExternal", "通过外部编辑器打开");
     public string CopyAsLocalText => GetString("Profiles.Form.CopyAsLocal", "复制为本地配置");
-    public bool ShowConfigEditor =>
-        ShowCreateLocalContentEditor ||
-        (IsEditingMode && IsLocalProfile) ||
-        (IsEditingMode && IsRemoteProfile && IsContentEditorVisible);
+    public bool ShowInlineConfigEditor => ShowCreateLocalContentEditor;
+    public bool ShowConfigFullscreenView => IsEditingMode && IsContentEditorVisible;
     public bool IsConfigReadOnly => IsEditingMode && IsRemoteProfile;
     public bool CanUpdateSelected => SelectedProfile?.IsRemoteType == true;
     public bool CanSaveProfile => IsEditingMode && IsFormChanged && !IsCreating;
@@ -144,7 +142,8 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanEditContent));
         OnPropertyChanged(nameof(ContentActionText));
         OnPropertyChanged(nameof(IsConfigReadOnly));
-        OnPropertyChanged(nameof(ShowConfigEditor));
+        OnPropertyChanged(nameof(ShowInlineConfigEditor));
+        OnPropertyChanged(nameof(ShowConfigFullscreenView));
         OnPropertyChanged(nameof(ShowExternalEditorAction));
     }
 
@@ -153,7 +152,8 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsLocalImportMode));
         OnPropertyChanged(nameof(ShowLocalImportFilePicker));
         OnPropertyChanged(nameof(ShowCreateLocalContentEditor));
-        OnPropertyChanged(nameof(ShowConfigEditor));
+        OnPropertyChanged(nameof(ShowInlineConfigEditor));
+        OnPropertyChanged(nameof(ShowConfigFullscreenView));
     }
 
     partial void OnIsCreatingModeChanged(bool value)
@@ -162,7 +162,8 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowLocalFileModeSelector));
         OnPropertyChanged(nameof(ShowLocalImportFilePicker));
         OnPropertyChanged(nameof(ShowCreateLocalContentEditor));
-        OnPropertyChanged(nameof(ShowConfigEditor));
+        OnPropertyChanged(nameof(ShowInlineConfigEditor));
+        OnPropertyChanged(nameof(ShowConfigFullscreenView));
     }
 
     partial void OnIsEditingModeChanged(bool value)
@@ -177,7 +178,8 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowLocalImportFilePicker));
         OnPropertyChanged(nameof(ShowCreateLocalContentEditor));
         OnPropertyChanged(nameof(CanSaveProfile));
-        OnPropertyChanged(nameof(ShowConfigEditor));
+        OnPropertyChanged(nameof(ShowInlineConfigEditor));
+        OnPropertyChanged(nameof(ShowConfigFullscreenView));
         OnPropertyChanged(nameof(ProfileFormTitle));
         OnPropertyChanged(nameof(ShowExternalEditorAction));
     }
@@ -190,7 +192,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     partial void OnIsContentEditorVisibleChanged(bool value)
     {
         OnPropertyChanged(nameof(ContentActionText));
-        OnPropertyChanged(nameof(ShowConfigEditor));
+        OnPropertyChanged(nameof(ShowConfigFullscreenView));
     }
 
     partial void OnNewProfileNameChanged(string value) => RecalculateFormChanged();
@@ -224,6 +226,18 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         _singBoxManager.StatusChanged += OnSingBoxStatusChanged;
         _ = LoadProfilesAsync();
         _ = RefreshRunningProfileIdAsync();
+    }
+
+    [RelayCommand]
+    private void GoBack()
+    {
+        if (ShowConfigFullscreenView)
+        {
+            IsContentEditorVisible = false;
+            return;
+        }
+
+        CancelCreate();
     }
 
     public async Task RefreshAsync()
