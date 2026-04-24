@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:carton.ViewModels"
+             xmlns:controls="using:carton.GUI.Controls"
              mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="500"
              x:Class="carton.Views.Pages.ProfilesView"
              x:DataType="vm:ProfilesViewModel">
@@ -52,6 +53,25 @@
 		<Style Selector="Button.iconButton:pressed">
 			<Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
 		</Style>
+		<Style Selector="Button.iconButton.saveButton">
+			<Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"/>
+		</Style>
+		<Style Selector="Button.iconButton.saveButton:enabled">
+			<Setter Property="Background" Value="{DynamicResource SystemAccentColor}"/>
+			<Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColor}"/>
+			<Setter Property="Foreground" Value="{DynamicResource SystemAccentColorForeground}"/>
+		</Style>
+		<Style Selector="Button.iconButton.saveButton:enabled:pointerover">
+			<Setter Property="Background" Value="{DynamicResource SystemAccentColor}"/>
+			<Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColor}"/>
+			<Setter Property="Foreground" Value="{DynamicResource SystemAccentColorForeground}"/>
+		</Style>
+		<Style Selector="Button.iconButton.saveButton:enabled:pressed">
+			<Setter Property="Background" Value="{DynamicResource SystemAccentColor}"/>
+			<Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColor}"/>
+			<Setter Property="Foreground" Value="{DynamicResource SystemAccentColorForeground}"/>
+			<Setter Property="Opacity" Value="0.88"/>
+		</Style>
  	</UserControl.Styles>
 
 	<Grid RowDefinitions="Auto,Auto,*">
@@ -77,19 +97,27 @@
 							Spacing="6"
 							IsVisible="{Binding ShowConfigFullscreenView}">
 					<Button Classes="iconButton"
-							Command="{Binding FormatConfigJsonCommand}"
-							IsEnabled="{Binding !IsConfigReadOnly}"
-							ToolTip.Tip="{Binding FormatJsonText}">
-						<PathIcon Width="14"
-								  Height="14"
-								  Data="M4 5H20V7H4V5ZM4 9H16V11H4V9ZM4 13H20V15H4V13ZM4 17H16V19H4V17Z"/>
-					</Button>
-					<Button Classes="iconButton"
 							Command="{Binding ValidateConfigJsonCommand}"
 							ToolTip.Tip="{Binding ValidateJsonText}">
 						<PathIcon Width="14"
 								  Height="14"
 								  Data="M9 16.17L4.83 12L3.41 13.41L9 19L21 7L19.59 5.59L9 16.17Z"/>
+					</Button>
+					<Button Classes="iconButton"
+							Command="{Binding FormatConfigJsonCommand}"
+							ToolTip.Tip="{Binding FormatJsonText}">
+						<PathIcon Width="14"
+								  Height="14"
+								  Data="M4 5H20V7H4V5ZM4 9H16V11H4V9ZM4 13H20V15H4V13ZM4 17H16V19H4V17Z"/>
+					</Button>
+					<Button Classes="iconButton saveButton"
+							Command="{Binding SaveProfileInEditorCommand}"
+							IsEnabled="{Binding CanSaveConfigInEditor}"
+							IsVisible="{Binding CanEditContent}"
+							ToolTip.Tip="{DynamicResource Profiles.Form.SaveButton}">
+						<PathIcon Width="14"
+								  Height="14"
+								  Data="M17 3H5A2 2 0 0 0 3 5V19A2 2 0 0 0 5 21H19A2 2 0 0 0 21 19V7L17 3ZM12 19A3 3 0 1 1 15 16A3 3 0 0 1 12 19ZM6 8V5H15V8Z"/>
 					</Button>
 				</StackPanel>
 			</Grid>
@@ -324,9 +352,10 @@
 							BorderThickness="1"
 							CornerRadius="10"
 							ClipToBounds="True">
-						<ContentControl x:Name="LazyConfigEditorHost"
-										HorizontalAlignment="Stretch"
-										VerticalAlignment="Stretch"/>
+						<controls:JsonConfigEditor HorizontalAlignment="Stretch"
+												 VerticalAlignment="Stretch"
+												 Text="{Binding ConfigContent, Mode=TwoWay}"
+												 IsReadOnly="{Binding IsConfigReadOnly}"/>
 					</Border>
 				</Grid>
 			</Grid>

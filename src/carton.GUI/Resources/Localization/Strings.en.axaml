@@ -89,6 +89,7 @@
   <x:String x:Key="Profiles.Form.OpenExternal">Open in External Editor</x:String>
   <x:String x:Key="Profiles.Form.CopyAsLocal">Copy as Local</x:String>
   <x:String x:Key="Profiles.Toast.JsonFormatSuccess">JSON formatted</x:String>
+  <x:String x:Key="Profiles.Toast.SaveSuccess">Profile saved</x:String>
   <x:String x:Key="Profiles.Toast.JsonValid">JSON syntax is valid</x:String>
   <x:String x:Key="Profiles.Toast.JsonInvalid">Invalid JSON</x:String>
   <x:String x:Key="Profiles.Toast.LocalConfigNotFound">Config file not found</x:String>
@@ -96,6 +97,10 @@
   <x:String x:Key="Profiles.Toast.OpenFailed">Failed to open file</x:String>
   <x:String x:Key="Profiles.Toast.CopySuccess">Copied to</x:String>
   <x:String x:Key="Profiles.Toast.CopyFailed">Copy failed</x:String>
+  <x:String x:Key="Profiles.UnsavedDialog.Title">Unsaved Changes</x:String>
+  <x:String x:Key="Profiles.UnsavedDialog.Message">You have unsaved changes. Save before going back?</x:String>
+  <x:String x:Key="Profiles.UnsavedDialog.SaveButton">Save</x:String>
+  <x:String x:Key="Profiles.UnsavedDialog.DiscardButton">Don't Save</x:String>
   <x:String x:Key="Toast.GitHubFallback.Kernel">GitHub API is unavailable. sing-box release lookup has switched to the releases page.</x:String>
   <x:String x:Key="Toast.GitHubFallback.AppUpdate">GitHub API is unavailable. Carton update lookup has switched to the releases page.</x:String>
   <x:String x:Key="Profiles.Status.Updating">Updating...</x:String>

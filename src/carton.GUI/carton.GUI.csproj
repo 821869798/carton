@@ -48,7 +48,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<TrimmerRootAssembly Include="System.Runtime.Serialization.Primitives" />
 		<TrimmerRootAssembly Include="carton.Core" />
 		<TrimmerRootAssembly Include="carton" />
 	</ItemGroup>

@@ -12,6 +12,7 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.Threading;
 
 namespace carton.GUI.Controls;
@@ -37,6 +38,7 @@ public sealed class JsonConfigEditor : Grid
         ColumnDefinitions = new ColumnDefinitions("*,Auto");
 
         _surface = new EditorSurface(this);
+        ActualThemeVariantChanged += (_, _) => _surface.InvalidateVisual();
         Children.Add(_surface);
 
         _horizontalScrollBar = new ScrollBar
@@ -131,17 +133,28 @@ public sealed class JsonConfigEditor : Grid
     private sealed class EditorSurface : Control
     {
         private static readonly Typeface EditorTypeface = new("Consolas, Cascadia Mono, monospace");
-        private static readonly IBrush BackgroundBrush = new SolidColorBrush(Color.FromRgb(30, 30, 30));
-        private static readonly IBrush LineNumberBackgroundBrush = new SolidColorBrush(Color.FromArgb(34, 255, 255, 255));
-        private static readonly IBrush TextBrush = new SolidColorBrush(Color.FromRgb(212, 212, 212));
-        private static readonly IBrush LineNumberBrush = new SolidColorBrush(Color.FromRgb(120, 127, 136));
-        private static readonly IBrush StringBrush = new SolidColorBrush(Color.FromRgb(206, 145, 120));
-        private static readonly IBrush PropertyBrush = new SolidColorBrush(Color.FromRgb(156, 220, 254));
-        private static readonly IBrush NumberBrush = new SolidColorBrush(Color.FromRgb(181, 206, 168));
-        private static readonly IBrush KeywordBrush = new SolidColorBrush(Color.FromRgb(86, 156, 214));
-        private static readonly IBrush PunctuationBrush = new SolidColorBrush(Color.FromRgb(215, 186, 125));
-        private static readonly IBrush SelectionBrush = new SolidColorBrush(Color.FromArgb(90, 80, 140, 220));
-        private static readonly IBrush CaretBrush = new SolidColorBrush(Color.FromRgb(245, 245, 245));
+        private static readonly IBrush DarkBackgroundBrush = new SolidColorBrush(Color.FromRgb(30, 30, 30));
+        private static readonly IBrush DarkLineNumberBackgroundBrush = new SolidColorBrush(Color.FromArgb(34, 255, 255, 255));
+        private static readonly IBrush DarkTextBrush = new SolidColorBrush(Color.FromRgb(212, 212, 212));
+        private static readonly IBrush DarkLineNumberBrush = new SolidColorBrush(Color.FromRgb(120, 127, 136));
+        private static readonly IBrush DarkStringBrush = new SolidColorBrush(Color.FromRgb(206, 145, 120));
+        private static readonly IBrush DarkPropertyBrush = new SolidColorBrush(Color.FromRgb(156, 220, 254));
+        private static readonly IBrush DarkNumberBrush = new SolidColorBrush(Color.FromRgb(181, 206, 168));
+        private static readonly IBrush DarkKeywordBrush = new SolidColorBrush(Color.FromRgb(86, 156, 214));
+        private static readonly IBrush DarkPunctuationBrush = new SolidColorBrush(Color.FromRgb(215, 186, 125));
+        private static readonly IBrush DarkSelectionBrush = new SolidColorBrush(Color.FromArgb(90, 80, 140, 220));
+        private static readonly IBrush DarkCaretBrush = new SolidColorBrush(Color.FromRgb(245, 245, 245));
+        private static readonly IBrush LightBackgroundBrush = new SolidColorBrush(Color.FromRgb(248, 249, 251));
+        private static readonly IBrush LightLineNumberBackgroundBrush = new SolidColorBrush(Color.FromRgb(240, 242, 245));
+        private static readonly IBrush LightTextBrush = new SolidColorBrush(Color.FromRgb(36, 41, 46));
+        private static readonly IBrush LightLineNumberBrush = new SolidColorBrush(Color.FromRgb(118, 126, 136));
+        private static readonly IBrush LightStringBrush = new SolidColorBrush(Color.FromRgb(163, 21, 21));
+        private static readonly IBrush LightPropertyBrush = new SolidColorBrush(Color.FromRgb(0, 92, 197));
+        private static readonly IBrush LightNumberBrush = new SolidColorBrush(Color.FromRgb(9, 134, 88));
+        private static readonly IBrush LightKeywordBrush = new SolidColorBrush(Color.FromRgb(0, 98, 177));
+        private static readonly IBrush LightPunctuationBrush = new SolidColorBrush(Color.FromRgb(97, 99, 104));
+        private static readonly IBrush LightSelectionBrush = new SolidColorBrush(Color.FromArgb(96, 173, 214, 255));
+        private static readonly IBrush LightCaretBrush = new SolidColorBrush(Color.FromRgb(36, 41, 46));
         private const double FontSizeValue = 12;
         private const double HorizontalPadding = 8;
         private const double VerticalPadding = 8;
@@ -165,6 +178,11 @@ public sealed class JsonConfigEditor : Grid
             _owner = owner;
             Focusable = true;
             Cursor = new Cursor(StandardCursorType.Ibeam);
+            ActualThemeVariantChanged += (_, _) =>
+            {
+                _sampleFormattedText = null;
+                InvalidateVisual();
+            };
             RebuildDocumentState();
         }
 
@@ -218,8 +236,8 @@ public sealed class JsonConfigEditor : Grid
 
             var bounds = Bounds;
             var lineNumberWidth = GetLineNumberColumnWidth();
-            context.FillRectangle(BackgroundBrush, bounds);
-            context.FillRectangle(LineNumberBackgroundBrush, new Rect(0, 0, lineNumberWidth, bounds.Height));
+            context.FillRectangle(GetBackgroundBrush(), bounds);
+            context.FillRectangle(GetLineNumberBackgroundBrush(), new Rect(0, 0, lineNumberWidth, bounds.Height));
 
             DrawSelection(context, lineNumberWidth);
             DrawText(context, lineNumberWidth);
@@ -533,7 +551,7 @@ public sealed class JsonConfigEditor : Grid
                 FlowDirection.LeftToRight,
                 EditorTypeface,
                 12,
-                TextBrush);
+                GetTextBrush());
             _charWidth = Math.Max(1, _sampleFormattedText.WidthIncludingTrailingWhitespace);
             _lineHeight = Math.Max(1, _sampleFormattedText.Height + 2);
         }
@@ -632,7 +650,7 @@ public sealed class JsonConfigEditor : Grid
                     FlowDirection.LeftToRight,
                     EditorTypeface,
                     12,
-                    TextBrush);
+                    GetTextBrush());
 
                 foreach (var token in GetLineTokens(line.StartOffset, line.EndOffset))
                 {
@@ -660,7 +678,7 @@ public sealed class JsonConfigEditor : Grid
                     FlowDirection.LeftToRight,
                     EditorTypeface,
                     12,
-                    LineNumberBrush);
+                    GetLineNumberBrush());
                 context.DrawText(formatted, new Point(lineNumberWidth - formatted.Width - LineNumberGap, y));
             }
         }
@@ -698,7 +716,7 @@ public sealed class JsonConfigEditor : Grid
                     VerticalPadding + lineIndex * _lineHeight - VerticalOffset,
                     Math.Max(2, (endColumn - startColumn) * _charWidth),
                     _lineHeight);
-                context.FillRectangle(SelectionBrush, rect);
+                context.FillRectangle(GetSelectionBrush(), rect);
             }
         }
 
@@ -707,7 +725,7 @@ public sealed class JsonConfigEditor : Grid
             var (lineIndex, column) = GetLineAndColumn(_caretIndex);
             var x = lineNumberWidth + HorizontalPadding + column * _charWidth - HorizontalOffset;
             var y = VerticalPadding + lineIndex * _lineHeight - VerticalOffset;
-            context.FillRectangle(CaretBrush, new Rect(x, y, 1.5, _lineHeight));
+            context.FillRectangle(GetCaretBrush(), new Rect(x, y, 1.5, _lineHeight));
         }
 
         private void EnsureCaretVisible()
@@ -857,14 +875,28 @@ public sealed class JsonConfigEditor : Grid
             return false;
         }
 
-        private static IBrush GetBrush(TokenKind kind) => kind switch
+        private bool IsLightTheme => ActualThemeVariant == ThemeVariant.Light;
+
+        private IBrush GetBackgroundBrush() => IsLightTheme ? LightBackgroundBrush : DarkBackgroundBrush;
+
+        private IBrush GetLineNumberBackgroundBrush() => IsLightTheme ? LightLineNumberBackgroundBrush : DarkLineNumberBackgroundBrush;
+
+        private IBrush GetTextBrush() => IsLightTheme ? LightTextBrush : DarkTextBrush;
+
+        private IBrush GetLineNumberBrush() => IsLightTheme ? LightLineNumberBrush : DarkLineNumberBrush;
+
+        private IBrush GetSelectionBrush() => IsLightTheme ? LightSelectionBrush : DarkSelectionBrush;
+
+        private IBrush GetCaretBrush() => IsLightTheme ? LightCaretBrush : DarkCaretBrush;
+
+        private IBrush GetBrush(TokenKind kind) => kind switch
         {
-            TokenKind.String => StringBrush,
-            TokenKind.Property => PropertyBrush,
-            TokenKind.Number => NumberBrush,
-            TokenKind.Keyword => KeywordBrush,
-            TokenKind.Punctuation => PunctuationBrush,
-            _ => TextBrush
+            TokenKind.String => IsLightTheme ? LightStringBrush : DarkStringBrush,
+            TokenKind.Property => IsLightTheme ? LightPropertyBrush : DarkPropertyBrush,
+            TokenKind.Number => IsLightTheme ? LightNumberBrush : DarkNumberBrush,
+            TokenKind.Keyword => IsLightTheme ? LightKeywordBrush : DarkKeywordBrush,
+            TokenKind.Punctuation => IsLightTheme ? LightPunctuationBrush : DarkPunctuationBrush,
+            _ => GetTextBrush()
         };
 
         private readonly record struct LineInfo(int StartOffset, int EndOffset);

@@ -1,10 +1,12 @@
 using System;
+using System.Buffers;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -97,6 +99,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     private bool _initialAutoUpdate = true;
     private string _initialUpdateIntervalMinutes = DefaultUpdateIntervalMinutes;
     private string _initialConfigContent = string.Empty;
+    private bool _isConfigContentLoaded;
 
     public ObservableCollection<string> ProfileTypes { get; } = new();
     public ObservableCollection<string> LocalModes { get; } = new();
@@ -127,10 +130,12 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     public bool ShowConfigFullscreenView => IsEditingMode && IsContentEditorVisible;
     public bool IsConfigReadOnly => IsEditingMode && IsRemoteProfile;
     public bool CanUpdateSelected => SelectedProfile?.IsRemoteType == true;
-    public bool CanSaveProfile => IsEditingMode && IsFormChanged && !IsCreating;
+    public bool CanSaveProfile => IsEditingMode && !IsCreating && HasProfileMetadataChanges();
+    public bool CanSaveConfigInEditor => IsEditingMode && IsLocalProfile && !IsCreating && HasUnsavedChanges();
     public string ProfileFormTitle => IsEditingMode
         ? GetString("Profiles.Form.Title.Edit", "Edit Profile")
         : GetString("Profiles.Form.Title.New", "New Profile");
+    public bool HasLoadedConfigContent => _isConfigContentLoaded;
 
     partial void OnNewProfileTypeChanged(int value)
     {
@@ -148,6 +153,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowInlineConfigEditor));
         OnPropertyChanged(nameof(ShowConfigFullscreenView));
         OnPropertyChanged(nameof(ShowExternalEditorAction));
+        OnPropertyChanged(nameof(CanSaveConfigInEditor));
     }
 
     partial void OnNewLocalModeChanged(int value)
@@ -157,6 +163,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowCreateLocalContentEditor));
         OnPropertyChanged(nameof(ShowInlineConfigEditor));
         OnPropertyChanged(nameof(ShowConfigFullscreenView));
+        OnPropertyChanged(nameof(CanSaveConfigInEditor));
     }
 
     partial void OnIsCreatingModeChanged(bool value)
@@ -167,6 +174,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowCreateLocalContentEditor));
         OnPropertyChanged(nameof(ShowInlineConfigEditor));
         OnPropertyChanged(nameof(ShowConfigFullscreenView));
+        OnPropertyChanged(nameof(CanSaveConfigInEditor));
     }
 
     partial void OnIsEditingModeChanged(bool value)
@@ -185,11 +193,18 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowConfigFullscreenView));
         OnPropertyChanged(nameof(ProfileFormTitle));
         OnPropertyChanged(nameof(ShowExternalEditorAction));
+        OnPropertyChanged(nameof(CanSaveConfigInEditor));
     }
 
     partial void OnSelectedProfileChanged(ProfileItemViewModel? value)
     {
         OnPropertyChanged(nameof(CanUpdateSelected));
+    }
+
+    partial void OnIsCreatingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanSaveProfile));
+        OnPropertyChanged(nameof(CanSaveConfigInEditor));
     }
 
     partial void OnIsContentEditorVisibleChanged(bool value)
@@ -232,15 +247,26 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private void GoBack()
+    private async Task GoBack()
     {
         if (ShowConfigFullscreenView)
         {
+            if (!await ConfirmDiscardOrSaveChangesAsync())
+            {
+                return;
+            }
+
             IsContentEditorVisible = false;
+            ClearLoadedConfigContent();
             return;
         }
 
-        CancelCreate();
+        if (!await ConfirmDiscardOrSaveChangesAsync())
+        {
+            return;
+        }
+
+        ResetEditingState();
     }
 
     public async Task RefreshAsync()
@@ -300,6 +326,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         NewAutoUpdate = true;
         NewUpdateIntervalMinutes = DefaultUpdateIntervalMinutes;
         ConfigContent = "{}";
+        _isConfigContentLoaded = true;
         IsContentEditorVisible = false;
         _editingProfile = null;
         IsEditingMode = false;
@@ -309,13 +336,24 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private void CancelCreate()
+    private async Task CancelCreate()
+    {
+        if (!await ConfirmDiscardOrSaveChangesAsync())
+        {
+            return;
+        }
+
+        ResetEditingState();
+    }
+
+    private void ResetEditingState()
     {
         IsCreatingMode = false;
         IsEditingMode = false;
         IsFormChanged = false;
         _editingProfile = null;
         IsContentEditorVisible = false;
+        ClearLoadedConfigContent();
         NewProfileStatus = string.Empty;
     }
 
@@ -437,6 +475,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
             NewAutoUpdate = false;
             NewUpdateIntervalMinutes = DefaultUpdateIntervalMinutes;
             ConfigContent = "{}";
+            _isConfigContentLoaded = true;
             IsContentEditorVisible = false;
             _editingProfile = null;
             IsEditingMode = false;
@@ -510,8 +549,6 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         var profileModel = await _profileManager.GetAsync(target.Id);
         if (profileModel == null) return;
 
-        var content = await _configManager.LoadConfigAsync(target.Id);
-        ConfigContent = content ?? "{}";
         NewProfileName = string.IsNullOrWhiteSpace(profileModel.Name) ? target.DisplayName : profileModel.Name;
         NewProfileType = profileModel.Type == ProfileType.Local ? 0 : 1;
         NewLocalMode = 0;
@@ -523,11 +560,12 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         NewProfileStatus = string.Empty;
         IsContentEditorVisible = false;
         _editingProfile = target;
+        ClearLoadedConfigContent();
         _initialName = NewProfileName;
         _initialUrl = NewProfileUrl;
         _initialAutoUpdate = NewAutoUpdate;
         _initialUpdateIntervalMinutes = NewUpdateIntervalMinutes;
-        _initialConfigContent = ConfigContent;
+        _initialConfigContent = string.Empty;
         IsFormChanged = false;
         IsCreatingMode = false;
         IsEditingMode = true;
@@ -562,6 +600,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
 
         NewLocalFilePath = file.Path.LocalPath;
         ConfigContent = await File.ReadAllTextAsync(NewLocalFilePath);
+        _isConfigContentLoaded = true;
         if (string.IsNullOrWhiteSpace(NewProfileName) || NewProfileName.StartsWith("New Profile ", StringComparison.Ordinal))
         {
             NewProfileName = Path.GetFileNameWithoutExtension(NewLocalFilePath);
@@ -571,7 +610,24 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     [RelayCommand]
     private async Task ToggleContentEditor()
     {
-        if (!IsContentEditorVisible && IsRemoteProfile && _editingProfile != null && _configManager != null)
+        if (IsContentEditorVisible)
+        {
+            if (!await ConfirmDiscardOrSaveChangesAsync())
+            {
+                return;
+            }
+
+            IsContentEditorVisible = false;
+            ClearLoadedConfigContent();
+            return;
+        }
+
+        if (_editingProfile == null || _configManager == null)
+        {
+            return;
+        }
+
+        if (IsRemoteProfile)
         {
             var configPath = await _configManager.GetConfigPathAsync(_editingProfile.Id, ProfileType.Remote);
             if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
@@ -581,11 +637,8 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
             }
         }
 
-        if (string.IsNullOrWhiteSpace(ConfigContent))
-        {
-            ConfigContent = "{}";
-        }
-        IsContentEditorVisible = !IsContentEditorVisible;
+        await LoadConfigContentForEditorAsync();
+        IsContentEditorVisible = true;
     }
 
     [RelayCommand]
@@ -594,12 +647,20 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         try
         {
             using var document = JsonDocument.Parse(ConfigContent);
-            ConfigContent = JsonSerializer.Serialize(
-                document.RootElement,
-                new JsonSerializerOptions
+            var buffer = new ArrayBufferWriter<byte>();
+            using (var writer = new Utf8JsonWriter(
+                buffer,
+                new JsonWriterOptions
                 {
-                    WriteIndented = true
-                });
+                    Indented = true,
+                    Encoder = UnicodeJsonEncoder.Instance
+                }))
+            {
+                document.RootElement.WriteTo(writer);
+                writer.Flush();
+            }
+
+            ConfigContent = Encoding.UTF8.GetString(buffer.WrittenSpan);
             _toastWriter?.Invoke(GetString("Profiles.Toast.JsonFormatSuccess", "JSON formatted"), 1800);
         }
         catch (JsonException ex)
@@ -695,18 +756,29 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     [RelayCommand]
     private async Task SaveProfile()
     {
-        if (_configManager == null || _profileManager == null || _editingProfile == null) return;
+        await SaveProfileCoreAsync(exitEditMode: true);
+    }
+
+    [RelayCommand]
+    private async Task SaveProfileInEditor()
+    {
+        await SaveProfileCoreAsync(exitEditMode: false);
+    }
+
+    private async Task<bool> SaveProfileCoreAsync(bool exitEditMode)
+    {
+        if (_configManager == null || _profileManager == null || _editingProfile == null) return false;
 
         if (string.IsNullOrWhiteSpace(NewProfileName))
         {
             NewProfileStatus = "Profile name cannot be empty";
-            return;
+            return false;
         }
 
         if (IsRemoteProfile && string.IsNullOrWhiteSpace(NewProfileUrl))
         {
             NewProfileStatus = "Remote profile URL cannot be empty";
-            return;
+            return false;
         }
 
         IsCreating = true;
@@ -714,15 +786,19 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
 
         try
         {
-            await _configManager.SaveConfigAsync(
-                _editingProfile.Id,
-                ConfigContent,
-                _editingProfile.IsRemoteType ? ProfileType.Remote : ProfileType.Local);
+            if (IsLocalProfile && HasLoadedConfigContent)
+            {
+                await _configManager.SaveConfigAsync(
+                    _editingProfile.Id,
+                    ConfigContent,
+                    ProfileType.Local);
+            }
 
             var profile = await _profileManager.GetAsync(_editingProfile.Id);
             if (profile != null)
             {
                 profile.Name = NewProfileName;
+                profile.LastUpdated = DateTime.Now;
                 if (profile.Type == ProfileType.Remote)
                 {
                     var updateInterval = ParseUpdateIntervalMinutes();
@@ -735,14 +811,39 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
 
             await LoadProfilesAsync();
             await NotifyProfilesChangedAsync();
-            IsEditingMode = false;
+
+            _initialName = NewProfileName;
+            _initialUrl = NewProfileUrl;
+            _initialAutoUpdate = NewAutoUpdate;
+            _initialUpdateIntervalMinutes = NewUpdateIntervalMinutes;
+            _initialConfigContent = ConfigContent;
             IsFormChanged = false;
-            _editingProfile = null;
             NewProfileStatus = string.Empty;
+            _toastWriter?.Invoke(GetString("Profiles.Toast.SaveSuccess", "Profile saved"), 1800);
+
+            if (profile != null)
+            {
+                EditLastUpdated = profile.LastUpdated?.ToString("yyyy-MM-dd HH:mm:ss") ?? _neverLabel;
+            }
+
+            if (exitEditMode)
+            {
+                IsEditingMode = false;
+                IsContentEditorVisible = false;
+                ClearLoadedConfigContent();
+                _editingProfile = null;
+            }
+            else
+            {
+                _editingProfile = Profiles.FirstOrDefault(p => p.Id == _editingProfile.Id) ?? _editingProfile;
+            }
+
+            return true;
         }
         catch (Exception ex)
         {
             NewProfileStatus = $"Save failed: {ex.Message}";
+            return false;
         }
         finally
         {
@@ -804,9 +905,13 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
 
             if (_configManager != null)
             {
-                var content = await _configManager.LoadConfigAsync(_editingProfile.Id, ProfileType.Remote);
-                ConfigContent = content ?? "{}";
-                _initialConfigContent = ConfigContent;
+                ClearLoadedConfigContent();
+                await LoadConfigContentForEditorAsync();
+                var profile = _profileManager != null ? await _profileManager.GetAsync(_editingProfile.Id) : null;
+                if (profile != null)
+                {
+                    EditLastUpdated = profile.LastUpdated?.ToString("yyyy-MM-dd HH:mm:ss") ?? _neverLabel;
+                }
                 RecalculateFormChanged();
             }
         }
@@ -861,24 +966,161 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         return int.Parse(DefaultUpdateIntervalMinutes);
     }
 
+    private bool HasProfileMetadataChanges()
+    {
+        if (!IsEditingMode)
+        {
+            return false;
+        }
+
+        return
+            !string.Equals(NewProfileName, _initialName, StringComparison.Ordinal) ||
+            !string.Equals(NewProfileUrl, _initialUrl, StringComparison.Ordinal) ||
+            NewAutoUpdate != _initialAutoUpdate ||
+            !string.Equals(NewUpdateIntervalMinutes, _initialUpdateIntervalMinutes, StringComparison.Ordinal);
+    }
+
+    private bool HasConfigContentChanges()
+    {
+        return IsEditingMode &&
+               IsLocalProfile &&
+               HasLoadedConfigContent &&
+               !string.Equals(ConfigContent, _initialConfigContent, StringComparison.Ordinal);
+    }
+
+    private bool HasUnsavedChanges()
+    {
+        return HasProfileMetadataChanges() || HasConfigContentChanges();
+    }
+
+    private async Task<bool> ConfirmDiscardOrSaveChangesAsync()
+    {
+        if (!IsEditingMode || !HasUnsavedChanges())
+        {
+            return true;
+        }
+
+        var shouldSave = await ShowUnsavedChangesDialogAsync();
+        if (!shouldSave.HasValue)
+        {
+            return false;
+        }
+
+        if (!shouldSave.Value)
+        {
+            return true;
+        }
+
+        return await SaveProfileCoreAsync(exitEditMode: false);
+    }
+
+    private async Task LoadConfigContentForEditorAsync()
+    {
+        if (_editingProfile == null || _configManager == null || HasLoadedConfigContent)
+        {
+            return;
+        }
+
+        var profileType = _editingProfile.IsRemoteType ? ProfileType.Remote : ProfileType.Local;
+        var content = await _configManager.LoadConfigAsync(_editingProfile.Id, profileType);
+        _initialConfigContent = content ?? "{}";
+        ConfigContent = _initialConfigContent;
+        _isConfigContentLoaded = true;
+        RecalculateFormChanged();
+    }
+
+    private void ClearLoadedConfigContent()
+    {
+        _isConfigContentLoaded = false;
+        _initialConfigContent = string.Empty;
+        ConfigContent = string.Empty;
+    }
+
+    private async Task<bool?> ShowUnsavedChangesDialogAsync()
+    {
+        var desktop = Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+        var owner = desktop?.MainWindow;
+        if (owner == null)
+        {
+            return true;
+        }
+
+        var dialog = new Avalonia.Controls.Window
+        {
+            Width = 460,
+            Height = 210,
+            CanResize = false,
+            WindowStartupLocation = Avalonia.Controls.WindowStartupLocation.CenterOwner,
+            Title = GetString("Profiles.UnsavedDialog.Title", "Unsaved Changes")
+        };
+
+        var message = new Avalonia.Controls.TextBlock
+        {
+            Text = GetString("Profiles.UnsavedDialog.Message", "You have unsaved changes. Save before going back?"),
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            Margin = new Avalonia.Thickness(0, 0, 0, 16)
+        };
+
+        var saveButton = new Avalonia.Controls.Button
+        {
+            Content = GetString("Profiles.UnsavedDialog.SaveButton", "Save"),
+            MinWidth = 90
+        };
+        saveButton.Click += (_, _) => dialog.Close(true);
+
+        var discardButton = new Avalonia.Controls.Button
+        {
+            Content = GetString("Profiles.UnsavedDialog.DiscardButton", "Don't Save"),
+            MinWidth = 90
+        };
+        discardButton.Click += (_, _) => dialog.Close(false);
+
+        var cancelButton = new Avalonia.Controls.Button
+        {
+            Content = GetString("Profiles.Form.CancelButton", "Cancel"),
+            MinWidth = 90
+        };
+        cancelButton.Click += (_, _) => dialog.Close(null);
+
+        dialog.Content = new Avalonia.Controls.StackPanel
+        {
+            Margin = new Avalonia.Thickness(20),
+            Children =
+            {
+                message,
+                new Avalonia.Controls.StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Spacing = 8,
+                    Children =
+                    {
+                        cancelButton,
+                        discardButton,
+                        saveButton
+                    }
+                }
+            }
+        };
+
+        return await dialog.ShowDialog<bool?>(owner);
+    }
+
     private void RecalculateFormChanged()
     {
         if (!IsEditingMode)
         {
             IsFormChanged = false;
             OnPropertyChanged(nameof(CanSaveProfile));
+            OnPropertyChanged(nameof(CanSaveConfigInEditor));
             return;
         }
 
-        var changed =
-            !string.Equals(NewProfileName, _initialName, StringComparison.Ordinal) ||
-            !string.Equals(NewProfileUrl, _initialUrl, StringComparison.Ordinal) ||
-            NewAutoUpdate != _initialAutoUpdate ||
-            !string.Equals(NewUpdateIntervalMinutes, _initialUpdateIntervalMinutes, StringComparison.Ordinal) ||
-            !string.Equals(ConfigContent, _initialConfigContent, StringComparison.Ordinal);
+        var changed = HasUnsavedChanges();
 
         IsFormChanged = changed;
         OnPropertyChanged(nameof(CanSaveProfile));
+        OnPropertyChanged(nameof(CanSaveConfigInEditor));
     }
 
     private void OnLanguageChanged(object? sender, AppLanguage e)
