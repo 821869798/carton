@@ -281,6 +281,10 @@
           </Grid>
           <Button Content="{DynamicResource Settings.Data.OpenFolder}" Command="{Binding OpenDataFolderCommand}"
                   HorizontalAlignment="Left"/>
+          <Button Content="{DynamicResource Settings.Data.ClearAll}"
+                  Command="{Binding ClearAllDataCommand}"
+                  IsEnabled="{Binding !IsDataOperationInProgress}"
+                  HorizontalAlignment="Left"/>
           <Button Content="{DynamicResource Settings.Data.Backup.Export}" Command="{Binding ExportBackupCommand}"
                   IsEnabled="{Binding !IsDataOperationInProgress}"
                   HorizontalAlignment="Left"/>

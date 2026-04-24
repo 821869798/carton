@@ -849,17 +849,63 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     [RelayCommand]
     private async Task OpenDataFolder()
     {
-        if (_configManager != null)
+        var dataDirectory = Path.Combine(carton.Core.Utilities.PathHelper.GetAppDataPath(), "data");
+        Directory.CreateDirectory(dataDirectory);
+        if (!string.IsNullOrWhiteSpace(dataDirectory))
         {
             await Task.Run(() =>
             {
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
-                    FileName = _configManager.ConfigDirectory,
+                    FileName = dataDirectory,
                     UseShellExecute = true,
                     Verb = "open"
                 });
             });
+        }
+    }
+
+    [RelayCommand]
+    private async Task ClearAllData()
+    {
+        var desktop = Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+        var window = desktop?.MainWindow;
+        if (window == null)
+        {
+            DataOperationStatus = GetString("Settings.Data.Operation.WindowUnavailable", "Main window unavailable");
+            return;
+        }
+
+        var dataDirectory = Path.Combine(carton.Core.Utilities.PathHelper.GetAppDataPath(), "data");
+
+        var shouldClear = await ShowClearAllDataDialogAsync(window, dataDirectory);
+        if (!shouldClear)
+        {
+            return;
+        }
+
+        IsDataOperationInProgress = true;
+        DataOperationStatus = GetString("Settings.Data.ClearAll.InProgress", "Clearing data...");
+        try
+        {
+            if (Directory.Exists(dataDirectory))
+            {
+                Directory.Delete(dataDirectory, true);
+            }
+
+            DataOperationStatus = GetString("Settings.Data.ClearAll.Success", "Data cleared");
+            await ShowRestartRequiredDialogAndRestartAsync(
+                window,
+                GetString("Settings.Data.ClearAll.Restart.Title", "Restart Required"),
+                GetString("Settings.Data.ClearAll.Restart.Message", "Data has been cleared. The app needs to restart to recreate defaults."));
+        }
+        catch (Exception ex)
+        {
+            DataOperationStatus = $"{GetString("Settings.Data.ClearAll.Failed", "Failed to clear data")}: {ex.Message}";
+        }
+        finally
+        {
+            IsDataOperationInProgress = false;
         }
     }
 
@@ -1367,7 +1413,75 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         source.CopyTo(target);
     }
 
+    private async Task<bool> ShowClearAllDataDialogAsync(Window owner, string dataRoot)
+    {
+        var dialog = new Window
+        {
+            Width = 460,
+            Height = 240,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Title = GetString("Settings.Data.ClearAll.ConfirmTitle", "Clear Data")
+        };
+
+        var message = new TextBlock
+        {
+            Text = string.Format(
+                GetString(
+                    "Settings.Data.ClearAll.ConfirmMessage",
+                    "This will permanently delete the entire data directory:\n{0}\n\nThis action cannot be undone. Continue?"),
+                dataRoot),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 16)
+        };
+
+        var confirmButton = new Button
+        {
+            Content = GetString("Settings.Data.ClearAll.ConfirmButton", "Delete Data"),
+            MinWidth = 110,
+            Classes = { "accent" }
+        };
+        confirmButton.Click += (_, _) => dialog.Close(true);
+
+        var cancelButton = new Button
+        {
+            Content = GetString("Settings.Data.StoreInAppDir.CancelButton", "Cancel"),
+            MinWidth = 90
+        };
+        cancelButton.Click += (_, _) => dialog.Close(false);
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(20),
+            Children =
+            {
+                message,
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Spacing = 8,
+                    Children =
+                    {
+                        cancelButton,
+                        confirmButton
+                    }
+                }
+            }
+        };
+
+        return await dialog.ShowDialog<bool>(owner);
+    }
+
     private async Task ShowRestartRequiredDialogAndRestartAsync(Window owner)
+    {
+        await ShowRestartRequiredDialogAndRestartAsync(
+            owner,
+            GetString("Settings.Data.Backup.Import.Restart.Title", "Restart Required"),
+            GetString("Settings.Data.Backup.Import.Restart.Message", "Backup import completed. The app needs to restart to apply changes."));
+    }
+
+    private async Task ShowRestartRequiredDialogAndRestartAsync(Window owner, string title, string messageText)
     {
         var dialog = new Window
         {
@@ -1375,12 +1489,12 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
             Height = 180,
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Title = GetString("Settings.Data.Backup.Import.Restart.Title", "Restart Required")
+            Title = title
         };
 
         var message = new TextBlock
         {
-            Text = GetString("Settings.Data.Backup.Import.Restart.Message", "Backup import completed. The app needs to restart to apply changes."),
+            Text = messageText,
             TextWrapping = Avalonia.Media.TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 16)
         };

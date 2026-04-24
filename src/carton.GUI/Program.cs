@@ -1,8 +1,9 @@
-using Avalonia;
 using System;
+using System.Runtime.InteropServices;
+using Avalonia;
 using carton.Core.Services;
-using Velopack;
 using carton.GUI.Services;
+using Velopack;
 
 namespace carton;
 
@@ -15,9 +16,15 @@ sealed class Program
     {
         LaunchOptions = AppLaunchOptions.Parse(args);
 
-        VelopackApp.Build()
-            .SetArgs(args)
-            .Run();
+        var velopackApp = VelopackApp.Build()
+            .SetArgs(args);
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            velopackApp = velopackApp.OnBeforeUninstallFastCallback(_ => WindowsUninstallDialog.HandleBeforeUninstall());
+        }
+
+        velopackApp.Run();
 
         if (WindowsElevatedHelperHost.TryRunFromArgs(args))
         {

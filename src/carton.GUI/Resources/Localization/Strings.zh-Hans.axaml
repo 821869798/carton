@@ -254,6 +254,7 @@
 	<x:String x:Key="Settings.Data.StoreInAppDir.CancelButton">取消</x:String>
 	<x:String x:Key="Settings.Data.StoreInAppDir.Failed">更改数据目录失败</x:String>
 	<x:String x:Key="Settings.Data.OpenFolder">打开数据目录</x:String>
+	<x:String x:Key="Settings.Data.ClearAll">清除全部数据</x:String>
 	<x:String x:Key="Settings.Data.Backup.Export">导出备份</x:String>
 	<x:String x:Key="Settings.Data.Backup.Import">导入备份</x:String>
 	<x:String x:Key="Settings.Data.Backup.Export.Title">导出备份</x:String>
@@ -273,6 +274,18 @@
 	<x:String x:Key="Settings.Data.ClearCache.Success">缓存数据库已清空</x:String>
 	<x:String x:Key="Settings.Data.ClearCache.NotFound">未找到缓存数据库文件</x:String>
 	<x:String x:Key="Settings.Data.ClearCache.Failed">清空缓存数据库失败</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.ConfirmTitle">确认清除数据</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.ConfirmMessage">这将永久删除整个数据目录：
+{0}
+
+此操作无法撤销，是否继续？</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.ConfirmButton">删除数据</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.InProgress">正在清除数据...</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.Success">数据已清除</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.Failed">清除数据失败</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.Restart.Title">需要重启</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.Restart.Message">数据已经清除，应用需要重启以重新创建默认数据。</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.PortableNotSupported">便携模式将数据存储在应用目录中，请关闭应用后手动清理。</x:String>
 	<x:String x:Key="Settings.Data.Reset">重置设置</x:String>
 
 	<x:String x:Key="Settings.Section.About">关于</x:String>
