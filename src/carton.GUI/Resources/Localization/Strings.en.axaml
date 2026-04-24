@@ -298,6 +298,9 @@
 	<x:String x:Key="Settings.About.Name">Carton</x:String>
 	<x:String x:Key="Settings.About.Version">Version</x:String>
   <x:String x:Key="Settings.About.Description">A cross-platform proxy client powered by sing-box</x:String>
+  <x:String x:Key="Settings.About.CartonHomepage">Carton Homepage</x:String>
+  <x:String x:Key="Settings.About.SingBoxHomepage">sing-box Homepage</x:String>
+  <x:String x:Key="Settings.About.OpenHomepageFailed">Failed to open homepage</x:String>
 
   <x:String x:Key="Status.KernelMissingStartFailed">Start failed. sing-box kernel is missing. Please install it from Settings.</x:String>
   <x:String x:Key="Settings.Kernel.DownloadedPendingReplace">Kernel downloaded. Stop sing-box and click Update again when you are ready to replace it.</x:String>

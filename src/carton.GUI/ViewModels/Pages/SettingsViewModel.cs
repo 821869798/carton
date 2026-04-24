@@ -1145,6 +1145,34 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         };
     }
 
+    [RelayCommand]
+    private void OpenCartonHomepage()
+    {
+        OpenHomepage("https://github.com/821869798/carton");
+    }
+
+    [RelayCommand]
+    private void OpenSingBoxHomepage()
+    {
+        OpenHomepage("https://github.com/SagerNet/sing-box");
+    }
+
+    private void OpenHomepage(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _toastWriter?.Invoke($"{GetString("Settings.About.OpenHomepageFailed", "Failed to open homepage")}: {ex.Message}", 3000);
+        }
+    }
+
     private static string NormalizeUpdateChannel(string? channel)
     {
         if (string.Equals(channel, "beta", StringComparison.OrdinalIgnoreCase))

@@ -279,6 +279,9 @@
 	<x:String x:Key="Settings.About.Name">Carton</x:String>
 	<x:String x:Key="Settings.About.Version">版本</x:String>
   <x:String x:Key="Settings.About.Description">基于 sing-box 的跨平台代理客户端</x:String>
+  <x:String x:Key="Settings.About.CartonHomepage">Carton 主页</x:String>
+  <x:String x:Key="Settings.About.SingBoxHomepage">sing-box 主页</x:String>
+  <x:String x:Key="Settings.About.OpenHomepageFailed">打开主页失败</x:String>
 
   <x:String x:Key="Status.KernelMissingStartFailed">启动失败，sing-box内核不存在，请前往设置页面安装</x:String>
   <x:String x:Key="Settings.Kernel.DownloadedPendingReplace">内核已下载完成。准备替换时请先停止 sing-box，然后再次点击更新。</x:String>
