@@ -88,6 +88,9 @@
   <x:String x:Key="Profiles.Form.ValidateJson">Validate JSON</x:String>
   <x:String x:Key="Profiles.Form.OpenExternal">Open in External Editor</x:String>
   <x:String x:Key="Profiles.Form.CopyAsLocal">Copy as Local</x:String>
+  <x:String x:Key="Profiles.Editor.Search">Search</x:String>
+  <x:String x:Key="Profiles.Editor.Undo">Undo</x:String>
+  <x:String x:Key="Profiles.Editor.Redo">Redo</x:String>
   <x:String x:Key="Profiles.Toast.JsonFormatSuccess">JSON formatted</x:String>
   <x:String x:Key="Profiles.Toast.SaveSuccess">Profile saved</x:String>
   <x:String x:Key="Profiles.Toast.JsonValid">JSON syntax is valid</x:String>

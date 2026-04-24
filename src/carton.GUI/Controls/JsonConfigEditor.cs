@@ -1,8 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
-using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -10,6 +9,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
@@ -28,9 +28,23 @@ public sealed class JsonConfigEditor : Grid
     public static readonly StyledProperty<bool> IsReadOnlyProperty =
         AvaloniaProperty.Register<JsonConfigEditor, bool>(nameof(IsReadOnly));
 
+    private const int MaxHistoryEntries = 200;
+
     private readonly EditorSurface _surface;
     private readonly ScrollBar _horizontalScrollBar;
     private readonly ScrollBar _verticalScrollBar;
+    private readonly Stack<EditorSnapshot> _undoStack = new();
+    private readonly Stack<EditorSnapshot> _redoStack = new();
+    private readonly List<SearchMatch> _searchMatches = new();
+
+    private string _searchQuery = string.Empty;
+    private int _currentSearchMatchIndex = -1;
+    private bool _isInternalTextMutation;
+    private bool _searchCaseSensitive;
+    private bool _searchWholeWord;
+    private bool _searchUseRegex;
+    private bool _searchPatternValid = true;
+    private bool _isSearchOpen;
 
     public JsonConfigEditor()
     {
@@ -39,6 +53,7 @@ public sealed class JsonConfigEditor : Grid
 
         _surface = new EditorSurface(this);
         ActualThemeVariantChanged += (_, _) => _surface.InvalidateVisual();
+        SetRow(_surface, 0);
         Children.Add(_surface);
 
         _horizontalScrollBar = new ScrollBar
@@ -56,9 +71,12 @@ public sealed class JsonConfigEditor : Grid
             Width = 12
         };
         _verticalScrollBar.ValueChanged += OnVerticalScrollChanged;
+        SetRow(_verticalScrollBar, 0);
         SetColumn(_verticalScrollBar, 1);
         Children.Add(_verticalScrollBar);
     }
+
+    public event EventHandler? EditorStateChanged;
 
     public string Text
     {
@@ -72,13 +90,124 @@ public sealed class JsonConfigEditor : Grid
         set => SetValue(IsReadOnlyProperty, value);
     }
 
+    public bool CanUndo => _undoStack.Count > 0;
+
+    public bool CanRedo => _redoStack.Count > 0;
+
+    public bool IsSearchOpen => _isSearchOpen;
+
+    public bool SearchCaseSensitive => _searchCaseSensitive;
+
+    public bool SearchWholeWord => _searchWholeWord;
+
+    public bool SearchUseRegex => _searchUseRegex;
+
+    public bool HasSearchMatches => _searchMatches.Count > 0 && _currentSearchMatchIndex >= 0;
+
+    public bool IsSearchPatternValid => _searchPatternValid;
+
+    public string SearchStatusText => !_searchPatternValid
+        ? "ERR"
+        : HasSearchMatches
+            ? $"{_currentSearchMatchIndex + 1}/{_searchMatches.Count}"
+            : "0/0";
+
+    public void Undo()
+    {
+        if (!CanUndo)
+        {
+            return;
+        }
+
+        var current = _surface.CaptureSnapshot();
+        var target = _undoStack.Pop();
+        _redoStack.Push(current);
+        TrimHistory(_redoStack);
+        _surface.ApplySnapshot(target);
+        UpdateSearchResults(selectCurrentMatch: false);
+        UpdateScrollBars();
+        RaiseEditorStateChanged();
+    }
+
+    public void Redo()
+    {
+        if (!CanRedo)
+        {
+            return;
+        }
+
+        var current = _surface.CaptureSnapshot();
+        var target = _redoStack.Pop();
+        _undoStack.Push(current);
+        TrimHistory(_undoStack);
+        _surface.ApplySnapshot(target);
+        UpdateSearchResults(selectCurrentMatch: false);
+        UpdateScrollBars();
+        RaiseEditorStateChanged();
+    }
+
+    public void OpenSearch()
+    {
+        _isSearchOpen = true;
+        RaiseEditorStateChanged();
+    }
+
+    public void CloseSearch()
+    {
+        _isSearchOpen = false;
+        _searchQuery = string.Empty;
+        _searchMatches.Clear();
+        _currentSearchMatchIndex = -1;
+        _searchPatternValid = true;
+        _surface.InvalidateVisual();
+        Dispatcher.UIThread.Post(() => _surface.Focus());
+        RaiseEditorStateChanged();
+    }
+
+    public void SetSearchQuery(string query)
+    {
+        _searchQuery = query ?? string.Empty;
+        UpdateSearchResults(selectCurrentMatch: true);
+        RaiseEditorStateChanged();
+    }
+
+    public void FindNext()
+    {
+        if (_searchMatches.Count == 0)
+        {
+            return;
+        }
+
+        _currentSearchMatchIndex = (_currentSearchMatchIndex + 1 + _searchMatches.Count) % _searchMatches.Count;
+        SelectCurrentSearchMatch();
+    }
+
+    public void FindPrevious()
+    {
+        if (_searchMatches.Count == 0)
+        {
+            return;
+        }
+
+        _currentSearchMatchIndex = (_currentSearchMatchIndex - 1 + _searchMatches.Count) % _searchMatches.Count;
+        SelectCurrentSearchMatch();
+    }
+
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
         if (change.Property == TextProperty)
         {
+            if (!_isInternalTextMutation)
+            {
+                ClearHistory();
+                ResetSearchForNewText();
+            }
+
             _surface.OnTextChanged();
+            UpdateSearchResults(selectCurrentMatch: false);
             UpdateScrollBars();
+            RaiseEditorStateChanged();
         }
     }
 
@@ -97,6 +226,156 @@ public sealed class JsonConfigEditor : Grid
     private void OnVerticalScrollChanged(object? sender, RangeBaseValueChangedEventArgs e)
     {
         _surface.VerticalOffset = e.NewValue;
+    }
+
+    private void ResetSearchForNewText()
+    {
+        _searchMatches.Clear();
+        _currentSearchMatchIndex = -1;
+        _searchQuery = string.Empty;
+        _searchPatternValid = true;
+        _isSearchOpen = false;
+    }
+
+    private void UpdateSearchResults(bool selectCurrentMatch)
+    {
+        _searchMatches.Clear();
+        _currentSearchMatchIndex = -1;
+        _searchPatternValid = true;
+
+        if (!string.IsNullOrWhiteSpace(_searchQuery) && !string.IsNullOrEmpty(Text))
+        {
+            try
+            {
+                if (_searchUseRegex)
+                {
+                    var regexPattern = _searchWholeWord ? $@"\b(?:{_searchQuery})\b" : _searchQuery;
+                    var regexOptions = RegexOptions.Multiline | RegexOptions.CultureInvariant;
+                    if (!_searchCaseSensitive)
+                    {
+                        regexOptions |= RegexOptions.IgnoreCase;
+                    }
+
+                    foreach (Match match in Regex.Matches(Text, regexPattern, regexOptions))
+                    {
+                        if (!match.Success || match.Length <= 0)
+                        {
+                            continue;
+                        }
+
+                        _searchMatches.Add(new SearchMatch(match.Index, match.Length));
+                    }
+                }
+                else
+                {
+                    var searchStart = 0;
+                    var comparison = _searchCaseSensitive
+                        ? StringComparison.Ordinal
+                        : StringComparison.OrdinalIgnoreCase;
+
+                    while (searchStart < Text.Length)
+                    {
+                        var matchIndex = Text.IndexOf(_searchQuery, searchStart, comparison);
+                        if (matchIndex < 0)
+                        {
+                            break;
+                        }
+
+                        if (!_searchWholeWord || IsWholeWordMatch(Text, matchIndex, _searchQuery.Length))
+                        {
+                            _searchMatches.Add(new SearchMatch(matchIndex, _searchQuery.Length));
+                        }
+
+                        searchStart = matchIndex + Math.Max(1, _searchQuery.Length);
+                    }
+                }
+            }
+            catch (ArgumentException)
+            {
+                _searchPatternValid = false;
+            }
+
+            if (_searchMatches.Count > 0)
+            {
+                _currentSearchMatchIndex = FindNearestSearchMatchIndex(_surface.CaretIndex);
+                if (selectCurrentMatch)
+                {
+                    SelectCurrentSearchMatch();
+                    return;
+                }
+            }
+        }
+
+        _surface.InvalidateVisual();
+    }
+
+    private int FindNearestSearchMatchIndex(int caretIndex)
+    {
+        for (var i = 0; i < _searchMatches.Count; i++)
+        {
+            if (_searchMatches[i].Start >= caretIndex)
+            {
+                return i;
+            }
+        }
+
+        return 0;
+    }
+
+    private void SelectCurrentSearchMatch()
+    {
+        if (_currentSearchMatchIndex < 0 || _currentSearchMatchIndex >= _searchMatches.Count)
+        {
+            _surface.InvalidateVisual();
+            RaiseEditorStateChanged();
+            return;
+        }
+
+        var match = _searchMatches[_currentSearchMatchIndex];
+        _surface.SelectRange(match.Start, match.Length);
+        _surface.CenterRangeInView(match.Start, match.Length);
+        _surface.InvalidateVisual();
+        RaiseEditorStateChanged();
+    }
+
+    private void PushUndoSnapshot(EditorSnapshot snapshot)
+    {
+        _undoStack.Push(snapshot);
+        TrimHistory(_undoStack);
+        _redoStack.Clear();
+        RaiseEditorStateChanged();
+    }
+
+    private static void TrimHistory(Stack<EditorSnapshot> stack)
+    {
+        if (stack.Count <= MaxHistoryEntries)
+        {
+            return;
+        }
+
+        var snapshots = stack.ToArray();
+        stack.Clear();
+        for (var i = MaxHistoryEntries - 1; i >= 0; i--)
+        {
+            stack.Push(snapshots[i]);
+        }
+    }
+
+    private void ClearHistory()
+    {
+        if (_undoStack.Count == 0 && _redoStack.Count == 0)
+        {
+            return;
+        }
+
+        _undoStack.Clear();
+        _redoStack.Clear();
+        RaiseEditorStateChanged();
+    }
+
+    private void RaiseEditorStateChanged()
+    {
+        EditorStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void UpdateScrollBars()
@@ -130,6 +409,49 @@ public sealed class JsonConfigEditor : Grid
         _verticalScrollBar.Value = Math.Clamp(_verticalScrollBar.Value + delta.Y, 0, _verticalScrollBar.Maximum);
     }
 
+    public void ToggleCaseSensitive()
+    {
+        _searchCaseSensitive = !_searchCaseSensitive;
+        UpdateSearchResults(selectCurrentMatch: true);
+        RaiseEditorStateChanged();
+    }
+
+    public void ToggleWholeWord()
+    {
+        _searchWholeWord = !_searchWholeWord;
+        UpdateSearchResults(selectCurrentMatch: true);
+        RaiseEditorStateChanged();
+    }
+
+    public void ToggleRegex()
+    {
+        _searchUseRegex = !_searchUseRegex;
+        UpdateSearchResults(selectCurrentMatch: true);
+        RaiseEditorStateChanged();
+    }
+
+    private static bool IsWholeWordMatch(string text, int index, int length)
+    {
+        var beforeIsWord = index > 0 && IsWordCharacter(text[index - 1]);
+        var afterIndex = index + length;
+        var afterIsWord = afterIndex < text.Length && IsWordCharacter(text[afterIndex]);
+        return !beforeIsWord && !afterIsWord;
+    }
+
+    private static bool IsWordCharacter(char ch)
+    {
+        return char.IsLetterOrDigit(ch) || ch == '_';
+    }
+
+    private readonly record struct EditorSnapshot(
+        string Text,
+        int CaretIndex,
+        int SelectionAnchor,
+        double HorizontalOffset,
+        double VerticalOffset);
+
+    private readonly record struct SearchMatch(int Start, int Length);
+
     private sealed class EditorSurface : Control
     {
         private static readonly Typeface EditorTypeface = new("Consolas, Cascadia Mono, monospace");
@@ -143,6 +465,8 @@ public sealed class JsonConfigEditor : Grid
         private static readonly IBrush DarkKeywordBrush = new SolidColorBrush(Color.FromRgb(86, 156, 214));
         private static readonly IBrush DarkPunctuationBrush = new SolidColorBrush(Color.FromRgb(215, 186, 125));
         private static readonly IBrush DarkSelectionBrush = new SolidColorBrush(Color.FromArgb(90, 80, 140, 220));
+        private static readonly IBrush DarkSearchBrush = new SolidColorBrush(Color.FromArgb(110, 255, 201, 40));
+        private static readonly IBrush DarkCurrentSearchBrush = new SolidColorBrush(Color.FromArgb(150, 255, 145, 0));
         private static readonly IBrush DarkCaretBrush = new SolidColorBrush(Color.FromRgb(245, 245, 245));
         private static readonly IBrush LightBackgroundBrush = new SolidColorBrush(Color.FromRgb(248, 249, 251));
         private static readonly IBrush LightLineNumberBackgroundBrush = new SolidColorBrush(Color.FromRgb(240, 242, 245));
@@ -154,8 +478,9 @@ public sealed class JsonConfigEditor : Grid
         private static readonly IBrush LightKeywordBrush = new SolidColorBrush(Color.FromRgb(0, 98, 177));
         private static readonly IBrush LightPunctuationBrush = new SolidColorBrush(Color.FromRgb(97, 99, 104));
         private static readonly IBrush LightSelectionBrush = new SolidColorBrush(Color.FromArgb(96, 173, 214, 255));
+        private static readonly IBrush LightSearchBrush = new SolidColorBrush(Color.FromArgb(120, 255, 230, 120));
+        private static readonly IBrush LightCurrentSearchBrush = new SolidColorBrush(Color.FromArgb(160, 255, 190, 60));
         private static readonly IBrush LightCaretBrush = new SolidColorBrush(Color.FromRgb(36, 41, 46));
-        private const double FontSizeValue = 12;
         private const double HorizontalPadding = 8;
         private const double VerticalPadding = 8;
         private const double LineNumberGap = 8;
@@ -185,6 +510,8 @@ public sealed class JsonConfigEditor : Grid
             };
             RebuildDocumentState();
         }
+
+        public int CaretIndex => _caretIndex;
 
         public double HorizontalOffset
         {
@@ -221,6 +548,50 @@ public sealed class JsonConfigEditor : Grid
             InvalidateVisual();
         }
 
+        public JsonConfigEditor.EditorSnapshot CaptureSnapshot()
+            => new(Text, _caretIndex, _selectionAnchor, HorizontalOffset, VerticalOffset);
+
+        public void ApplySnapshot(JsonConfigEditor.EditorSnapshot snapshot)
+        {
+            _internalTextUpdate = true;
+            _owner._isInternalTextMutation = true;
+            _owner.Text = snapshot.Text;
+            _owner._isInternalTextMutation = false;
+            _internalTextUpdate = false;
+            _caretIndex = Math.Clamp(snapshot.CaretIndex, 0, Text.Length);
+            _selectionAnchor = Math.Clamp(snapshot.SelectionAnchor, -1, Text.Length);
+            _owner._horizontalScrollBar.Value = Math.Clamp(snapshot.HorizontalOffset, 0, _owner._horizontalScrollBar.Maximum);
+            _owner._verticalScrollBar.Value = Math.Clamp(snapshot.VerticalOffset, 0, _owner._verticalScrollBar.Maximum);
+            EnsureCaretVisible();
+            InvalidateVisual();
+        }
+
+        public void SelectRange(int start, int length)
+        {
+            _selectionAnchor = Math.Clamp(start, 0, Text.Length);
+            _caretIndex = Math.Clamp(start + length, 0, Text.Length);
+            EnsureCaretVisible();
+            InvalidateVisual();
+        }
+
+        public void CenterRangeInView(int start, int length)
+        {
+            EnsureMetrics();
+            var targetIndex = Math.Clamp(start + Math.Max(0, length / 2), 0, Text.Length);
+            var (lineIndex, column) = GetLineAndColumn(targetIndex);
+            var lineNumberWidth = GetLineNumberColumnWidth();
+            var targetX = lineNumberWidth + HorizontalPadding + column * _charWidth;
+            var targetY = VerticalPadding + lineIndex * _lineHeight;
+
+            var horizontalTarget = Math.Max(0, targetX - Bounds.Width / 2);
+            var verticalTarget = Math.Max(0, targetY - Bounds.Height / 2 + _lineHeight / 2);
+
+            _owner._horizontalScrollBar.Value = Math.Clamp(horizontalTarget, 0, _owner._horizontalScrollBar.Maximum);
+            _owner._verticalScrollBar.Value = Math.Clamp(verticalTarget, 0, _owner._verticalScrollBar.Maximum);
+            HorizontalOffset = _owner._horizontalScrollBar.Value;
+            VerticalOffset = _owner._verticalScrollBar.Value;
+        }
+
         public Size GetExtent()
         {
             EnsureMetrics();
@@ -239,6 +610,7 @@ public sealed class JsonConfigEditor : Grid
             context.FillRectangle(GetBackgroundBrush(), bounds);
             context.FillRectangle(GetLineNumberBackgroundBrush(), new Rect(0, 0, lineNumberWidth, bounds.Height));
 
+            DrawSearchMatches(context, lineNumberWidth);
             DrawSelection(context, lineNumberWidth);
             DrawText(context, lineNumberWidth);
             DrawLineNumbers(context, lineNumberWidth);
@@ -309,6 +681,12 @@ public sealed class JsonConfigEditor : Grid
         {
             base.OnKeyDown(e);
 
+            if (HandleEditorShortcut(e))
+            {
+                e.Handled = true;
+                return;
+            }
+
             if (HandleClipboardShortcutAsync(e) is { } task)
             {
                 await task;
@@ -323,6 +701,46 @@ public sealed class JsonConfigEditor : Grid
         }
 
         private string Text => _owner.Text ?? string.Empty;
+
+        private bool HandleEditorShortcut(KeyEventArgs e)
+        {
+            if (e.Key == Key.F3)
+            {
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                {
+                    _owner.FindPrevious();
+                }
+                else
+                {
+                    _owner.FindNext();
+                }
+
+                return true;
+            }
+
+            if (!e.KeyModifiers.HasFlag(KeyModifiers.Control))
+            {
+                return false;
+            }
+
+            switch (e.Key)
+            {
+                case Key.F:
+                    _owner.OpenSearch();
+                    return true;
+                case Key.Z when !_owner.IsReadOnly && e.KeyModifiers.HasFlag(KeyModifiers.Shift):
+                    _owner.Redo();
+                    return true;
+                case Key.Z when !_owner.IsReadOnly:
+                    _owner.Undo();
+                    return true;
+                case Key.Y when !_owner.IsReadOnly:
+                    _owner.Redo();
+                    return true;
+                default:
+                    return false;
+            }
+        }
 
         private Task? HandleClipboardShortcutAsync(KeyEventArgs e)
         {
@@ -508,13 +926,26 @@ public sealed class JsonConfigEditor : Grid
 
         private void SetTextInternal(string newText, int newCaretIndex)
         {
+            if (string.Equals(newText, Text, StringComparison.Ordinal))
+            {
+                _caretIndex = Math.Clamp(newCaretIndex, 0, Text.Length);
+                _selectionAnchor = _caretIndex;
+                EnsureCaretVisible();
+                InvalidateVisual();
+                return;
+            }
+
+            _owner.PushUndoSnapshot(CaptureSnapshot());
             _internalTextUpdate = true;
+            _owner._isInternalTextMutation = true;
             _owner.Text = newText;
+            _owner._isInternalTextMutation = false;
             _internalTextUpdate = false;
             _caretIndex = Math.Clamp(newCaretIndex, 0, Text.Length);
             _selectionAnchor = _caretIndex;
             EnsureCaretVisible();
             _owner.UpdateScrollBars();
+            _owner.UpdateSearchResults(selectCurrentMatch: false);
             InvalidateVisual();
         }
 
@@ -683,6 +1114,24 @@ public sealed class JsonConfigEditor : Grid
             }
         }
 
+        private void DrawSearchMatches(DrawingContext context, double lineNumberWidth)
+        {
+            for (var i = 0; i < _owner._searchMatches.Count; i++)
+            {
+                var match = _owner._searchMatches[i];
+                var isCurrent = i == _owner._currentSearchMatchIndex;
+                var brush = isCurrent ? GetCurrentSearchBrush() : GetSearchBrush();
+                DrawTextRangeHighlight(
+                    context,
+                    lineNumberWidth,
+                    match.Start,
+                    match.Start + match.Length,
+                    brush,
+                    isCurrent ? 2 : 0,
+                    isCurrent ? GetCurrentSearchOutlineBrush() : null);
+            }
+        }
+
         private void DrawSelection(DrawingContext context, double lineNumberWidth)
         {
             if (!HasSelection)
@@ -691,7 +1140,18 @@ public sealed class JsonConfigEditor : Grid
             }
 
             var (start, length) = GetSelectionRange();
-            var end = start + length;
+            DrawTextRangeHighlight(context, lineNumberWidth, start, start + length, GetSelectionBrush(), 0, null);
+        }
+
+        private void DrawTextRangeHighlight(
+            DrawingContext context,
+            double lineNumberWidth,
+            int start,
+            int end,
+            IBrush brush,
+            double inflate,
+            IPen? pen)
+        {
             var lineStartX = lineNumberWidth + HorizontalPadding - HorizontalOffset;
 
             for (var lineIndex = 0; lineIndex < _lines.Count; lineIndex++)
@@ -715,8 +1175,12 @@ public sealed class JsonConfigEditor : Grid
                     lineStartX + startColumn * _charWidth,
                     VerticalPadding + lineIndex * _lineHeight - VerticalOffset,
                     Math.Max(2, (endColumn - startColumn) * _charWidth),
-                    _lineHeight);
-                context.FillRectangle(GetSelectionBrush(), rect);
+                    _lineHeight).Inflate(inflate);
+                context.FillRectangle(brush, rect);
+                if (pen != null)
+                {
+                    context.DrawRectangle(pen, rect);
+                }
             }
         }
 
@@ -886,6 +1350,15 @@ public sealed class JsonConfigEditor : Grid
         private IBrush GetLineNumberBrush() => IsLightTheme ? LightLineNumberBrush : DarkLineNumberBrush;
 
         private IBrush GetSelectionBrush() => IsLightTheme ? LightSelectionBrush : DarkSelectionBrush;
+
+        private IBrush GetSearchBrush() => IsLightTheme ? LightSearchBrush : DarkSearchBrush;
+
+        private IBrush GetCurrentSearchBrush() => IsLightTheme ? LightCurrentSearchBrush : DarkCurrentSearchBrush;
+
+        private IPen GetCurrentSearchOutlineBrush()
+            => new Pen(IsLightTheme
+                ? new SolidColorBrush(Color.FromRgb(191, 101, 0))
+                : new SolidColorBrush(Color.FromRgb(255, 214, 102)));
 
         private IBrush GetCaretBrush() => IsLightTheme ? LightCaretBrush : DarkCaretBrush;
 

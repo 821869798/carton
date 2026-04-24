@@ -88,6 +88,9 @@
   <x:String x:Key="Profiles.Form.ValidateJson">检测 JSON</x:String>
   <x:String x:Key="Profiles.Form.OpenExternal">通过外部编辑器打开</x:String>
   <x:String x:Key="Profiles.Form.CopyAsLocal">复制为本地配置</x:String>
+  <x:String x:Key="Profiles.Editor.Search">搜索</x:String>
+  <x:String x:Key="Profiles.Editor.Undo">撤销</x:String>
+  <x:String x:Key="Profiles.Editor.Redo">重做</x:String>
   <x:String x:Key="Profiles.Toast.JsonFormatSuccess">JSON 已格式化</x:String>
   <x:String x:Key="Profiles.Toast.SaveSuccess">配置已保存</x:String>
   <x:String x:Key="Profiles.Toast.JsonValid">JSON 语法有效</x:String>

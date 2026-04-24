@@ -72,9 +72,18 @@
 			<Setter Property="Foreground" Value="{DynamicResource SystemAccentColorForeground}"/>
 			<Setter Property="Opacity" Value="0.88"/>
 		</Style>
+		<Style Selector="Button.searchChip">
+			<Setter Property="Width" Value="30"/>
+			<Setter Property="Height" Value="30"/>
+			<Setter Property="Padding" Value="0"/>
+			<Setter Property="CornerRadius" Value="15"/>
+			<Setter Property="HorizontalContentAlignment" Value="Center"/>
+			<Setter Property="VerticalContentAlignment" Value="Center"/>
+			<Setter Property="FontSize" Value="11"/>
+		</Style>
  	</UserControl.Styles>
 
-	<Grid RowDefinitions="Auto,Auto,*">
+	<Grid RowDefinitions="Auto,Auto,Auto,*">
 		<Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="6">
 			<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
 				<Button Grid.Column="0"
@@ -96,6 +105,14 @@
 							Orientation="Horizontal"
 							Spacing="6"
 							IsVisible="{Binding ShowConfigFullscreenView}">
+					<Button x:Name="SearchConfigButton"
+							Classes="iconButton"
+							Click="OnSearchConfigClick"
+							ToolTip.Tip="{DynamicResource Profiles.Editor.Search}">
+						<PathIcon Width="14"
+								  Height="14"
+								  Data="M15.5 14H14.71L14.43 13.73A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16A6.471 6.471 0 0 0 13.73 14.43L14 14.71V15.5L19 20.49L20.49 19L15.5 14ZM9.5 14A4.5 4.5 0 1 1 14 9.5A4.505 4.505 0 0 1 9.5 14Z"/>
+					</Button>
 					<Button Classes="iconButton"
 							Command="{Binding ValidateConfigJsonCommand}"
 							ToolTip.Tip="{Binding ValidateJsonText}">
@@ -124,6 +141,65 @@
 		</Border>
 
 		<Border Grid.Row="1"
+				x:Name="ConfigSearchBar"
+				IsVisible="False"
+				Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+				BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+				BorderThickness="0,0,0,1"
+				Padding="10,8">
+			<Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+				<TextBox x:Name="ConfigSearchInput"
+						 Grid.Column="0"
+						 VerticalAlignment="Center"
+						 Watermark="{DynamicResource Profiles.Editor.Search}"/>
+				<TextBlock x:Name="ConfigSearchStatus"
+						   Grid.Column="1"
+						   Width="56"
+						   VerticalAlignment="Center"
+						   TextAlignment="Center"/>
+				<Button x:Name="ConfigSearchCaseButton"
+						Grid.Column="2"
+						Classes="searchChip"
+						Content="Aa"
+						Click="OnSearchCaseClick"/>
+				<Button x:Name="ConfigSearchWholeWordButton"
+						Grid.Column="3"
+						Classes="searchChip"
+						Content="W"
+						Click="OnSearchWholeWordClick"/>
+				<Button x:Name="ConfigSearchRegexButton"
+						Grid.Column="4"
+						Classes="searchChip"
+						Content=".*"
+						Click="OnSearchRegexClick"/>
+				<Button x:Name="ConfigSearchPreviousButton"
+						Grid.Column="5"
+						Classes="iconButton"
+						Click="OnSearchPreviousClick">
+					<PathIcon Width="14"
+							  Height="14"
+							  Data="M7 14L12 9L17 14H7Z"/>
+				</Button>
+				<Button x:Name="ConfigSearchNextButton"
+						Grid.Column="6"
+						Classes="iconButton"
+						Click="OnSearchNextClick">
+					<PathIcon Width="14"
+							  Height="14"
+							  Data="M7 10L12 15L17 10H7Z"/>
+				</Button>
+				<Button x:Name="ConfigSearchCloseButton"
+						Grid.Column="7"
+						Classes="iconButton"
+						Click="OnSearchCloseClick">
+					<PathIcon Width="14"
+							  Height="14"
+							  Data="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z"/>
+				</Button>
+			</Grid>
+		</Border>
+
+		<Border Grid.Row="2"
 				IsVisible="{Binding ImportStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
 				Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
 				BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
@@ -135,7 +211,7 @@
 			</StackPanel>
 		</Border>
 
-		<Grid Grid.Row="2">
+		<Grid Grid.Row="3">
 			<ScrollViewer IsVisible="{Binding !IsProfileFormMode}"
 						  Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
 				<Border Margin="20"
@@ -353,6 +429,7 @@
 							CornerRadius="10"
 							ClipToBounds="True">
 						<controls:JsonConfigEditor HorizontalAlignment="Stretch"
+												 x:Name="ConfigEditor"
 												 VerticalAlignment="Stretch"
 												 Text="{Binding ConfigContent, Mode=TwoWay}"
 												 IsReadOnly="{Binding IsConfigReadOnly}"/>
