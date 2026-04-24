@@ -925,6 +925,7 @@ public partial class GroupsViewModel : PageViewModelBase
 
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
+            group.IsTesting = true;
             foreach (var item in targets)
             {
                 SetOutboundTestingState(item.Tag, true);
@@ -935,11 +936,18 @@ public partial class GroupsViewModel : PageViewModelBase
         {
             var completedCounter = new int[1];
             var totalCount = targets.Count;
+            using var concurrencyLimiter = new SemaphoreSlim(10);
             var testTasks = new Task[targets.Count];
             for (var i = 0; i < targets.Count; i++)
             {
                 var item = targets[i];
-                testTasks[i] = TestGroupTargetAsync(group, item, updateTestingState, totalCount, completedCounter);
+                testTasks[i] = TestGroupTargetLimitedAsync(
+                    concurrencyLimiter,
+                    group,
+                    item,
+                    updateTestingState,
+                    totalCount,
+                    completedCounter);
             }
 
             await Task.WhenAll(testTasks);
@@ -973,11 +981,32 @@ public partial class GroupsViewModel : PageViewModelBase
                     SetOutboundTestingState(item.Tag, false);
                 }
 
+                group.IsTesting = false;
+
                 if (updateTestingState)
                 {
                     IsTestingGroup = false;
                 }
             });
+        }
+    }
+
+    private async Task TestGroupTargetLimitedAsync(
+        SemaphoreSlim concurrencyLimiter,
+        GroupItemViewModel group,
+        OutboundItemViewModel item,
+        bool updateTestingState,
+        int totalCount,
+        int[] completedCounter)
+    {
+        await concurrencyLimiter.WaitAsync();
+        try
+        {
+            await TestGroupTargetAsync(group, item, updateTestingState, totalCount, completedCounter);
+        }
+        finally
+        {
+            concurrencyLimiter.Release();
         }
     }
 
@@ -1584,6 +1613,7 @@ public partial class GroupsViewModel : PageViewModelBase
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
             UpdateCachedRawDelay(item.Tag, delay);
+            RecalculateEffectiveDelays();
             SetOutboundTestingState(item.Tag, false);
 
             completedCounter[0]++;
@@ -1905,6 +1935,9 @@ public partial class GroupItemViewModel : ObservableObject
     [ObservableProperty]
     private bool _isExpanded;
 
+    [ObservableProperty]
+    private bool _isTesting;
+
     public IAsyncRelayCommand<string>? SelectOutboundCommand { get; set; }
 
     public bool IsCollapsed => !IsExpanded;
@@ -2011,19 +2044,21 @@ public partial class OutboundItemViewModel : ObservableObject
     private bool _isTesting;
 
     public string DelayDisplay => IsTesting ? "..." : Delay > 0 ? $"{Delay}ms" : string.Empty;
-
-    public string DelayDisplayOrIcon => IsTesting ? "..." : Delay > 0 ? $"{Delay}ms" : "\u26A1";
+    public bool ShowDelayText => IsTesting || Delay > 0;
+    public bool ShowDelayIcon => !IsTesting && Delay <= 0;
 
     partial void OnDelayChanged(int value)
     {
         OnPropertyChanged(nameof(DelayDisplay));
-        OnPropertyChanged(nameof(DelayDisplayOrIcon));
+        OnPropertyChanged(nameof(ShowDelayText));
+        OnPropertyChanged(nameof(ShowDelayIcon));
     }
 
     partial void OnIsTestingChanged(bool value)
     {
         OnPropertyChanged(nameof(DelayDisplay));
-        OnPropertyChanged(nameof(DelayDisplayOrIcon));
+        OnPropertyChanged(nameof(ShowDelayText));
+        OnPropertyChanged(nameof(ShowDelayIcon));
     }
 }
 

@@ -20,7 +20,8 @@
 	<ItemGroup>
 		<RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="3" />
 		<Folder Include="Models\" />
-		<AvaloniaResource Include="Assets\**" />
+		<AvaloniaResource Include="Assets\**"
+						  Exclude="Assets\carton_icon_full.png" />
 		<AvaloniaResource Include="Resources\**"
 						  Exclude="Resources\Localization\Strings.en.axaml;Resources\Localization\Strings.zh-Hans.axaml" />
 		<AvaloniaXaml Remove="Resources\Localization\Strings.en.axaml" />
@@ -34,13 +35,12 @@
 		<PackageReference Include="Avalonia.Desktop" Version="11.3.14" />
 		<PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.14" />
 		<PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.14" />
-		<PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.13" />
-		<PackageReference Include="Avalonia.Diagnostics" Version="11.3.14">
-			<IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
-			<PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
-		</PackageReference>
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
 		<PackageReference Include="Velopack" Version="0.0.1298" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(Configuration)' == 'Debug'">
+		<PackageReference Include="Avalonia.Diagnostics" Version="11.3.14" />
 	</ItemGroup>
 
 	<ItemGroup>

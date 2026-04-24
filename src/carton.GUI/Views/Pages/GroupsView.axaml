@@ -115,8 +115,26 @@
                         <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundBaseLowBrush}"/>
                       </Style>
                     </Border.Styles>
-                    <TextBlock Text="&#x26A1;"
-                               FontSize="14"/>
+                    <Grid MinWidth="28"
+                          Height="16"
+                          VerticalAlignment="Center">
+                      <TextBlock Text="..."
+                                 IsVisible="{Binding IsTesting}"
+                                 VerticalAlignment="Center"
+                                 HorizontalAlignment="Center"
+                                 FontSize="11"
+                                 FontWeight="SemiBold"
+                                 Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                      <Path Width="14"
+                            Height="14"
+                            IsVisible="{Binding !IsTesting}"
+                            Stretch="Uniform"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Margin="1,0,0,0"
+                            Fill="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                            Data="M13 2L5 13H11L10 22L18 11H12L13 2Z"/>
+                    </Grid>
                   </Border>
 
                   <Grid Grid.Column="2"
@@ -317,11 +335,26 @@
                                       <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundBaseLowBrush}"/>
                                     </Style>
                                   </Border.Styles>
-                                  <TextBlock Text="{Binding DelayDisplayOrIcon}"
-                                             VerticalAlignment="Center"
-                                             FontSize="11"
-                                             FontWeight="SemiBold"
-                                             Foreground="{Binding Delay, Converter={StaticResource LatencyForegroundConverter}}"/>
+                                  <Grid MinWidth="28"
+                                        Height="16"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding DelayDisplay}"
+                                               IsVisible="{Binding ShowDelayText}"
+                                               VerticalAlignment="Center"
+                                               HorizontalAlignment="Center"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               Foreground="{Binding Delay, Converter={StaticResource LatencyForegroundConverter}}"/>
+                                    <Path Width="12"
+                                          Height="12"
+                                          IsVisible="{Binding ShowDelayIcon}"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Center"
+                                          Margin="1,0,0,0"
+                                          Stretch="Uniform"
+                                          Fill="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                          Data="M13 2L5 13H11L10 22L18 11H12L13 2Z"/>
+                                  </Grid>
                                 </Border>
                               </Grid>
                             </Border>
