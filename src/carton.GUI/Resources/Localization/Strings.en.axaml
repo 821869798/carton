@@ -273,6 +273,7 @@
 	<x:String x:Key="Settings.Data.StoreInAppDir.CancelButton">Cancel</x:String>
 	<x:String x:Key="Settings.Data.StoreInAppDir.Failed">Failed to change data directory</x:String>
 	<x:String x:Key="Settings.Data.OpenFolder">Open Data Folder</x:String>
+	<x:String x:Key="Settings.Data.ClearAll">Clear All Data</x:String>
 	<x:String x:Key="Settings.Data.Backup.Export">Export Backup</x:String>
 	<x:String x:Key="Settings.Data.Backup.Import">Import Backup</x:String>
 	<x:String x:Key="Settings.Data.Backup.Export.Title">Export Backup</x:String>
@@ -292,6 +293,18 @@
 	<x:String x:Key="Settings.Data.ClearCache.Success">Cache database cleared successfully</x:String>
 	<x:String x:Key="Settings.Data.ClearCache.NotFound">Cache database file not found</x:String>
 	<x:String x:Key="Settings.Data.ClearCache.Failed">Failed to clear cache database</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.ConfirmTitle">Confirm Clear Data</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.ConfirmMessage">This will permanently delete the entire data directory:
+{0}
+
+This action cannot be undone. Continue?</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.ConfirmButton">Delete Data</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.InProgress">Clearing data...</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.Success">Data cleared</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.Failed">Failed to clear data</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.Restart.Title">Restart Required</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.Restart.Message">Data has been cleared. The app needs to restart to recreate defaults.</x:String>
+	<x:String x:Key="Settings.Data.ClearAll.PortableNotSupported">Portable mode stores data in the application directory. Clear it manually after closing the app.</x:String>
 	<x:String x:Key="Settings.Data.Reset">Reset Settings</x:String>
 
 	<x:String x:Key="Settings.Section.About">About</x:String>

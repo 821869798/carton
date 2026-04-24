@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -28,6 +30,8 @@ public interface IAppUpdateService
     string? PendingRestartVersion { get; }
 
     bool SupportsInAppUpdates { get; }
+
+    bool SupportsDirectInstallerUpdates { get; }
 
     string ReleasesPageUrl { get; }
 
@@ -52,7 +56,7 @@ public sealed record AppUpdateResult(
     string Version,
     string? ReleaseNotesMarkdown,
     string Channel,
-    UpdateInfo UpdateInfo,
+    UpdateInfo? UpdateInfo,
     GitHubReleaseInfo ReleaseInfo);
 
 public sealed record GitHubReleaseInfo(
@@ -84,9 +88,12 @@ public sealed class AppUpdateService : IAppUpdateService
     private readonly string _repoOwner;
     private readonly string _repoName;
     private readonly bool _supportsInAppUpdates;
+    private readonly bool _supportsDirectInstallerUpdates;
 
     private VelopackAsset? _stagedRelease;
     private string? _stagedChannel;
+    private string? _downloadedInstallerPath;
+    private string? _downloadedInstallerVersion;
 
     public AppUpdateService(string repositoryUrl, string? token = null, Action<string>? log = null)
     {
@@ -112,11 +119,14 @@ public sealed class AppUpdateService : IAppUpdateService
 
         CurrentVersion = CartonApplicationInfo.Version;
         _supportsInAppUpdates = DetermineSupportsInAppUpdates();
+        _supportsDirectInstallerUpdates = DetermineSupportsDirectInstallerUpdates();
     }
 
     public string CurrentVersion { get; }
 
     public bool SupportsInAppUpdates => _supportsInAppUpdates;
+
+    public bool SupportsDirectInstallerUpdates => _supportsDirectInstallerUpdates;
 
     public string ReleasesPageUrl => $"{_repositoryUrl}/releases";
 
@@ -124,6 +134,11 @@ public sealed class AppUpdateService : IAppUpdateService
     {
         get
         {
+            if (!string.IsNullOrWhiteSpace(_downloadedInstallerVersion))
+            {
+                return _downloadedInstallerVersion;
+            }
+
             var release = GetPendingRestartRelease();
             if (release?.Version == null)
             {
@@ -138,7 +153,7 @@ public sealed class AppUpdateService : IAppUpdateService
     {
         get
         {
-            return GetPendingRestartRelease() != null;
+            return !string.IsNullOrWhiteSpace(_downloadedInstallerPath) || GetPendingRestartRelease() != null;
         }
     }
 
@@ -158,6 +173,11 @@ public sealed class AppUpdateService : IAppUpdateService
         {
             Log($"Current version ({CurrentVersion}) is up to date for channel={channel}");
             return null;
+        }
+
+        if (!SupportsInAppUpdates)
+        {
+            return new AppUpdateResult(releaseInfo.Version, releaseInfo.Body, channel, null, releaseInfo);
         }
 
         var manager = CreateManager(channel, releaseInfo, allowVersionDowngrade: true);
@@ -223,6 +243,12 @@ public sealed class AppUpdateService : IAppUpdateService
             throw new ArgumentNullException(nameof(update));
         }
 
+        if (!SupportsInAppUpdates)
+        {
+            await DownloadInstallerUpdateAsync(update, progress, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         var totalBytes = ResolveDownloadSize(update);
         var manager = CreateManager(channel, update.ReleaseInfo);
         try
@@ -230,7 +256,7 @@ public sealed class AppUpdateService : IAppUpdateService
             Log($"Downloading update {update.Version} (channel={channel})");
 
             await manager.DownloadUpdatesAsync(
-                update.UpdateInfo,
+                update.UpdateInfo!,
                 percent =>
                 {
                     var normalizedPercent = Math.Clamp(percent, 0, 100);
@@ -241,7 +267,7 @@ public sealed class AppUpdateService : IAppUpdateService
                 },
                 cancellationToken).ConfigureAwait(false);
 
-            _stagedRelease = update.UpdateInfo.TargetFullRelease;
+            _stagedRelease = update.UpdateInfo!.TargetFullRelease;
             _stagedChannel = channel;
         }
         finally
@@ -252,6 +278,22 @@ public sealed class AppUpdateService : IAppUpdateService
 
     public async Task RestartToApplyDownloadedUpdateAsync(bool silentRestart = false)
     {
+        if (!SupportsInAppUpdates)
+        {
+            if (string.IsNullOrWhiteSpace(_downloadedInstallerPath) || !File.Exists(_downloadedInstallerPath))
+            {
+                throw new InvalidOperationException("No downloaded installer is ready to apply.");
+            }
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = _downloadedInstallerPath,
+                UseShellExecute = true
+            });
+            Environment.Exit(0);
+            return;
+        }
+
         if (_stagedRelease == null)
         {
             _stagedRelease = GetPendingRestartRelease();
@@ -325,6 +367,12 @@ public sealed class AppUpdateService : IAppUpdateService
 
     private static long ResolveDownloadSize(AppUpdateResult update)
     {
+        if (update.UpdateInfo == null)
+        {
+            var installerAsset = ResolvePreferredInstallerAsset(update.ReleaseInfo);
+            return installerAsset?.Size ?? 0;
+        }
+
         var deltaPackages = update.UpdateInfo.DeltasToTarget;
         if (deltaPackages is { Length: > 0 })
         {
@@ -407,6 +455,11 @@ public sealed class AppUpdateService : IAppUpdateService
             Log($"Failed to determine update capability: {ex.Message}");
             return false;
         }
+    }
+
+    private static bool DetermineSupportsDirectInstallerUpdates()
+    {
+        return OperatingSystem.IsWindows();
     }
 
     private bool IsRemoteVersionDifferent(string remoteVersion)
@@ -513,14 +566,14 @@ public sealed class AppUpdateService : IAppUpdateService
                 continue;
             }
 
-            return new GitHubReleaseInfo(
+            return await HydrateReleaseDetailsAsync(new GitHubReleaseInfo(
                 tag,
                 NormalizeVersion(tag),
                 isPrerelease,
                 tag,
                 string.Empty,
                 [],
-                DateTimeOffset.MinValue);
+                DateTimeOffset.MinValue), cancellationToken).ConfigureAwait(false);
         }
 
         return null;
@@ -545,14 +598,14 @@ public sealed class AppUpdateService : IAppUpdateService
                 continue;
             }
 
-            return new GitHubReleaseInfo(
+            return await HydrateReleaseDetailsAsync(new GitHubReleaseInfo(
                 release.Tag,
                 NormalizeVersion(release.Tag),
                 release.IsPrerelease,
                 string.IsNullOrWhiteSpace(release.Title) ? release.Tag : release.Title,
                 release.Body,
                 [],
-                release.PublishedAt);
+                release.PublishedAt), cancellationToken).ConfigureAwait(false);
         }
 
         return null;
@@ -682,4 +735,122 @@ public sealed class AppUpdateService : IAppUpdateService
         string Body,
         bool IsPrerelease,
         DateTimeOffset PublishedAt);
+
+    private async Task<GitHubReleaseInfo> HydrateReleaseDetailsAsync(
+        GitHubReleaseInfo fallback,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await _httpClient.GetAsync(
+                $"https://api.github.com/repos/{_repoOwner}/{_repoName}/releases/tags/{Uri.EscapeDataString(fallback.Tag)}",
+                cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return fallback;
+            }
+
+            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            var root = document.RootElement;
+
+            var assets = new List<GitHubAssetInfo>();
+            if (root.TryGetProperty("assets", out var assetsElement) && assetsElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var asset in assetsElement.EnumerateArray())
+                {
+                    var name = asset.TryGetProperty("name", out var nameProperty) ? nameProperty.GetString() ?? string.Empty : string.Empty;
+                    var url = asset.TryGetProperty("browser_download_url", out var urlProperty) ? urlProperty.GetString() ?? string.Empty : string.Empty;
+                    var size = asset.TryGetProperty("size", out var sizeProperty) && sizeProperty.TryGetInt64(out var parsedSize)
+                        ? parsedSize
+                        : 0;
+
+                    if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(url))
+                    {
+                        assets.Add(new GitHubAssetInfo(name, url, size));
+                    }
+                }
+            }
+
+            var tag = root.TryGetProperty("tag_name", out var tagProperty) ? tagProperty.GetString() ?? fallback.Tag : fallback.Tag;
+            var releaseName = root.TryGetProperty("name", out var releaseNameProperty) ? releaseNameProperty.GetString() ?? fallback.Name : fallback.Name;
+            var body = root.TryGetProperty("body", out var bodyProperty) ? bodyProperty.GetString() ?? fallback.Body : fallback.Body;
+            var isPrerelease = root.TryGetProperty("prerelease", out var prereleaseProperty) && prereleaseProperty.ValueKind == JsonValueKind.True
+                ? true
+                : fallback.IsPrerelease;
+            var publishedAt = root.TryGetProperty("published_at", out var publishedProperty)
+                ? ParseAtomDateTime(publishedProperty.GetString())
+                : fallback.PublishedAt;
+
+            return new GitHubReleaseInfo(
+                tag,
+                NormalizeVersion(tag),
+                isPrerelease,
+                string.IsNullOrWhiteSpace(releaseName) ? tag : releaseName,
+                body,
+                assets,
+                publishedAt);
+        }
+        catch
+        {
+            return fallback;
+        }
+    }
+
+    private async Task DownloadInstallerUpdateAsync(
+        AppUpdateResult update,
+        IProgress<AppUpdateDownloadProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        var asset = ResolvePreferredInstallerAsset(update.ReleaseInfo);
+        if (asset == null)
+        {
+            throw new InvalidOperationException("No Windows installer asset was found for this release.");
+        }
+
+        var fileName = Path.GetFileName(asset.Name);
+        var tempPath = Path.Combine(Path.GetTempPath(), fileName);
+        using var response = await _httpClient.GetAsync(asset.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+
+        var totalBytes = response.Content.Headers.ContentLength ?? asset.Size;
+        await using var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using var target = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None);
+        var buffer = new byte[81920];
+        long bytesReceived = 0;
+
+        while (true)
+        {
+            var bytesRead = await source.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+            if (bytesRead <= 0)
+            {
+                break;
+            }
+
+            await target.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken).ConfigureAwait(false);
+            bytesReceived += bytesRead;
+            var percent = totalBytes > 0 ? (int)Math.Clamp(bytesReceived * 100 / totalBytes, 0, 100) : 0;
+            progress?.Report(new AppUpdateDownloadProgress(percent, bytesReceived, totalBytes));
+        }
+
+        _downloadedInstallerPath = tempPath;
+        _downloadedInstallerVersion = update.Version;
+    }
+
+    private static GitHubAssetInfo? ResolvePreferredInstallerAsset(GitHubReleaseInfo release)
+    {
+        if (release.Assets.Count == 0)
+        {
+            return null;
+        }
+
+        return release.Assets
+            .Where(asset => asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                            asset.Name.EndsWith(".msi", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(asset => asset.Name.Contains("InnoSetup", StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(asset => asset.Name.Contains("Setup", StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(asset => asset.Name.Contains("win-x64", StringComparison.OrdinalIgnoreCase))
+            .ThenBy(asset => asset.Name.EndsWith(".msi", StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault();
+    }
 }

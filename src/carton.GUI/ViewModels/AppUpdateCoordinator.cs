@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -543,7 +544,9 @@ public partial class AppUpdateCoordinator : ObservableObject
     private void InitializeState()
     {
         CurrentAppVersion = _appUpdateService?.CurrentVersion ?? GetString("Common.Unknown", "unknown");
-        _requiresManualAppUpdate = _appUpdateService != null && !_appUpdateService.SupportsInAppUpdates;
+        _requiresManualAppUpdate = _appUpdateService != null &&
+                                   !_appUpdateService.SupportsInAppUpdates &&
+                                   !_appUpdateService.SupportsDirectInstallerUpdates;
         IsPortableApp = _requiresManualAppUpdate;
         LatestAvailableVersion = _appUpdateService?.PendingRestartVersion ?? string.Empty;
         IsAppUpdateAvailable = false;
@@ -603,6 +606,11 @@ public partial class AppUpdateCoordinator : ObservableObject
 
     private long ResolveExpectedDownloadSize(AppUpdateResult update)
     {
+        if (update.UpdateInfo == null)
+        {
+            return update.ReleaseInfo.Assets.FirstOrDefault()?.Size ?? 0;
+        }
+
         var deltaPackages = update.UpdateInfo.DeltasToTarget;
         if (deltaPackages is { Length: > 0 })
         {
