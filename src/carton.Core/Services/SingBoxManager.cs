@@ -19,6 +19,7 @@ public interface ISingBoxManager
 
     Task<bool> SyncRunningStateAsync();
     Task<bool> StartAsync(string configPath);
+    Task<(bool Success, string Message)> CheckConfigAsync(string configContent);
     Task StopAsync();
     Task ReloadAsync();
     Task<List<OutboundGroup>> GetOutboundGroupsAsync();
@@ -276,6 +277,85 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
             await CleanupFailedStartAttemptAsync();
             SetError(error);
             return false;
+        }
+    }
+
+    public async Task<(bool Success, string Message)> CheckConfigAsync(string configContent)
+    {
+        if (string.IsNullOrWhiteSpace(configContent))
+        {
+            return (false, "Configuration content is empty.");
+        }
+
+        if (!File.Exists(_singBoxPath))
+        {
+            return (false, $"sing-box binary not found at: {_singBoxPath}");
+        }
+
+        var tempConfigPath = Path.Combine(Path.GetTempPath(), $"carton-check-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            await File.WriteAllTextAsync(tempConfigPath, configContent, new UTF8Encoding(false));
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = _singBoxPath,
+                Arguments = $"check -c \"{tempConfigPath}\"",
+                WorkingDirectory = _workingDirectory,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            };
+            ApplyLinuxLibrarySearchPath(startInfo);
+
+            using var process = new Process { StartInfo = startInfo };
+            if (!process.Start())
+            {
+                return (false, "Failed to start sing-box check process.");
+            }
+
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+
+            await Task.WhenAll(stdoutTask, stderrTask, process.WaitForExitAsync());
+
+            var stdout = (await stdoutTask).Trim();
+            var stderr = (await stderrTask).Trim();
+
+            var output = string.Join(
+                Environment.NewLine + Environment.NewLine,
+                new[] { stdout, stderr }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                output = process.ExitCode == 0
+                    ? "sing-box check succeeded."
+                    : $"sing-box check failed with exit code {process.ExitCode}.";
+            }
+
+            return (process.ExitCode == 0, output);
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Failed to run sing-box check: {ex.Message}");
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(tempConfigPath))
+                {
+                    File.Delete(tempConfigPath);
+                }
+            }
+            catch
+            {
+                // Ignore temp cleanup errors.
+            }
         }
     }
 

@@ -670,17 +670,31 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private void ValidateConfigJson()
+    private async Task ValidateConfigJson()
     {
-        try
+        if (_singBoxManager == null)
         {
-            using var _ = JsonDocument.Parse(ConfigContent);
+            try
+            {
+                using var _ = JsonDocument.Parse(ConfigContent);
+                _toastWriter?.Invoke(GetString("Profiles.Toast.JsonValid", "JSON syntax is valid"), 1800);
+            }
+            catch (JsonException ex)
+            {
+                _toastWriter?.Invoke(FormatJsonError(ex), 3600);
+            }
+
+            return;
+        }
+
+        var (success, message) = await _singBoxManager.CheckConfigAsync(ConfigContent);
+        if (success)
+        {
             _toastWriter?.Invoke(GetString("Profiles.Toast.JsonValid", "JSON syntax is valid"), 1800);
+            return;
         }
-        catch (JsonException ex)
-        {
-            _toastWriter?.Invoke(FormatJsonError(ex), 3600);
-        }
+
+        await ShowValidationErrorDialogAsync(message);
     }
 
     [RelayCommand]
@@ -1104,6 +1118,99 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         };
 
         return await dialog.ShowDialog<bool?>(owner);
+    }
+
+    private async Task ShowValidationErrorDialogAsync(string logText)
+    {
+        var content = string.IsNullOrWhiteSpace(logText)
+            ? GetString("Profiles.ValidateDialog.EmptyLog", "No error output from sing-box check.")
+            : logText.Trim();
+
+        var desktop = Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+        var owner = desktop?.MainWindow;
+        if (owner == null)
+        {
+            _toastWriter?.Invoke($"{GetString("Profiles.Toast.JsonInvalid", "Invalid JSON")}: {content}", 4200);
+            return;
+        }
+
+        var dialog = new Avalonia.Controls.Window
+        {
+            Width = 760,
+            Height = 520,
+            CanResize = true,
+            WindowStartupLocation = Avalonia.Controls.WindowStartupLocation.CenterOwner,
+            Title = GetString("Profiles.ValidateDialog.Title", "sing-box Check Failed")
+        };
+
+        var message = new Avalonia.Controls.TextBlock
+        {
+            Text = GetString("Profiles.ValidateDialog.Message", "sing-box check failed. Review the log below:"),
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            Margin = new Avalonia.Thickness(0, 0, 0, 12)
+        };
+
+        var logBox = new Avalonia.Controls.TextBox
+        {
+            Text = content,
+            IsReadOnly = true,
+            AcceptsReturn = true,
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            Height = 390
+        };
+        Avalonia.Controls.ScrollViewer.SetHorizontalScrollBarVisibility(
+            logBox,
+            Avalonia.Controls.Primitives.ScrollBarVisibility.Auto);
+        Avalonia.Controls.ScrollViewer.SetVerticalScrollBarVisibility(
+            logBox,
+            Avalonia.Controls.Primitives.ScrollBarVisibility.Auto);
+
+        var copyButton = new Avalonia.Controls.Button
+        {
+            Content = GetString("Profiles.ValidateDialog.CopyButton", "Copy Log"),
+            MinWidth = 100
+        };
+        copyButton.Click += async (_, _) =>
+        {
+            if (owner.Clipboard == null)
+            {
+                return;
+            }
+
+            await owner.Clipboard.SetTextAsync(content);
+            _toastWriter?.Invoke(GetString("Dashboard.Status.CommandCopied", "Command copied to clipboard"), 1800);
+        };
+
+        var closeButton = new Avalonia.Controls.Button
+        {
+            Content = GetString("Profiles.ValidateDialog.CloseButton", "Close"),
+            MinWidth = 90
+        };
+        closeButton.Click += (_, _) => dialog.Close();
+
+        dialog.Content = new Avalonia.Controls.StackPanel
+        {
+            Margin = new Avalonia.Thickness(20),
+            Spacing = 8,
+            Children =
+            {
+                message,
+                logBox,
+                new Avalonia.Controls.StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Spacing = 8,
+                    Children =
+                    {
+                        copyButton,
+                        closeButton
+                    }
+                }
+            }
+        };
+
+        await dialog.ShowDialog(owner);
     }
 
     private void RecalculateFormChanged()

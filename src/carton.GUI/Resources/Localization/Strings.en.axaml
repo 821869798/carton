@@ -93,8 +93,13 @@
   <x:String x:Key="Profiles.Editor.Redo">Redo</x:String>
   <x:String x:Key="Profiles.Toast.JsonFormatSuccess">JSON formatted</x:String>
   <x:String x:Key="Profiles.Toast.SaveSuccess">Profile saved</x:String>
-  <x:String x:Key="Profiles.Toast.JsonValid">JSON syntax is valid</x:String>
+  <x:String x:Key="Profiles.Toast.JsonValid">JSON config is valid</x:String>
   <x:String x:Key="Profiles.Toast.JsonInvalid">Invalid JSON</x:String>
+  <x:String x:Key="Profiles.ValidateDialog.Title">sing-box Check Failed</x:String>
+  <x:String x:Key="Profiles.ValidateDialog.Message">sing-box check failed. Review the log below:</x:String>
+  <x:String x:Key="Profiles.ValidateDialog.EmptyLog">No error output from sing-box check.</x:String>
+  <x:String x:Key="Profiles.ValidateDialog.CopyButton">Copy Log</x:String>
+  <x:String x:Key="Profiles.ValidateDialog.CloseButton">Close</x:String>
   <x:String x:Key="Profiles.Toast.LocalConfigNotFound">Config file not found</x:String>
   <x:String x:Key="Profiles.Toast.RemoteConfigNotFound">Error: Remote config not found locally, please update config</x:String>
   <x:String x:Key="Profiles.Toast.OpenFailed">Failed to open file</x:String>

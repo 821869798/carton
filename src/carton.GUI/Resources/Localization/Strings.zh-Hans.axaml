@@ -93,8 +93,13 @@
   <x:String x:Key="Profiles.Editor.Redo">重做</x:String>
   <x:String x:Key="Profiles.Toast.JsonFormatSuccess">JSON 已格式化</x:String>
   <x:String x:Key="Profiles.Toast.SaveSuccess">配置已保存</x:String>
-  <x:String x:Key="Profiles.Toast.JsonValid">JSON 语法有效</x:String>
+  <x:String x:Key="Profiles.Toast.JsonValid">json配置正确</x:String>
   <x:String x:Key="Profiles.Toast.JsonInvalid">JSON 语法无效</x:String>
+  <x:String x:Key="Profiles.ValidateDialog.Title">sing-box 校验失败</x:String>
+  <x:String x:Key="Profiles.ValidateDialog.Message">sing-box check 校验失败，请查看以下错误日志：</x:String>
+  <x:String x:Key="Profiles.ValidateDialog.EmptyLog">sing-box check 未输出错误日志。</x:String>
+  <x:String x:Key="Profiles.ValidateDialog.CopyButton">复制日志</x:String>
+  <x:String x:Key="Profiles.ValidateDialog.CloseButton">关闭</x:String>
   <x:String x:Key="Profiles.Toast.LocalConfigNotFound">找不到配置文件</x:String>
   <x:String x:Key="Profiles.Toast.RemoteConfigNotFound">错误：本地不存在此远程配置，请更新配置</x:String>
   <x:String x:Key="Profiles.Toast.OpenFailed">无法打开文件</x:String>
