@@ -275,7 +275,7 @@
         <StackPanel Spacing="12">
           <Grid ColumnDefinitions="*,Auto"
                 ColumnSpacing="12"
-                IsVisible="{Binding AppUpdate.IsPortableApp}">
+                IsVisible="{Binding ShowPortableDataOption}">
             <TextBlock Grid.Column="0" Text="{DynamicResource Settings.Data.StoreInAppDir}" VerticalAlignment="Center"/>
             <ToggleSwitch Grid.Column="1" Classes="OnlySwitch" IsChecked="{Binding IsDataInExeDirectory}" />
           </Grid>

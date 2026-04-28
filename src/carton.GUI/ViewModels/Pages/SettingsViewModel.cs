@@ -23,6 +23,12 @@ namespace carton.ViewModels;
 
 public partial class SettingsViewModel : PageViewModelBase, IDisposable
 {
+#if INSTALLER_BUILD
+    private const bool IsPortableDistributionBuild = false;
+#else
+    private const bool IsPortableDistributionBuild = true;
+#endif
+
     private const string WindowsNaiveProxyRuntimeDll = "libcronet.dll";
     private readonly Action<string, int>? _toastWriter;
     private readonly IConfigManager? _configManager;
@@ -158,6 +164,9 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
 
     [ObservableProperty]
     private bool _isDataInExeDirectory;
+
+    [ObservableProperty]
+    private bool _showPortableDataOption = true;
 
     partial void OnIsDataInExeDirectoryChanged(bool value)
     {
@@ -339,6 +348,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
 
         var preferences = _preferencesService.Load();
         _currentPreferences = preferences ?? new AppPreferences();
+        ShowPortableDataOption = IsPortableDistributionBuild;
 
         _suppressPreferenceUpdates = true;
         StartAtLogin = _currentPreferences.StartAtLogin;

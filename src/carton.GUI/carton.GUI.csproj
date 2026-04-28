@@ -15,6 +15,8 @@
 		<RootNamespace>carton</RootNamespace>
 		<ApplicationIcon>Assets\carton_icon.ico</ApplicationIcon>
 		<EnableLoopbackToolPath>Tools\Windows\EnableLoopback.exe</EnableLoopbackToolPath>
+		<CartonBuildMacro Condition="'$(CartonBuildMacro)' == ''"></CartonBuildMacro>
+		<DefineConstants>$(DefineConstants);$(CartonBuildMacro)</DefineConstants>
 	</PropertyGroup>
 
 	<ItemGroup>
