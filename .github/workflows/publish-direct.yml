@@ -384,9 +384,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           sparse-checkout: |
             .github/release-template.md
+
+      - name: Build commit changelog
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          mode: COMMIT
+          toTag: ${{ needs.metadata.outputs.tag }}
+          failOnError: false
 
       - name: Update release notes
         shell: bash
@@ -396,6 +406,7 @@ jobs:
           REPO: ${{ github.repository }}
           VERSION: ${{ needs.metadata.outputs.version }}
           CHANNEL: ${{ needs.metadata.outputs.channel }}
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
         run: |
           set -euo pipefail
 
@@ -412,5 +423,14 @@ jobs:
             -e "s|__BASE_URL__|$base_url|g" \
             -e "s|__CHANNEL__|$CHANNEL|g" \
             "$template_file" > "$notes_file"
+
+          if [[ -n "${CHANGELOG//[[:space:]]/}" ]]; then
+            {
+              echo ""
+              echo "**Commit Logs**"
+              echo ""
+              printf '%s\n' "$CHANGELOG"
+            } >> "$notes_file"
+          fi
 
           gh release edit "$TAG" --repo "$REPO" --notes-file "$notes_file"
