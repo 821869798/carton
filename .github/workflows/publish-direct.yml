@@ -203,8 +203,13 @@ jobs:
         run: |
           $publishDirPortable = "$env:GITHUB_WORKSPACE\artifacts\publish\${{ matrix.rid }}-portable"
           $publishDirInstaller = "$env:GITHUB_WORKSPACE\artifacts\publish\${{ matrix.rid }}-installer"
+          $kernelStageDir = Join-Path $env:RUNNER_TEMP "singbox-runtime-${{ matrix.rid }}"
           New-Item -ItemType Directory -Path $publishDirPortable -Force | Out-Null
           New-Item -ItemType Directory -Path $publishDirInstaller -Force | Out-Null
+          if (Test-Path $kernelStageDir) {
+            Remove-Item -Recurse -Force $kernelStageDir
+          }
+          New-Item -ItemType Directory -Path $kernelStageDir -Force | Out-Null
           dotnet publish src\carton.GUI\carton.GUI.csproj `
             -c Release `
             -r ${{ matrix.rid }} `
@@ -217,6 +222,8 @@ jobs:
             /p:InvariantGlobalization=true `
             /p:IncludeNativeLibrariesForSelfExtract=true `
             /p:EnableCompressionInSingleFile=true
+          & "$env:GITHUB_WORKSPACE\scripts\include-singbox-kernel.ps1" -Rid '${{ matrix.rid }}' -Destination $kernelStageDir
+          Copy-Item -Path (Join-Path $kernelStageDir '*') -Destination $publishDirPortable -Recurse -Force
           dotnet publish src\carton.GUI\carton.GUI.csproj `
             -c Release `
             -r ${{ matrix.rid }} `
@@ -230,6 +237,7 @@ jobs:
             /p:InvariantGlobalization=true `
             /p:IncludeNativeLibrariesForSelfExtract=true `
             /p:EnableCompressionInSingleFile=true
+          Copy-Item -Path (Join-Path $kernelStageDir '*') -Destination $publishDirInstaller -Recurse -Force
           "PUBLISH_DIR_PORTABLE=$publishDirPortable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "PUBLISH_DIR_INSTALLER=$publishDirInstaller" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
@@ -447,6 +455,12 @@ jobs:
           base_url="https://github.com/$REPO/releases/download/$TAG"
           notes_file="$RUNNER_TEMP/release-notes.md"
           template_file=".github/release-template.md"
+          singbox_tag="$(gh api repos/SagerNet/sing-box/releases/latest --jq .tag_name 2>/dev/null || true)"
+          if [[ -n "$singbox_tag" ]]; then
+            singbox_version="${singbox_tag#v}"
+          else
+            singbox_version="unknown"
+          fi
 
           sed \
             -e "s|__APP_NAME__|$app_name|g" \
@@ -455,6 +469,7 @@ jobs:
             -e "s|__REPO__|$REPO|g" \
             -e "s|__BASE_URL__|$base_url|g" \
             -e "s|__CHANNEL__|$CHANNEL|g" \
+            -e "s|__SINGBOX_VERSION__|$singbox_version|g" \
             "$template_file" > "$notes_file"
 
           if [[ -n "${CHANGELOG//[[:space:]]/}" ]]; then

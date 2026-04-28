@@ -941,6 +941,7 @@ public partial class MainViewModel : ViewModelBase
 
     private void ApplyInstalledKernelInfo(KernelInfo? kernelInfo)
     {
+        _singBoxManager.UpdateKernelPath(kernelInfo?.Path ?? _kernelManager.KernelPath);
         IsKernelInstalled = kernelInfo != null;
         KernelStatus = kernelInfo == null
             ? string.Empty

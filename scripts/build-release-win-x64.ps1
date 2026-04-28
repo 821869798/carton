@@ -19,6 +19,8 @@ if ($Version -match "-beta" -or $Version -match "-rc" -or $Version -match "-prev
 $publishDirPortable = "$repoRoot\artifacts\publish\$rid-portable"
 $publishDirInstaller = "$repoRoot\artifacts\publish\$rid-installer"
 $packDir = "$repoRoot\artifacts\pack\$Channel"
+$includeKernelScript = "$repoRoot\scripts\include-singbox-kernel.ps1"
+$kernelStageDir = Join-Path $env:TEMP ("carton-singbox-runtime-" + [Guid]::NewGuid().ToString("N"))
 
 Write-Host "==== Environment ===="
 Write-Host "App Name: $appName"
@@ -47,10 +49,12 @@ Write-Host "Cleaning up old artifacts..."
 if (Test-Path $publishDirPortable) { Remove-Item -Recurse -Force $publishDirPortable }
 if (Test-Path $publishDirInstaller) { Remove-Item -Recurse -Force $publishDirInstaller }
 if (Test-Path $packDir) { Remove-Item -Recurse -Force $packDir }
+if (Test-Path $kernelStageDir) { Remove-Item -Recurse -Force $kernelStageDir }
 
 New-Item -ItemType Directory -Path $publishDirPortable -Force | Out-Null
 New-Item -ItemType Directory -Path $publishDirInstaller -Force | Out-Null
 New-Item -ItemType Directory -Path $packDir -Force | Out-Null
+New-Item -ItemType Directory -Path $kernelStageDir -Force | Out-Null
 
 Write-Host "==== 1. Publishing $appName portable ($rid) with NativeAOT ===="
 
@@ -71,6 +75,10 @@ if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
     Write-Error "Publish failed."
     exit 1
 }
+
+Write-Host "Preparing built-in sing-box runtime (single download)..."
+& $includeKernelScript -Rid $rid -Destination $kernelStageDir
+Copy-Item -Path "$kernelStageDir\*" -Destination $publishDirPortable -Recurse -Force
 
 Write-Host "`n==== 2. Creating Portable Archive ===="
 # Remove .pdb files if any
@@ -112,6 +120,8 @@ if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
     Write-Error "Installer publish failed."
     exit 1
 }
+
+Copy-Item -Path "$kernelStageDir\*" -Destination $publishDirInstaller -Recurse -Force
 
 if (Test-Path "$publishDirInstaller\*.pdb") {
     Get-ChildItem -Path $publishDirInstaller -Filter '*.pdb' -Recurse | Remove-Item -Force
@@ -160,3 +170,7 @@ Write-Host "`n==== Build Completed Successfully ===="
 Write-Host "Output Directory: $packDir"
 Write-Host "- Portable Zip: $portableName"
 Write-Host "- Velopack Installer: $renamedSetupName"
+
+if (Test-Path $kernelStageDir) {
+    Remove-Item -Recurse -Force $kernelStageDir
+}

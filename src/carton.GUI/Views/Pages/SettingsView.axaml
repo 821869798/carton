@@ -110,7 +110,7 @@
             <Button Content="{DynamicResource Settings.Kernel.InstallCustom}" Command="{Binding InstallCustomKernelCommand}"
                     IsEnabled="{Binding !IsUpdatingKernel}"/>
             <Button Content="{DynamicResource Settings.Kernel.Uninstall}" Command="{Binding UninstallKernelCommand}"
-                    IsEnabled="{Binding !IsUpdatingKernel}"
+                    IsEnabled="{Binding CanUninstallKernel}"
                     IsVisible="{Binding IsKernelInstalled}"/>
           </StackPanel>
         </StackPanel>

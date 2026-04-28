@@ -131,7 +131,18 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     [ObservableProperty]
     private bool _isUpdatingKernel;
 
-    partial void OnIsUpdatingKernelChanged(bool value) => OnPropertyChanged(nameof(CanCheckKernelUpdate));
+    partial void OnIsUpdatingKernelChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanCheckKernelUpdate));
+        OnPropertyChanged(nameof(CanUninstallKernel));
+    }
+
+    partial void OnIsKernelInstalledChanged(bool value) => OnPropertyChanged(nameof(CanUninstallKernel));
+
+    [ObservableProperty]
+    private bool _isBuiltinKernel;
+
+    partial void OnIsBuiltinKernelChanged(bool value) => OnPropertyChanged(nameof(CanUninstallKernel));
 
     [ObservableProperty]
     private bool _isKernelProgressIndeterminate;
@@ -191,6 +202,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     public bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
     public bool HasLoopbackStatus => !string.IsNullOrWhiteSpace(LoopbackStatus);
     public bool CanCheckKernelUpdate => !IsUpdatingKernel && !IsCheckingKernelUpdate;
+    public bool CanUninstallKernel => IsKernelInstalled && !IsUpdatingKernel && !IsBuiltinKernel;
     public AppUpdateCoordinator AppUpdate => _appUpdate;
 
     public SettingsViewModel()
@@ -498,11 +510,13 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         {
             KernelVersion = kernelInfo.KernelVersion;
             KernelPath = kernelInfo.Path;
+            IsBuiltinKernel = kernelInfo.IsBuiltin;
             return;
         }
 
         KernelVersion = GetString("Settings.Kernel.NotInstalled", "Not installed");
         KernelPath = string.Empty;
+        IsBuiltinKernel = false;
     }
 
     [RelayCommand]

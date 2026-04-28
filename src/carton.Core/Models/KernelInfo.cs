@@ -7,6 +7,7 @@ public class KernelInfo
     public string KernelVersion { get; set; } = string.Empty;
     public string Path { get; set; } = string.Empty;
     public DateTime? InstallTime { get; set; }
+    public bool IsBuiltin { get; set; }
     public PlatformInfo Platform { get; set; } = new();
 }
 

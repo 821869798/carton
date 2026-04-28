@@ -33,6 +33,7 @@ public interface ISingBoxManager
 
     Task<bool> IsLinuxCoreAuthorizedAsync();
     Task<(bool Success, string? Error)> AuthorizeCoreOnLinuxAsync(string password);
+    void UpdateKernelPath(string singBoxPath);
 
     /// <summary>
     /// Notifies the manager whether a system proxy was configured for the current
@@ -44,7 +45,7 @@ public interface ISingBoxManager
 
 public partial class SingBoxManager : ISingBoxManager, IDisposable
 {
-    private readonly string _singBoxPath;
+    private string _singBoxPath;
     private readonly string _workingDirectory;
     private Process? _process;
     private readonly ServiceState _state = new();
@@ -91,6 +92,16 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
         {
             TryInitializeWindowsProcessJob();
         }
+    }
+
+    public void UpdateKernelPath(string singBoxPath)
+    {
+        if (string.IsNullOrWhiteSpace(singBoxPath))
+        {
+            return;
+        }
+
+        _singBoxPath = singBoxPath;
     }
 
     public async Task<bool> SyncRunningStateAsync()

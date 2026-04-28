@@ -47,8 +47,10 @@ public sealed class KernelPackageDownloadResult
 public class KernelManager : IKernelManager
 {
     private const string WindowsNaiveProxyRuntimeDll = "libcronet.dll";
-    private readonly string _binDirectory;
-    private readonly string _kernelPath;
+    private const string BuiltinVersionSuffix = " (builtin)";
+    private readonly string _dataBinDirectory;
+    private readonly string _dataKernelPath;
+    private readonly string _builtinKernelPath;
     private readonly HttpClient _httpClient = HttpClientFactory.External;
     private KernelInfo? _installedKernel;
 
@@ -57,8 +59,8 @@ public class KernelManager : IKernelManager
     public event EventHandler<KernelInfo?>? InstalledKernelChanged;
 
     public KernelInfo? InstalledKernel => _installedKernel;
-    public bool IsKernelInstalled => File.Exists(_kernelPath);
-    public string KernelPath => _kernelPath;
+    public bool IsKernelInstalled => ResolveActiveKernel() != null;
+    public string KernelPath => ResolveActiveKernel()?.Path ?? _dataKernelPath;
 
     private static readonly TimeSpan GitHubLookupTimeout = TimeSpan.FromSeconds(6);
     private const string GitHubDownloadUrl = "https://github.com/SagerNet/sing-box/releases/download";
@@ -71,31 +73,34 @@ public class KernelManager : IKernelManager
 
     public KernelManager(string baseDirectory)
     {
-        _binDirectory = Path.Combine(baseDirectory, "bin");
+        _dataBinDirectory = Path.Combine(baseDirectory, "bin");
         var platform = PlatformInfo.Current;
         var fileName = $"sing-box{platform.Suffix}";
-        _kernelPath = Path.Combine(_binDirectory, fileName);
+        _dataKernelPath = Path.Combine(_dataBinDirectory, fileName);
+        _builtinKernelPath = Path.Combine(AppContext.BaseDirectory, fileName);
 
-        Directory.CreateDirectory(_binDirectory);
+        Directory.CreateDirectory(_dataBinDirectory);
     }
 
 
 
     public async Task<KernelInfo?> GetInstalledKernelInfoAsync()
     {
-        if (!File.Exists(_kernelPath))
+        var activeKernel = ResolveActiveKernel();
+        if (activeKernel == null)
         {
             return SetInstalledKernel(null, null);
         }
 
         try
         {
-            var version = await GetInstalledVersionAsync();
+            var version = await GetInstalledVersionAsync(activeKernel.Path);
             var kernelInfo = new KernelInfo
             {
-                KernelVersion = CartonApplicationInfo.FormatSingBoxVersion(version),
-                Path = _kernelPath,
-                InstallTime = File.GetCreationTime(_kernelPath),
+                KernelVersion = FormatDisplayVersion(version, activeKernel.IsBuiltin),
+                Path = activeKernel.Path,
+                InstallTime = File.GetCreationTime(activeKernel.Path),
+                IsBuiltin = activeKernel.IsBuiltin,
                 Platform = PlatformInfo.Current
             };
 
@@ -115,25 +120,52 @@ public class KernelManager : IKernelManager
         return kernelInfo;
     }
 
-    private string GetKernelWorkingDirectory()
-        => Path.GetDirectoryName(_kernelPath) ?? _binDirectory;
+    private ActiveKernelCandidate? ResolveActiveKernel()
+    {
+        if (File.Exists(_dataKernelPath))
+        {
+            return new ActiveKernelCandidate(_dataKernelPath, IsBuiltin: false);
+        }
 
-    private void ApplyLinuxLibrarySearchPath(ProcessStartInfo startInfo)
+        if (File.Exists(_builtinKernelPath))
+        {
+            return new ActiveKernelCandidate(_builtinKernelPath, IsBuiltin: true);
+        }
+
+        return null;
+    }
+
+    private static string FormatDisplayVersion(string? version, bool isBuiltin)
+    {
+        var normalized = CartonApplicationInfo.FormatSingBoxVersion(version);
+        return isBuiltin ? $"{normalized}{BuiltinVersionSuffix}" : normalized;
+    }
+
+    private static string GetKernelWorkingDirectory(string kernelPath)
+        => Path.GetDirectoryName(kernelPath) ?? AppContext.BaseDirectory;
+
+    private static void ApplyLinuxLibrarySearchPath(ProcessStartInfo startInfo, string kernelPath)
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             return;
         }
 
+        var libraryDirectory = Path.GetDirectoryName(kernelPath);
+        if (string.IsNullOrWhiteSpace(libraryDirectory))
+        {
+            return;
+        }
+
         var current = Environment.GetEnvironmentVariable("LD_LIBRARY_PATH");
         startInfo.Environment["LD_LIBRARY_PATH"] = string.IsNullOrWhiteSpace(current)
-            ? _binDirectory
-            : $"{_binDirectory}:{current}";
+            ? libraryDirectory
+            : $"{libraryDirectory}:{current}";
     }
 
-    private async Task<string?> GetInstalledVersionAsync()
+    private async Task<string?> GetInstalledVersionAsync(string kernelPath)
     {
-        if (!File.Exists(_kernelPath)) return null;
+        if (!File.Exists(kernelPath)) return null;
 
         try
         {
@@ -141,16 +173,16 @@ public class KernelManager : IKernelManager
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = _kernelPath,
+                    FileName = kernelPath,
                     Arguments = "version",
-                    WorkingDirectory = GetKernelWorkingDirectory(),
+                    WorkingDirectory = GetKernelWorkingDirectory(kernelPath),
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     CreateNoWindow = true
                 }
             };
-            ApplyLinuxLibrarySearchPath(process.StartInfo);
+            ApplyLinuxLibrarySearchPath(process.StartInfo, kernelPath);
 
             process.Start();
             var stdoutTask = process.StandardOutput.ReadToEndAsync();
@@ -375,18 +407,18 @@ public class KernelManager : IKernelManager
                 StatusChanged?.Invoke(this, "Installing...");
                 await KillRunningKernelAsync();
                 CleanupWindowsRuntimeSidecars();
-                var destination = Path.Combine(_binDirectory, "sing-box.exe");
+                var destination = Path.Combine(_dataBinDirectory, "sing-box.exe");
                 File.Move(package.TempFilePath, destination, overwrite: true);
             }
             else
             {
                 StatusChanged?.Invoke(this, "Extracting...");
-                await ExtractArchiveAsync(package.TempFilePath, _binDirectory);
+                await ExtractArchiveAsync(package.TempFilePath, _dataBinDirectory);
                 TryDeleteFile(package.TempFilePath);
 
                 if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
-                    var chmodPath = Path.Combine(_binDirectory, "sing-box");
+                    var chmodPath = Path.Combine(_dataBinDirectory, "sing-box");
                     if (File.Exists(chmodPath))
                     {
                         Process.Start("chmod", $"+x \"{chmodPath}\"")?.WaitForExit();
@@ -661,7 +693,7 @@ public class KernelManager : IKernelManager
     {
         try
         {
-            var targetExe = _kernelPath;
+            var targetExe = _dataKernelPath;
             var processes = Process.GetProcessesByName("sing-box");
             foreach (var p in processes)
             {
@@ -828,9 +860,9 @@ public class KernelManager : IKernelManager
             return;
         }
 
-        TryDeleteFile(Path.Combine(_binDirectory, "sing-box.exe"));
+        TryDeleteFile(Path.Combine(_dataBinDirectory, "sing-box.exe"));
 
-        foreach (var dllPath in Directory.EnumerateFiles(_binDirectory, "*.dll", SearchOption.TopDirectoryOnly))
+        foreach (var dllPath in Directory.EnumerateFiles(_dataBinDirectory, "*.dll", SearchOption.TopDirectoryOnly))
         {
             TryDeleteFile(dllPath);
         }
@@ -847,6 +879,7 @@ public class KernelManager : IKernelManager
         => fileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
            fileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase);
 
+    private sealed record ActiveKernelCandidate(string Path, bool IsBuiltin);
     private sealed record GitHubAtomRelease(string Tag, string Title);
 
     public async Task<bool> InstallCustomKernelAsync(string sourcePath)
@@ -862,8 +895,8 @@ public class KernelManager : IKernelManager
             StatusChanged?.Invoke(this, "Installing custom kernel...");
 
             var platform = PlatformInfo.Current;
-            var targetExe = _kernelPath;
-            var targetDirectory = Path.GetDirectoryName(targetExe) ?? _binDirectory;
+            var targetExe = _dataKernelPath;
+            var targetDirectory = Path.GetDirectoryName(targetExe) ?? _dataBinDirectory;
             var sourceDirectory = Path.GetDirectoryName(sourcePath);
             var sourceNaiveProxyRuntime = string.IsNullOrWhiteSpace(sourceDirectory)
                 ? null
@@ -918,28 +951,37 @@ public class KernelManager : IKernelManager
         }
     }
 
-    public Task<bool> UninstallAsync()
+    public async Task<bool> UninstallAsync()
     {
         try
         {
-            if (File.Exists(_kernelPath))
+            var removedAny = false;
+            if (File.Exists(_dataKernelPath))
             {
-                File.Delete(_kernelPath);
+                File.Delete(_dataKernelPath);
+                removedAny = true;
             }
 
-            SetInstalledKernel(null, null);
-            StatusChanged?.Invoke(this, "Kernel uninstalled");
-            return Task.FromResult(true);
+            foreach (var dllPath in Directory.EnumerateFiles(_dataBinDirectory, "*.dll", SearchOption.TopDirectoryOnly))
+            {
+                removedAny = true;
+                TryDeleteFile(dllPath);
+            }
+
+            await GetInstalledKernelInfoAsync();
+            StatusChanged?.Invoke(this, removedAny ? "Kernel uninstalled" : "No extra kernel to uninstall");
+            return true;
         }
         catch
         {
-            return Task.FromResult(false);
+            return false;
         }
     }
 
     public async Task<bool> CheckKernelAsync()
     {
-        if (!File.Exists(_kernelPath))
+        var activeKernelPath = ResolveActiveKernel()?.Path;
+        if (string.IsNullOrWhiteSpace(activeKernelPath) || !File.Exists(activeKernelPath))
         {
             return false;
         }
@@ -950,15 +992,15 @@ public class KernelManager : IKernelManager
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = _kernelPath,
+                    FileName = activeKernelPath,
                     Arguments = "version",
-                    WorkingDirectory = GetKernelWorkingDirectory(),
+                    WorkingDirectory = GetKernelWorkingDirectory(activeKernelPath),
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     CreateNoWindow = true
                 }
             };
-            ApplyLinuxLibrarySearchPath(process.StartInfo);
+            ApplyLinuxLibrarySearchPath(process.StartInfo, activeKernelPath);
 
             process.Start();
             await process.WaitForExitAsync();
