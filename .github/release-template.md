@@ -40,6 +40,6 @@
 **Notes**
 
 - Channel: `__CHANNEL__`
-- Built-in sing-box kernel (Windows package): `__SINGBOX_VERSION__`
+- Built-in sing-box kernel version: `__SINGBOX_VERSION__`
 - You can update and replace the bundled kernel inside the app (`Settings -> Kernel`).
 - `.nupkg` and `releases*.json` are for auto-update and usually do not need to be downloaded manually.

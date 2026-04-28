@@ -87,13 +87,14 @@ try {
         throw "sing-box.exe was not found in downloaded asset: $($asset.name)"
     }
 
-    $runtimeDir = Split-Path -Parent $kernelFile.FullName
-    $runtimeFiles = Get-ChildItem -Path $runtimeDir -File | Where-Object {
-        $_.Name -ieq "sing-box.exe" -or $_.Extension -ieq ".dll"
+    $runtimeFiles = Get-ChildItem -Path $extractDir -Recurse -File | Where-Object {
+        $_.Name -ieq "sing-box.exe" -or
+        $_.Extension -ieq ".dll" -or
+        $_.Name -match "\.so(?:\..+)?$"
     }
 
     if (-not $runtimeFiles) {
-        throw "No runtime files (sing-box.exe/*.dll) were found in extracted package."
+        throw "No runtime files (sing-box.exe/*.dll/*.so*) were found in extracted package."
     }
 
     foreach ($file in $runtimeFiles) {

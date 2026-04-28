@@ -183,6 +183,7 @@ jobs:
             props+=(/p:ObjCopyName=aarch64-linux-gnu-objcopy)
           fi
           dotnet publish src/carton.GUI/carton.GUI.csproj "${props[@]}"
+          bash scripts/include-singbox-kernel.sh "${{ matrix.rid }}" "$publish_dir"
           echo "PUBLISH_DIR=$publish_dir" >> "$GITHUB_ENV"
 
       - name: Publish (Windows)
