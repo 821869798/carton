@@ -2,6 +2,7 @@ namespace carton.Core.Models;
 
 public class AppPreferences
 {
+    public double JsonEditorFontSize { get; set; } = 13;
     public bool StartAtLogin { get; set; }
     public bool StartHiddenAtLogin { get; set; }
     public bool AutoStartOnLaunch { get; set; }

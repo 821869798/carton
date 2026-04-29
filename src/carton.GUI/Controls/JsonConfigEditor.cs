@@ -19,6 +19,8 @@ namespace carton.GUI.Controls;
 
 public sealed class JsonConfigEditor : Grid
 {
+    public const double DefaultEditorFontSize = 13;
+
     public static readonly StyledProperty<string> TextProperty =
         AvaloniaProperty.Register<JsonConfigEditor, string>(
             nameof(Text),
@@ -105,6 +107,16 @@ public sealed class JsonConfigEditor : Grid
     public bool HasSearchMatches => _searchMatches.Count > 0 && _currentSearchMatchIndex >= 0;
 
     public bool IsSearchPatternValid => _searchPatternValid;
+
+    public double EditorFontSize
+    {
+        get => _surface.FontSize;
+        set
+        {
+            _surface.SetFontSize(value);
+            UpdateScrollBars();
+        }
+    }
 
     public string SearchStatusText => !_searchPatternValid
         ? "ERR"
@@ -484,6 +496,10 @@ public sealed class JsonConfigEditor : Grid
         private const double HorizontalPadding = 8;
         private const double VerticalPadding = 8;
         private const double LineNumberGap = 8;
+        private const double DefaultFontSize = DefaultEditorFontSize;
+        private const double MinFontSize = 10;
+        private const double MaxFontSize = 24;
+        private const double FontSizeStep = 1;
 
         private readonly JsonConfigEditor _owner;
         private readonly List<LineInfo> _lines = new();
@@ -497,6 +513,7 @@ public sealed class JsonConfigEditor : Grid
         private bool _internalTextUpdate;
         private double _horizontalOffset;
         private double _verticalOffset;
+        private double _fontSize = DefaultFontSize;
 
         public EditorSurface(JsonConfigEditor owner)
         {
@@ -512,6 +529,8 @@ public sealed class JsonConfigEditor : Grid
         }
 
         public int CaretIndex => _caretIndex;
+
+        public double FontSize => _fontSize;
 
         public double HorizontalOffset
         {
@@ -620,6 +639,22 @@ public sealed class JsonConfigEditor : Grid
             }
         }
 
+        public void SetFontSize(double fontSize)
+        {
+            var newFontSize = Math.Clamp(fontSize, MinFontSize, MaxFontSize);
+            if (Math.Abs(newFontSize - _fontSize) < double.Epsilon)
+            {
+                return;
+            }
+
+            _fontSize = newFontSize;
+            _sampleFormattedText = null;
+            RebuildDocumentState();
+            EnsureCaretVisible();
+            _owner.UpdateScrollBars();
+            InvalidateVisual();
+        }
+
         protected override void OnPointerPressed(PointerPressedEventArgs e)
         {
             base.OnPointerPressed(e);
@@ -658,6 +693,17 @@ public sealed class JsonConfigEditor : Grid
         protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
         {
             base.OnPointerWheelChanged(e);
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+            {
+                if (Math.Abs(e.Delta.Y) > double.Epsilon)
+                {
+                    AdjustFontSize(Math.Sign(e.Delta.Y) * FontSizeStep);
+                }
+
+                e.Handled = true;
+                return;
+            }
+
             EnsureMetrics();
             _owner.ScrollSurfaceBy(new Vector(
                 -e.Delta.X * _charWidth * 3,
@@ -981,7 +1027,7 @@ public sealed class JsonConfigEditor : Grid
                 CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
                 EditorTypeface,
-                12,
+                _fontSize,
                 GetTextBrush());
             _charWidth = Math.Max(1, _sampleFormattedText.WidthIncludingTrailingWhitespace);
             _lineHeight = Math.Max(1, _sampleFormattedText.Height + 2);
@@ -1080,7 +1126,7 @@ public sealed class JsonConfigEditor : Grid
                     CultureInfo.CurrentCulture,
                     FlowDirection.LeftToRight,
                     EditorTypeface,
-                    12,
+                    _fontSize,
                     GetTextBrush());
 
                 foreach (var token in GetLineTokens(line.StartOffset, line.EndOffset))
@@ -1108,10 +1154,15 @@ public sealed class JsonConfigEditor : Grid
                     CultureInfo.CurrentCulture,
                     FlowDirection.LeftToRight,
                     EditorTypeface,
-                    12,
+                    _fontSize,
                     GetLineNumberBrush());
                 context.DrawText(formatted, new Point(lineNumberWidth - formatted.Width - LineNumberGap, y));
             }
+        }
+
+        private void AdjustFontSize(double delta)
+        {
+            SetFontSize(_fontSize + delta);
         }
 
         private void DrawSearchMatches(DrawingContext context, double lineNumberWidth)

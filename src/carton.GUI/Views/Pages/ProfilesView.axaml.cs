@@ -5,6 +5,8 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using carton.Core.Services;
+using carton.GUI.Controls;
 using carton.ViewModels;
 
 namespace carton.Views.Pages;
@@ -14,12 +16,16 @@ public partial class ProfilesView : UserControl
     private static readonly IBrush SearchSelectedBrush =
         new SolidColorBrush(Color.FromArgb(80, 96, 160, 255));
 
+    private readonly IPreferencesService _preferencesService;
     private ProfilesViewModel? _subscribedViewModel;
     private bool _wasSearchOpen;
+    private bool _wasEditorVisible;
+    private double _fontSizeOnEditorOpen;
 
     public ProfilesView()
     {
         InitializeComponent();
+        _preferencesService = App.PreferencesService;
         AttachedToVisualTree += OnAttachedToVisualTree;
         DetachedFromVisualTree += OnDetachedFromVisualTree;
         DataContextChanged += OnDataContextChanged;
@@ -34,6 +40,7 @@ public partial class ProfilesView : UserControl
         ToolTip.SetTip(ConfigSearchNextButton, "下一处");
         ToolTip.SetTip(ConfigSearchCloseButton, "关闭搜索");
 
+        LoadEditorFontSizePreference();
         UpdateEditorActionState();
     }
 
@@ -47,6 +54,12 @@ public partial class ProfilesView : UserControl
 
     private void OnDetachedFromVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
     {
+        if (_wasEditorVisible)
+        {
+            SaveEditorFontSizeIfChanged();
+        }
+
+        _wasEditorVisible = false;
         UnsubscribeViewModel(_subscribedViewModel);
     }
 
@@ -101,6 +114,15 @@ public partial class ProfilesView : UserControl
         var editorVisible = ViewModel?.ShowConfigFullscreenView == true;
         var isSearchOpen = editorVisible && ConfigEditor.IsSearchOpen;
 
+        if (editorVisible && !_wasEditorVisible)
+        {
+            _fontSizeOnEditorOpen = ConfigEditor.EditorFontSize;
+        }
+        else if (!editorVisible && _wasEditorVisible)
+        {
+            SaveEditorFontSizeIfChanged();
+        }
+
         SearchConfigButton.IsEnabled = editorVisible;
         ConfigSearchBar.IsVisible = isSearchOpen;
         ConfigSearchStatus.Text = ConfigEditor.SearchStatusText;
@@ -120,6 +142,34 @@ public partial class ProfilesView : UserControl
         }
 
         _wasSearchOpen = isSearchOpen;
+        _wasEditorVisible = editorVisible;
+    }
+
+    private void LoadEditorFontSizePreference()
+    {
+        var preferences = _preferencesService.Load();
+        var fontSize = preferences.JsonEditorFontSize > 0
+            ? preferences.JsonEditorFontSize
+            : JsonConfigEditor.DefaultEditorFontSize;
+        ConfigEditor.EditorFontSize = fontSize;
+    }
+
+    private void SaveEditorFontSizeIfChanged()
+    {
+        var currentFontSize = ConfigEditor.EditorFontSize;
+        if (Math.Abs(currentFontSize - _fontSizeOnEditorOpen) < 0.01)
+        {
+            return;
+        }
+
+        var preferences = _preferencesService.Load();
+        if (Math.Abs(preferences.JsonEditorFontSize - currentFontSize) < 0.01)
+        {
+            return;
+        }
+
+        preferences.JsonEditorFontSize = currentFontSize;
+        _preferencesService.Save(preferences);
     }
 
     private void OnSearchConfigClick(object? sender, RoutedEventArgs e)
