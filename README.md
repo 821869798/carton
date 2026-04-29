@@ -58,7 +58,7 @@
 - 支持本地配置创建、导入、编辑
 - 支持远程订阅导入、手动更新、自动更新间隔
 - 启动前可为不同配置保存独立运行参数
-- 如果你没有 `sing-box` 订阅地址，可以使用 [`sublink-worker`](https://github.com/7Sageer/sublink-worker) 进行转换；它提供了 [`app.sublink.works`](https://app.sublink.works) 在线工具，可将多种订阅或协议链接转换为 `sing-box` 配置
+- 如果你没有 `sing-box` 订阅地址，可以使用 [`sublink-worker`](https://github.com/7Sageer/sublink-worker) 进行转换；它提供了 [`app.sublink.works`](https://app.sublink.works) 在线工具，可将多种订阅或协议链接转换为 `sing-box` 配置。若是机场用户，请在 `User Agent` 中输入 `clash` 或 `xray`
 
 ### 节点与分组增强
 

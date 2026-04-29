@@ -58,7 +58,7 @@ This is intentional because many users strongly dislike third-party GUIs overwri
 - Create, import, and edit local configs
 - Import remote subscriptions with manual update and auto-update intervals
 - Save per-profile runtime options before startup
-- If you do not have a `sing-box` subscription URL, you can use [`sublink-worker`](https://github.com/7Sageer/sublink-worker); it provides the online tool [`app.sublink.works`](https://app.sublink.works) to convert various subscription formats or protocol links into `sing-box` configs
+- If you do not have a `sing-box` subscription URL, you can use [`sublink-worker`](https://github.com/7Sageer/sublink-worker); it provides the online tool [`app.sublink.works`](https://app.sublink.works) to convert various subscription formats or protocol links into `sing-box` configs. If you are using an airport subscription provider, set `User Agent` to `clash` or `xray`
 
 ### Node and group enhancements
 
