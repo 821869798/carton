@@ -13,6 +13,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using carton.Core.Services;
 using carton.Core.Utilities;
 using NuGet.Versioning;
 using Velopack;
@@ -333,7 +334,7 @@ public sealed class AppUpdateService : IAppUpdateService
             MaximumDeltasBeforeFallback = 2
         };
 
-        var downloader = new HttpClientFileDownloader();
+        var downloader = new VelopackAcceleratedFileDownloader(Log);
         var source = new SimpleWebSource(
             GetReleaseDownloadBaseUrl(releaseInfo?.Tag),
             downloader,
@@ -810,28 +811,25 @@ public sealed class AppUpdateService : IAppUpdateService
 
         var fileName = Path.GetFileName(asset.Name);
         var tempPath = Path.Combine(Path.GetTempPath(), fileName);
-        using var response = await _httpClient.GetAsync(asset.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-
-        var totalBytes = response.Content.Headers.ContentLength ?? asset.Size;
-        await using var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        await using var target = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None);
-        var buffer = new byte[81920];
-        long bytesReceived = 0;
-
-        while (true)
+        using var httpClient = new HttpClient
         {
-            var bytesRead = await source.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
-            if (bytesRead <= 0)
+            Timeout = Timeout.InfiniteTimeSpan
+        };
+        httpClient.DefaultRequestHeaders.UserAgent.Add(
+            new ProductInfoHeaderValue("carton", CartonApplicationInfo.Version));
+        var downloader = new AcceleratedFileDownloader(httpClient, Log);
+        await downloader.DownloadFileAsync(
+            asset.DownloadUrl,
+            tempPath,
+            new Progress<FileDownloadProgress>(downloadProgress =>
             {
-                break;
-            }
-
-            await target.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken).ConfigureAwait(false);
-            bytesReceived += bytesRead;
-            var percent = totalBytes > 0 ? (int)Math.Clamp(bytesReceived * 100 / totalBytes, 0, 100) : 0;
-            progress?.Report(new AppUpdateDownloadProgress(percent, bytesReceived, totalBytes));
-        }
+                var totalBytes = downloadProgress.TotalBytes > 0 ? downloadProgress.TotalBytes : asset.Size;
+                var percent = totalBytes > 0
+                    ? (int)Math.Clamp(downloadProgress.BytesReceived * 100 / totalBytes, 0, 100)
+                    : 0;
+                progress?.Report(new AppUpdateDownloadProgress(percent, downloadProgress.BytesReceived, totalBytes));
+            }),
+            cancellationToken).ConfigureAwait(false);
 
         _downloadedInstallerPath = tempPath;
         _downloadedInstallerVersion = update.Version;

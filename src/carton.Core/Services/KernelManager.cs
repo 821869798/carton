@@ -52,6 +52,7 @@ public class KernelManager : IKernelManager
     private readonly string _dataKernelPath;
     private readonly string _builtinKernelPath;
     private readonly HttpClient _httpClient = HttpClientFactory.External;
+    private readonly AcceleratedFileDownloader _fileDownloader;
     private KernelInfo? _installedKernel;
 
     public event EventHandler<DownloadProgress>? DownloadProgressChanged;
@@ -78,6 +79,7 @@ public class KernelManager : IKernelManager
         var fileName = $"sing-box{platform.Suffix}";
         _dataKernelPath = Path.Combine(_dataBinDirectory, fileName);
         _builtinKernelPath = Path.Combine(AppContext.BaseDirectory, fileName);
+        _fileDownloader = new AcceleratedFileDownloader(_httpClient, message => StatusChanged?.Invoke(this, message));
 
         Directory.CreateDirectory(_dataBinDirectory);
     }
@@ -814,29 +816,16 @@ public class KernelManager : IKernelManager
 
     private async Task DownloadFileAsync(string downloadUrl, string tempFile)
     {
-        using var response = await _httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
-        response.EnsureSuccessStatusCode();
-
-        var totalBytes = response.Content.Headers.ContentLength ?? 0;
-        var buffer = new byte[8192];
-        var bytesRead = 0L;
-
-        await using var contentStream = await response.Content.ReadAsStreamAsync();
-        await using var fileStream = File.Create(tempFile);
-
-        int read;
-        while ((read = await contentStream.ReadAsync(buffer)) > 0)
-        {
-            await fileStream.WriteAsync(buffer.AsMemory(0, read));
-            bytesRead += read;
-
-            DownloadProgressChanged?.Invoke(this, new DownloadProgress
-            {
-                BytesReceived = bytesRead,
-                TotalBytes = totalBytes,
-                Status = "Downloading..."
-            });
-        }
+        await _fileDownloader.DownloadFileAsync(
+            downloadUrl,
+            tempFile,
+            new Progress<FileDownloadProgress>(progress =>
+                DownloadProgressChanged?.Invoke(this, new DownloadProgress
+                {
+                    BytesReceived = progress.BytesReceived,
+                    TotalBytes = progress.TotalBytes,
+                    Status = "Downloading..."
+                })));
     }
 
     private static void TryDeleteFile(string path)
