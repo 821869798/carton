@@ -200,13 +200,8 @@ public partial class MainWindow : Window
         }
 
         MoveNavigationSelectionRail(selectedItem);
-        ApplyNavigationSelectionIndicator(selectedItem);
         Dispatcher.UIThread.Post(
-            () =>
-            {
-                MoveNavigationSelectionRail(selectedItem, retryIfMissing: true);
-                ApplyNavigationSelectionIndicator(selectedItem, retryIfMissing: true);
-            },
+            () => MoveNavigationSelectionRail(selectedItem, retryIfMissing: true),
             DispatcherPriority.Render);
     }
 
@@ -286,23 +281,6 @@ public partial class MainWindow : Window
             NavigationSelectionRail.Margin = new Thickness(NavigationRailLeft, targetTop, 0, 0);
             NavigationSelectionRail.Height = NavigationRailHeight;
         });
-    }
-
-    private void ApplyNavigationSelectionIndicator(NavigationItem selectedItem, bool retryIfMissing = false)
-    {
-        foreach (var item in GetNavigationItemContainers())
-        {
-            var indicator = item.GetVisualDescendants()
-                .OfType<Border>()
-                .FirstOrDefault(x => x.Name == "SelectionIndicator");
-
-            if (indicator == null)
-            {
-                continue;
-            }
-
-            indicator.Opacity = 0;
-        }
     }
 
     private NavigationItem? GetNavigationItemFromInvokedEvent(NavigationViewItemInvokedEventArgs e)
