@@ -3,69 +3,143 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:carton.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="400"
+             xmlns:views="using:carton.Views.Pages"
+             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="450"
              x:Class="carton.Views.Pages.LogsView"
              x:DataType="vm:LogsViewModel">
 
+  <UserControl.Resources>
+    <views:LogLevelBrushConverter x:Key="LogLevelBrushConverter"/>
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <Style Selector="ListBoxItem">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    </Style>
+
+    <Style Selector="Border.logRow">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="MinHeight" Value="28"/>
+    </Style>
+    <Style Selector="Border.logRow:pointerover">
+      <Setter Property="Background" Value="{DynamicResource CartonSettingsItemPointerOverBackgroundBrush}"/>
+    </Style>
+
+    <Style Selector="Border.logRow:selected">
+      <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundBaseLowBrush}"/>
+    </Style>
+
+    <Style Selector="TextBlock.logTime">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="FontFamily" Value="Cascadia Code,Consolas,monospace"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
+    </Style>
+
+    <Style Selector="TextBlock.logSource">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
+    </Style>
+
+    <Style Selector="TextBlock.logLevel">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style Selector="TextBlock.logMessage">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="TextWrapping" Value="NoWrap"/>
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+      <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI, Segoe UI Emoji, Segoe UI Symbol"/>
+    </Style>
+
+    <Style Selector="Border.levelBar">
+      <Setter Property="IsVisible" Value="False"/>
+    </Style>
+    <Style Selector="ListBoxItem:selected Border.levelBar">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+  </UserControl.Styles>
+
   <Grid RowDefinitions="Auto,*">
-    <Grid Grid.Row="0" Margin="10" RowDefinitions="Auto,Auto">
-      <StackPanel Grid.Row="0" Orientation="Horizontal">
-        <Button Content="{DynamicResource Logs.Button.Clear}"
-                Command="{Binding ClearLogsCommand}"
-                Margin="0,0,10,0"/>
-        <Button Content="{DynamicResource Logs.Button.CopySelected}"
-                Command="{Binding CopySelectedLogCommand}"
-                Margin="0,0,10,0"/>
-        <Button Content="{DynamicResource Logs.Button.CopyAll}"
-                Command="{Binding CopyAllLogsCommand}"
-                Margin="0,0,10,0"/>
-        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <TextBlock Text="{DynamicResource Logs.CheckBox.AutoScrollToLatest}"
-                     VerticalAlignment="Center"/>
-          <ToggleSwitch
-                        IsChecked="{Binding IsAutoScrollToLatest}"/>
+    <!-- Toolbar -->
+    <Border Grid.Row="0"
+            Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+            BorderBrush="{DynamicResource CartonControlForegroundBaseLowBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="16,10">
+      <Grid RowDefinitions="Auto,Auto">
+        <StackPanel Grid.Row="0"
+                    Orientation="Horizontal"
+                    Spacing="8">
+          <Button Content="{DynamicResource Logs.Button.Clear}"
+                  Command="{Binding ClearLogsCommand}"
+                  Padding="12,6"/>
+          <Button Content="{DynamicResource Logs.Button.CopySelected}"
+                  Command="{Binding CopySelectedLogCommand}"
+                  Padding="12,6"/>
+          <Button Content="{DynamicResource Logs.Button.CopyAll}"
+                  Command="{Binding CopyAllLogsCommand}"
+                  Padding="12,6"/>
+          <Border Width="1"
+                  Background="{DynamicResource CartonControlForegroundBaseLowBrush}"
+                  Margin="8,4"/>
+          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <TextBlock Text="{DynamicResource Logs.CheckBox.AutoScrollToLatest}"
+                       FontSize="13"
+                       VerticalAlignment="Center"/>
+            <ToggleSwitch IsChecked="{Binding IsAutoScrollToLatest}"/>
+          </StackPanel>
         </StackPanel>
-      </StackPanel>
 
-      <Grid Grid.Row="1" Margin="0,10,0,0" ColumnDefinitions="Auto,Auto,*,Auto">
-        <ComboBox Grid.Column="0"
-                  Width="110"
-                  ItemsSource="{Binding LogLevels}"
-                  SelectedItem="{Binding SelectedLevel}"
-                  Margin="0,0,10,0"/>
-        <ComboBox Grid.Column="1"
-                  Width="110"
-                  ItemsSource="{Binding LogSourceFilters}"
-                  SelectedItem="{Binding SelectedSourceFilter}"
-                  Margin="0,0,10,0">
-          <ComboBox.ItemTemplate>
-            <DataTemplate DataType="vm:LogSourceFilterOptionViewModel">
-              <TextBlock Text="{Binding DisplayName}"/>
-            </DataTemplate>
-          </ComboBox.ItemTemplate>
-        </ComboBox>
-        <TextBox Grid.Column="2"
-                  Text="{Binding SearchText}"
-                  Watermark="{DynamicResource Logs.Search.Watermark}"
-                  MinWidth="220"
-                  HorizontalAlignment="Stretch"/>
-        <TextBlock Grid.Column="3"
-                   Margin="10,0,0,0"
-                   VerticalAlignment="Center">
-          <Run Text="{DynamicResource Logs.Label.CountPrefix}"/>
-          <Run Text="{Binding Logs.Count}"/>
-        </TextBlock>
+        <Grid Grid.Row="1" Margin="0,8,0,0" ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
+          <ComboBox Grid.Column="0"
+                    Width="100"
+                    ItemsSource="{Binding LogLevels}"
+                    SelectedItem="{Binding SelectedLevel}"/>
+          <ComboBox Grid.Column="1"
+                    Width="100"
+                    ItemsSource="{Binding LogSourceFilters}"
+                    SelectedItem="{Binding SelectedSourceFilter}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate DataType="vm:LogSourceFilterOptionViewModel">
+                <TextBlock Text="{Binding DisplayName}"/>
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <TextBox Grid.Column="2"
+                   Text="{Binding SearchText}"
+                   Watermark="{DynamicResource Logs.Search.Watermark}"
+                   HorizontalAlignment="Stretch"/>
+          <Border Grid.Column="3"
+                  Classes="fluentBadge"
+                  VerticalAlignment="Center"
+                  Padding="8,3">
+            <TextBlock Classes="fluentBadgeText" FontSize="12">
+              <Run Text="{DynamicResource Logs.Label.CountPrefix}"/>
+              <Run Text=" "/>
+              <Run Text="{Binding Logs.Count}"/>
+            </TextBlock>
+          </Border>
+        </Grid>
       </Grid>
-    </Grid>
+    </Border>
 
+    <!-- Log List -->
     <ListBox x:Name="LogsListBox"
              Grid.Row="1"
-             Margin="10"
              ItemsSource="{Binding Logs}"
              SelectionMode="Multiple"
              SelectedItem="{Binding SelectedLog}"
-             BorderThickness="0"
-             Background="Transparent">
+             Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+             BorderThickness="0">
       <ListBox.KeyBindings>
         <KeyBinding Gesture="Ctrl+C" Command="{Binding CopySelectedLogCommand}"/>
       </ListBox.KeyBindings>
@@ -75,22 +149,47 @@
         </ItemsPanelTemplate>
       </ListBox.ItemsPanel>
       <ListBox.ItemTemplate>
-          <DataTemplate DataType="vm:LogEntryViewModel">
-            <Border BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
-                    BorderThickness="0,0,0,1"
-                    Padding="6,4">
-              <Grid ColumnDefinitions="80,80,70,*" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="{Binding Time}"/>
-                <TextBlock Grid.Column="1" Text="{Binding SourceDisplayName}"/>
-                <TextBlock Grid.Column="2"
-                           Text="{Binding Level}"/>
-                <TextBlock Grid.Column="3"
-                           Text="{Binding Message}"
-                           TextWrapping="Wrap"
-                           FontFamily="Segoe UI, Microsoft YaHei UI, Segoe UI Emoji, Segoe UI Symbol"/>
-              </Grid>
-            </Border>
-          </DataTemplate>
+        <DataTemplate DataType="vm:LogEntryViewModel">
+          <Border Classes="logRow">
+            <Grid ColumnDefinitions="4,7,72,68,55,*" ColumnSpacing="0">
+              <!-- Level color bar (visible only when selected) -->
+              <Border Grid.Column="0"
+                      Classes="levelBar"
+                      Width="4"
+                      CornerRadius="2"
+                      Background="{Binding Level, Converter={StaticResource LogLevelBrushConverter}}"
+                      VerticalAlignment="Stretch"
+                      Margin="0,2"/>
+
+              <!-- Spacer -->
+              <Border Grid.Column="1"/>
+
+              <!-- Time -->
+              <TextBlock Grid.Column="2"
+                         Classes="logTime"
+                         Text="{Binding Time}"
+                         Margin="0,0,6,0"/>
+
+              <!-- Source -->
+              <TextBlock Grid.Column="3"
+                         Classes="logSource"
+                         Text="{Binding SourceDisplayName}"
+                         Margin="0,0,6,0"/>
+
+              <!-- Level -->
+              <TextBlock Grid.Column="4"
+                         Classes="logLevel"
+                         Text="{Binding Level}"
+                         Foreground="{Binding Level, Converter={StaticResource LogLevelBrushConverter}}"
+                         Margin="0,0,6,0"/>
+
+              <!-- Message -->
+              <TextBlock Grid.Column="5"
+                         Classes="logMessage"
+                         Text="{Binding Message}"/>
+            </Grid>
+          </Border>
+        </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>
   </Grid>

@@ -1,14 +1,17 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Data.Converters;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using carton.ViewModels;
 using System;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
 
 namespace carton.Views.Pages;
@@ -343,4 +346,28 @@ public partial class LogsView : UserControl
             _scrollViewer.PropertyChanged += OnScrollViewerPropertyChanged;
         }
     }
+}
+
+public sealed class LogLevelBrushConverter : IValueConverter
+{
+    private static readonly SolidColorBrush ErrorBrush = new(Color.FromRgb(231, 72, 86));
+    private static readonly SolidColorBrush WarnBrush = new(Color.FromRgb(249, 168, 37));
+    private static readonly SolidColorBrush InfoBrush = new(Color.FromRgb(0, 120, 212));
+    private static readonly SolidColorBrush DebugBrush = new(Color.FromRgb(128, 128, 128));
+    private static readonly SolidColorBrush DefaultBrush = new(Color.FromArgb(80, 128, 128, 128));
+
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        return (value as string)?.ToUpperInvariant() switch
+        {
+            "ERROR" => ErrorBrush,
+            "WARN" or "WARNING" => WarnBrush,
+            "INFO" => InfoBrush,
+            "DEBUG" => DebugBrush,
+            _ => DefaultBrush,
+        };
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
 }
