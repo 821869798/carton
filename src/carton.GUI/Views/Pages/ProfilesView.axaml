@@ -7,436 +7,530 @@
              mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="500"
              x:Class="carton.Views.Pages.ProfilesView"
              x:DataType="vm:ProfilesViewModel">
-	<UserControl.Styles>
-		<Style Selector="ListBoxItem">
-			<Setter Property="Background" Value="Transparent"/>
-			<Setter Property="BorderBrush" Value="Transparent"/>
-			<Setter Property="BorderThickness" Value="0"/>
-			<Setter Property="Padding" Value="0"/>
-		</Style>
-		<Style Selector="ListBoxItem:pointerover">
-			<Setter Property="Background" Value="Transparent"/>
-			<Setter Property="BorderBrush" Value="Transparent"/>
-		</Style>
-		<Style Selector="ListBoxItem:selected">
-			<Setter Property="Background" Value="Transparent"/>
-			<Setter Property="BorderBrush" Value="Transparent"/>
-		</Style>
-		<Style Selector="Button.profile-row">
-			<Setter Property="Background" Value="Transparent"/>
-			<Setter Property="BorderBrush" Value="Transparent"/>
-			<Setter Property="BorderThickness" Value="0"/>
-			<Setter Property="Padding" Value="8,8,0,8"/>
-		</Style>
-		<Style Selector="Button.profile-row:pointerover">
-			<Setter Property="Background" Value="Transparent"/>
-			<Setter Property="BorderBrush" Value="Transparent"/>
-		</Style>
- 		<Style Selector="Button.profile-row:pressed">
- 			<Setter Property="Background" Value="Transparent"/>
- 			<Setter Property="BorderBrush" Value="Transparent"/>
- 		</Style>
-		<Style Selector="Button.iconButton">
-			<Setter Property="Width" Value="30"/>
-			<Setter Property="Height" Value="30"/>
-			<Setter Property="Padding" Value="0"/>
-			<Setter Property="CornerRadius" Value="15"/>
-			<Setter Property="Background" Value="Transparent"/>
-			<Setter Property="BorderBrush" Value="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"/>
-			<Setter Property="BorderThickness" Value="1"/>
-			<Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
-		</Style>
-		<Style Selector="Button.iconButton:pointerover">
-			<Setter Property="Background" Value="{DynamicResource CartonControlBackgroundBaseLowBrush}"/>
-			<Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseHighBrush}"/>
-		</Style>
-		<Style Selector="Button.iconButton:pressed">
-			<Setter Property="Background" Value="{DynamicResource CartonControlBackgroundChromeMediumBrush}"/>
-		</Style>
-		<Style Selector="Button.iconButton.saveButton">
-			<Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"/>
-		</Style>
-		<Style Selector="Button.iconButton.saveButton:enabled">
-			<Setter Property="Background" Value="{DynamicResource CartonAccentBrush}"/>
-			<Setter Property="BorderBrush" Value="{DynamicResource CartonAccentBrush}"/>
-			<Setter Property="Foreground" Value="{DynamicResource CartonAccentForegroundBrush}"/>
-		</Style>
-		<Style Selector="Button.iconButton.saveButton:enabled:pointerover">
-			<Setter Property="Background" Value="{DynamicResource CartonAccentBrush}"/>
-			<Setter Property="BorderBrush" Value="{DynamicResource CartonAccentBrush}"/>
-			<Setter Property="Foreground" Value="{DynamicResource CartonAccentForegroundBrush}"/>
-		</Style>
-		<Style Selector="Button.iconButton.saveButton:enabled:pressed">
-			<Setter Property="Background" Value="{DynamicResource CartonAccentBrush}"/>
-			<Setter Property="BorderBrush" Value="{DynamicResource CartonAccentBrush}"/>
-			<Setter Property="Foreground" Value="{DynamicResource CartonAccentForegroundBrush}"/>
-			<Setter Property="Opacity" Value="0.88"/>
-		</Style>
-		<Style Selector="Button.searchChip">
-			<Setter Property="Width" Value="30"/>
-			<Setter Property="Height" Value="30"/>
-			<Setter Property="Padding" Value="0"/>
-			<Setter Property="CornerRadius" Value="15"/>
-			<Setter Property="HorizontalContentAlignment" Value="Center"/>
-			<Setter Property="VerticalContentAlignment" Value="Center"/>
-			<Setter Property="FontSize" Value="11"/>
-		</Style>
- 	</UserControl.Styles>
 
-	<Grid RowDefinitions="Auto,Auto,Auto,*">
-		<Border Grid.Row="0" Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}" Padding="6">
-			<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-				<Button Grid.Column="0"
-						Classes="iconButton"
-						Command="{Binding GoBackCommand}"
-						IsVisible="{Binding IsProfileFormMode}"
-						Margin="0,0,6,0"
-						ToolTip.Tip="{DynamicResource Profiles.Button.Back}">
-					<PathIcon Width="14"
-							  Height="14"
-							  Data="M14.71 6.71L13.29 5.29L6.59 12L13.29 18.71L14.71 17.29L9.41 12L14.71 6.71Z"/>
-				</Button>
-				<TextBlock Grid.Column="1"
-						   Text="{DynamicResource Profiles.Header.Title}"
-						   FontSize="20"
-						   FontWeight="SemiBold"
-						   VerticalAlignment="Center"/>
-				<StackPanel Grid.Column="2"
-							Orientation="Horizontal"
-							Spacing="6"
-							IsVisible="{Binding ShowConfigFullscreenView}">
-					<Button x:Name="SearchConfigButton"
-							Classes="iconButton"
-							Click="OnSearchConfigClick"
-							ToolTip.Tip="{DynamicResource Profiles.Editor.Search}">
-						<PathIcon Width="14"
-								  Height="14"
-								  Data="M15.5 14H14.71L14.43 13.73A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16A6.471 6.471 0 0 0 13.73 14.43L14 14.71V15.5L19 20.49L20.49 19L15.5 14ZM9.5 14A4.5 4.5 0 1 1 14 9.5A4.505 4.505 0 0 1 9.5 14Z"/>
-					</Button>
-					<Button Classes="iconButton"
-							Command="{Binding ValidateConfigJsonCommand}"
-							ToolTip.Tip="{Binding ValidateJsonText}">
-						<PathIcon Width="14"
-								  Height="14"
-								  Data="M9 16.17L4.83 12L3.41 13.41L9 19L21 7L19.59 5.59L9 16.17Z"/>
-					</Button>
-					<Button Classes="iconButton"
-							Command="{Binding FormatConfigJsonCommand}"
-							ToolTip.Tip="{Binding FormatJsonText}">
-						<PathIcon Width="14"
-								  Height="14"
-								  Data="M4 5H20V7H4V5ZM4 9H16V11H4V9ZM4 13H20V15H4V13ZM4 17H16V19H4V17Z"/>
-					</Button>
-					<Button Classes="iconButton saveButton"
-							Command="{Binding SaveProfileInEditorCommand}"
-							IsEnabled="{Binding CanSaveConfigInEditor}"
-							IsVisible="{Binding CanEditContent}"
-							ToolTip.Tip="{DynamicResource Profiles.Form.SaveButton}">
-						<PathIcon Width="14"
-								  Height="14"
-								  Data="M17 3H5A2 2 0 0 0 3 5V19A2 2 0 0 0 5 21H19A2 2 0 0 0 21 19V7L17 3ZM12 19A3 3 0 1 1 15 16A3 3 0 0 1 12 19ZM6 8V5H15V8Z"/>
-					</Button>
-				</StackPanel>
-			</Grid>
-		</Border>
+  <UserControl.Styles>
+    <Style Selector="ListBoxItem">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style Selector="ListBoxItem:pointerover">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="ListBoxItem:selected">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
 
-		<Border Grid.Row="1"
-				x:Name="ConfigSearchBar"
-				IsVisible="False"
-				Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
-				BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
-				BorderThickness="0,0,0,1"
-				Padding="10,8">
-			<Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
-				<TextBox x:Name="ConfigSearchInput"
-						 Grid.Column="0"
-						 VerticalAlignment="Center"
-						 Watermark="{DynamicResource Profiles.Editor.Search}"/>
-				<TextBlock x:Name="ConfigSearchStatus"
-						   Grid.Column="1"
-						   Width="56"
-						   VerticalAlignment="Center"
-						   TextAlignment="Center"/>
-				<Button x:Name="ConfigSearchCaseButton"
-						Grid.Column="2"
-						Classes="searchChip"
-						Content="Aa"
-						Click="OnSearchCaseClick"/>
-				<Button x:Name="ConfigSearchWholeWordButton"
-						Grid.Column="3"
-						Classes="searchChip"
-						Content="W"
-						Click="OnSearchWholeWordClick"/>
-				<Button x:Name="ConfigSearchRegexButton"
-						Grid.Column="4"
-						Classes="searchChip"
-						Content=".*"
-						Click="OnSearchRegexClick"/>
-				<Button x:Name="ConfigSearchPreviousButton"
-						Grid.Column="5"
-						Classes="iconButton"
-						Click="OnSearchPreviousClick">
-					<PathIcon Width="14"
-							  Height="14"
-							  Data="M7 14L12 9L17 14H7Z"/>
-				</Button>
-				<Button x:Name="ConfigSearchNextButton"
-						Grid.Column="6"
-						Classes="iconButton"
-						Click="OnSearchNextClick">
-					<PathIcon Width="14"
-							  Height="14"
-							  Data="M7 10L12 15L17 10H7Z"/>
-				</Button>
-				<Button x:Name="ConfigSearchCloseButton"
-						Grid.Column="7"
-						Classes="iconButton"
-						Click="OnSearchCloseClick">
-					<PathIcon Width="14"
-							  Height="14"
-							  Data="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z"/>
-				</Button>
-			</Grid>
-		</Border>
+    <Style Selector="Button.iconButton">
+      <Setter Property="Width" Value="30"/>
+      <Setter Property="Height" Value="30"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="CornerRadius" Value="15"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
+    </Style>
+    <Style Selector="Button.iconButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundBaseLowBrush}"/>
+      <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseHighBrush}"/>
+    </Style>
+    <Style Selector="Button.iconButton:pressed">
+      <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundChromeMediumBrush}"/>
+    </Style>
+    <Style Selector="Button.iconButton.saveButton">
+      <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"/>
+    </Style>
+    <Style Selector="Button.iconButton.saveButton:enabled">
+      <Setter Property="Background" Value="{DynamicResource CartonAccentBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource CartonAccentBrush}"/>
+      <Setter Property="Foreground" Value="{DynamicResource CartonAccentForegroundBrush}"/>
+    </Style>
+    <Style Selector="Button.iconButton.saveButton:enabled:pointerover">
+      <Setter Property="Background" Value="{DynamicResource CartonAccentBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource CartonAccentBrush}"/>
+      <Setter Property="Foreground" Value="{DynamicResource CartonAccentForegroundBrush}"/>
+    </Style>
+    <Style Selector="Button.iconButton.saveButton:enabled:pressed">
+      <Setter Property="Background" Value="{DynamicResource CartonAccentBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource CartonAccentBrush}"/>
+      <Setter Property="Foreground" Value="{DynamicResource CartonAccentForegroundBrush}"/>
+      <Setter Property="Opacity" Value="0.88"/>
+    </Style>
+    <Style Selector="Button.searchChip">
+      <Setter Property="Width" Value="30"/>
+      <Setter Property="Height" Value="30"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="CornerRadius" Value="15"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="FontSize" Value="11"/>
+    </Style>
 
-		<Border Grid.Row="2"
-				IsVisible="{Binding ImportStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-				Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
-				BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
-				BorderThickness="0,0,0,1"
-				Padding="10,6">
-			<StackPanel Orientation="Horizontal" Spacing="8">
-				<ProgressBar IsIndeterminate="True" IsVisible="{Binding IsImporting}" Width="80" Height="4"/>
-				<TextBlock Text="{Binding ImportStatus}" VerticalAlignment="Center"/>
-			</StackPanel>
-		</Border>
+    <Style Selector="Border.profileCard">
+      <Setter Property="Background" Value="{DynamicResource CartonSettingsItemBackgroundBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource CartonSettingsItemBorderBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="16,14"/>
+      <Setter Property="Margin" Value="0,0,0,4"/>
+    </Style>
 
-		<Grid Grid.Row="3">
-			<ScrollViewer IsVisible="{Binding !IsProfileFormMode}"
-						  Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}">
-				<Border Margin="20"
-						BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
-						BorderThickness="1"
-						CornerRadius="8"
-						Padding="12">
-					<StackPanel Spacing="0">
-						<Grid ColumnDefinitions="*,Auto">
-							<Button Grid.Column="1"
-									Classes="iconButton"
-									Command="{Binding ShowCreateProfileDialogCommand}"
-									ToolTip.Tip="{DynamicResource Profiles.Button.NewProfile}">
-								<PathIcon Width="14"
-										  Height="14"
-										  Data="M19 11H13V5H11V11H5V13H11V19H13V13H19V11Z"/>
-							</Button>
-						</Grid>
-						<Separator Margin="0,8"/>
+    <Style Selector="Border.profileCard:pointerover">
+      <Setter Property="Background" Value="{DynamicResource CartonSettingsItemPointerOverBackgroundBrush}"/>
+    </Style>
 
-						<ItemsControl ItemsSource="{Binding Profiles}">
-							<ItemsControl.ItemTemplate>
-								<DataTemplate>
-									<Border BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
-											BorderThickness="0,0,0,1"
-											Padding="6,12">
-										<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-											<Button Grid.Column="0"
-													Classes="profile-row"
-													Background="Transparent"
-													BorderBrush="Transparent"
-													BorderThickness="0"
-													HorizontalAlignment="Stretch"
-													HorizontalContentAlignment="Left"
-													Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).EditProfileCommand}"
-													CommandParameter="{Binding}">
-												<StackPanel Spacing="4">
-													<TextBlock Text="{Binding DisplayName}"
-															   FontSize="18"
-															   FontWeight="SemiBold"/>
-													<TextBlock FontSize="13"
-															   Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}">
-														<Run Text="{DynamicResource Profiles.List.LastUpdatedLabel}"/>
-														<Run Text="{Binding LastUpdated}"/>
-													</TextBlock>
-												</StackPanel>
-											</Button>
+    <Style Selector="Button.profileEditArea">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <ContentPresenter Content="{TemplateBinding Content}"
+                            Background="{TemplateBinding Background}"
+                            Padding="{TemplateBinding Padding}"/>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+  </UserControl.Styles>
 
-											<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-												<Button Classes="iconButton"
-														Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).UpdateProfileCommand}"
-														CommandParameter="{Binding}"
-														IsVisible="{Binding IsRemoteType}"
-														ToolTip.Tip="{DynamicResource Profiles.Button.Update}">
-													<PathIcon Width="14"
-															  Height="14"
-															  Data="M12 5 V1 L7 6 L12 11 V7 C15.3 7 18 9.7 18 13 C18 16.3 15.3 19 12 19 C8.7 19 6 16.3 6 13 H4 C4 17.4 7.6 21 12 21 C16.4 21 20 17.4 20 13 C20 8.6 16.4 5 12 5 Z"/>
-												</Button>
-												<Button Classes="iconButton"
-														Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).DeleteProfileCommand}"
-														CommandParameter="{Binding}"
-														IsEnabled="{Binding CanDelete}"
-														ToolTip.Tip="{DynamicResource Profiles.Button.Delete}">
-													<PathIcon Width="14"
-															  Height="14"
-															  Data="M9 3V4H4V6H5V19A2 2 0 0 0 7 21H17A2 2 0 0 0 19 19V6H20V4H15V3H9M7 6H17V19H7V6M9 8V17H11V8H9M13 8V17H15V8H13Z"/>
-												</Button>
-											</StackPanel>
-										</Grid>
-									</Border>
-								</DataTemplate>
-							</ItemsControl.ItemTemplate>
-						</ItemsControl>
-					</StackPanel>
-				</Border>
-			</ScrollViewer>
+  <Grid RowDefinitions="Auto,Auto,Auto,*">
+    <!-- Header -->
+    <Border Grid.Row="0"
+            Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+            BorderBrush="{DynamicResource CartonControlForegroundBaseLowBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="12,10">
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+        <Button Grid.Column="0"
+                Classes="iconButton"
+                Command="{Binding GoBackCommand}"
+                IsVisible="{Binding IsProfileFormMode}"
+                ToolTip.Tip="{DynamicResource Profiles.Button.Back}">
+          <PathIcon Width="14" Height="14"
+                    Data="M14.71 6.71L13.29 5.29L6.59 12L13.29 18.71L14.71 17.29L9.41 12L14.71 6.71Z"/>
+        </Button>
+        <TextBlock Grid.Column="1"
+                   Text="{DynamicResource Profiles.Header.Title}"
+                   FontSize="18"
+                   FontWeight="SemiBold"
+                   VerticalAlignment="Center"/>
+        <StackPanel Grid.Column="2"
+                    Orientation="Horizontal"
+                    Spacing="6"
+                    IsVisible="{Binding ShowConfigFullscreenView}">
+          <Button x:Name="SearchConfigButton"
+                  Classes="iconButton"
+                  Click="OnSearchConfigClick"
+                  ToolTip.Tip="{DynamicResource Profiles.Editor.Search}">
+            <PathIcon Width="14" Height="14"
+                      Data="M15.5 14H14.71L14.43 13.73A6.471 6.471 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16A6.471 6.471 0 0 0 13.73 14.43L14 14.71V15.5L19 20.49L20.49 19L15.5 14ZM9.5 14A4.5 4.5 0 1 1 14 9.5A4.505 4.505 0 0 1 9.5 14Z"/>
+          </Button>
+          <Button Classes="iconButton"
+                  Command="{Binding ValidateConfigJsonCommand}"
+                  ToolTip.Tip="{Binding ValidateJsonText}">
+            <PathIcon Width="14" Height="14"
+                      Data="M9 16.17L4.83 12L3.41 13.41L9 19L21 7L19.59 5.59L9 16.17Z"/>
+          </Button>
+          <Button Classes="iconButton"
+                  Command="{Binding FormatConfigJsonCommand}"
+                  ToolTip.Tip="{Binding FormatJsonText}">
+            <PathIcon Width="14" Height="14"
+                      Data="M4 5H20V7H4V5ZM4 9H16V11H4V9ZM4 13H20V15H4V13ZM4 17H16V19H4V17Z"/>
+          </Button>
+          <Button Classes="iconButton saveButton"
+                  Command="{Binding SaveProfileInEditorCommand}"
+                  IsEnabled="{Binding CanSaveConfigInEditor}"
+                  IsVisible="{Binding CanEditContent}"
+                  ToolTip.Tip="{DynamicResource Profiles.Form.SaveButton}">
+            <PathIcon Width="14" Height="14"
+                      Data="M17 3H5A2 2 0 0 0 3 5V19A2 2 0 0 0 5 21H19A2 2 0 0 0 21 19V7L17 3ZM12 19A3 3 0 1 1 15 16A3 3 0 0 1 12 19ZM6 8V5H15V8Z"/>
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
 
-			<ScrollViewer IsVisible="{Binding IsProfileFormMode}"
-						  Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}">
-				<StackPanel Margin="20" Spacing="16" MaxWidth="500">
-					<TextBlock Text="{Binding ProfileFormTitle}" FontSize="18" FontWeight="SemiBold"/>
+    <!-- Config Search Bar -->
+    <Border Grid.Row="1"
+            x:Name="ConfigSearchBar"
+            IsVisible="False"
+            Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+            BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="10,8">
+      <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6">
+        <TextBox x:Name="ConfigSearchInput"
+                 Grid.Column="0"
+                 VerticalAlignment="Center"
+                 Watermark="{DynamicResource Profiles.Editor.Search}"/>
+        <TextBlock x:Name="ConfigSearchStatus"
+                   Grid.Column="1"
+                   Width="56"
+                   VerticalAlignment="Center"
+                   TextAlignment="Center"/>
+        <Button x:Name="ConfigSearchCaseButton"
+                Grid.Column="2"
+                Classes="searchChip"
+                Content="Aa"
+                Click="OnSearchCaseClick"/>
+        <Button x:Name="ConfigSearchWholeWordButton"
+                Grid.Column="3"
+                Classes="searchChip"
+                Content="W"
+                Click="OnSearchWholeWordClick"/>
+        <Button x:Name="ConfigSearchRegexButton"
+                Grid.Column="4"
+                Classes="searchChip"
+                Content=".*"
+                Click="OnSearchRegexClick"/>
+        <Button x:Name="ConfigSearchPreviousButton"
+                Grid.Column="5"
+                Classes="iconButton"
+                Click="OnSearchPreviousClick">
+          <PathIcon Width="14" Height="14"
+                    Data="M7 14L12 9L17 14H7Z"/>
+        </Button>
+        <Button x:Name="ConfigSearchNextButton"
+                Grid.Column="6"
+                Classes="iconButton"
+                Click="OnSearchNextClick">
+          <PathIcon Width="14" Height="14"
+                    Data="M7 10L12 15L17 10H7Z"/>
+        </Button>
+        <Button x:Name="ConfigSearchCloseButton"
+                Grid.Column="7"
+                Classes="iconButton"
+                Click="OnSearchCloseClick">
+          <PathIcon Width="14" Height="14"
+                    Data="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z"/>
+        </Button>
+      </Grid>
+    </Border>
 
-					<StackPanel Spacing="12">
-						<Grid ColumnDefinitions="100,*" ColumnSpacing="12">
-							<TextBlock Grid.Column="0" Text="{DynamicResource Profiles.Form.NameLabel}" VerticalAlignment="Center"/>
-							<TextBox Grid.Column="1" Text="{Binding NewProfileName}"
-									 Watermark="{DynamicResource Profiles.Form.NameWatermark}"/>
-						</Grid>
+    <!-- Import Status Bar -->
+    <Border Grid.Row="2"
+            IsVisible="{Binding ImportStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+            Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+            BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="10,6">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsImporting}" Width="80" Height="4"/>
+        <TextBlock Text="{Binding ImportStatus}" VerticalAlignment="Center"/>
+      </StackPanel>
+    </Border>
 
-						<Grid ColumnDefinitions="100,*" ColumnSpacing="12">
-							<TextBlock Grid.Column="0" Text="{DynamicResource Profiles.Form.TypeLabel}" VerticalAlignment="Center"/>
-							<ComboBox Grid.Column="1"
-									  ItemsSource="{Binding ProfileTypes}"
-									  SelectedIndex="{Binding NewProfileType}"
-									  IsEnabled="{Binding IsTypeEditable}"
-									  HorizontalAlignment="Stretch"/>
-						</Grid>
+    <!-- Main Content -->
+    <Grid Grid.Row="3">
+      <!-- Profile List View -->
+      <ScrollViewer IsVisible="{Binding !IsProfileFormMode}">
+        <StackPanel Margin="20" Spacing="6" MaxWidth="560">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Classes="sectionTitle"
+                       Text="{DynamicResource Profiles.Header.Title}"/>
+            <Button Grid.Column="1"
+                    Classes="accent"
+                    Command="{Binding ShowCreateProfileDialogCommand}"
+                    ToolTip.Tip="{DynamicResource Profiles.Button.NewProfile}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <PathIcon Width="12" Height="12"
+                          Data="M19 11H13V5H11V11H5V13H11V19H13V13H19V11Z"/>
+                <TextBlock Text="{DynamicResource Profiles.Button.NewProfile}"/>
+              </StackPanel>
+            </Button>
+          </Grid>
 
-						<Grid ColumnDefinitions="100,*" ColumnSpacing="12"
-							  IsVisible="{Binding ShowLocalFileModeSelector}">
-							<TextBlock Grid.Column="0" Text="{DynamicResource Profiles.Form.FileLabel}" VerticalAlignment="Center"/>
-							<ComboBox Grid.Column="1"
-									  ItemsSource="{Binding LocalModes}"
-									  SelectedIndex="{Binding NewLocalMode}"
-									  IsEnabled="{Binding IsLocalModeEditable}"
-									  HorizontalAlignment="Stretch"/>
-						</Grid>
+          <ItemsControl ItemsSource="{Binding Profiles}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Classes="profileCard">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+                    <!-- Clickable area: icon + info -->
+                    <Button Grid.Column="0"
+                            Classes="profileEditArea"
+                            Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).EditProfileCommand}"
+                            CommandParameter="{Binding}">
+                      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                        <!-- Type Icon -->
+                        <Border Grid.Column="0"
+                                Width="40" Height="40"
+                                CornerRadius="20"
+                                Background="{DynamicResource CartonControlBackgroundBaseLowBrush}"
+                                VerticalAlignment="Center">
+                          <PathIcon Width="18" Height="18"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"
+                                    Data="M13.99 3.09V2H5.99L3.99 4V17C3.99 18.1 4.89 19 5.99 19H17.99C19.09 19 19.99 18.1 19.99 17V8L13.99 3.09ZM11.99 4.5L16.49 9H11.99V4.5ZM6.99 17V15H9.99V17H6.99ZM11.99 17V12H16.99V17H11.99Z"/>
+                        </Border>
 
-						<Grid ColumnDefinitions="100,*,Auto" ColumnSpacing="12"
-							  IsVisible="{Binding ShowLocalImportFilePicker}">
-							<TextBlock Grid.Column="0" Text="{DynamicResource Profiles.Form.FileLabel}" VerticalAlignment="Center"/>
-							<TextBox Grid.Column="1"
-									 Text="{Binding NewLocalFilePath}"
-									 IsReadOnly="True"
-									 Watermark="{DynamicResource Profiles.Form.FileWatermark}"/>
-							<Button Grid.Column="2"
-									Content="{DynamicResource Profiles.Form.BrowseButton}"
-									Command="{Binding BrowseLocalFileCommand}"
-									IsEnabled="{Binding IsLocalModeEditable}"/>
-						</Grid>
+                        <!-- Profile Info -->
+                        <StackPanel Grid.Column="1"
+                                    Spacing="3"
+                                    VerticalAlignment="Center">
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{Binding DisplayName}"
+                                       FontSize="15"
+                                       FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <Border Classes="fluentBadge"
+                                    VerticalAlignment="Center">
+                              <TextBlock Classes="fluentBadgeText"
+                                         Text="{Binding Type}"/>
+                            </Border>
+                          </StackPanel>
+                          <TextBlock FontSize="12"
+                                     Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}">
+                            <Run Text="{DynamicResource Profiles.List.LastUpdatedLabel}"/>
+                            <Run Text="{Binding LastUpdated}"/>
+                          </TextBlock>
+                        </StackPanel>
+                      </Grid>
+                    </Button>
 
-						<Grid ColumnDefinitions="100,*" ColumnSpacing="12"
-							  IsVisible="{Binding IsRemoteProfile}">
-							<TextBlock Grid.Column="0" Text="{DynamicResource Profiles.Form.UrlLabel}" VerticalAlignment="Center"/>
-							<TextBox Grid.Column="1"
-									 Text="{Binding NewProfileUrl}"
-									 Watermark="{DynamicResource Profiles.Form.UrlWatermark}"/>
-						</Grid>
+                    <!-- Action Buttons -->
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="6"
+                                VerticalAlignment="Center">
+                      <Button Classes="iconButton"
+                              Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).UpdateProfileCommand}"
+                              CommandParameter="{Binding}"
+                              IsVisible="{Binding IsRemoteType}"
+                              ToolTip.Tip="{DynamicResource Profiles.Button.Update}">
+                        <PathIcon Width="14" Height="14"
+                                  Data="M12 5 V1 L7 6 L12 11 V7 C15.3 7 18 9.7 18 13 C18 16.3 15.3 19 12 19 C8.7 19 6 16.3 6 13 H4 C4 17.4 7.6 21 12 21 C16.4 21 20 17.4 20 13 C20 8.6 16.4 5 12 5 Z"/>
+                      </Button>
+                      <Button Classes="iconButton"
+                              Command="{Binding $parent[ItemsControl].((vm:ProfilesViewModel)DataContext).DeleteProfileCommand}"
+                              CommandParameter="{Binding}"
+                              IsEnabled="{Binding CanDelete}"
+                              ToolTip.Tip="{DynamicResource Profiles.Button.Delete}">
+                        <PathIcon Width="14" Height="14"
+                                  Data="M9 3V4H4V6H5V19A2 2 0 0 0 7 21H17A2 2 0 0 0 19 19V6H20V4H15V3H9M7 6H17V19H7V6M9 8V17H11V8H9M13 8V17H15V8H13Z"/>
+                      </Button>
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
 
-						<Grid ColumnDefinitions="100,*,Auto" ColumnSpacing="12"
-							  IsVisible="{Binding IsRemoteProfile}">
-							<TextBlock Grid.Column="0" Text="{DynamicResource Profiles.Form.AutoUpdateLabel}" VerticalAlignment="Center"/>
-							<ToggleSwitch Grid.Column="2"
+      <!-- Profile Form View -->
+      <ScrollViewer IsVisible="{Binding IsProfileFormMode}">
+        <StackPanel Margin="20" Spacing="8" MaxWidth="560">
+          <TextBlock Classes="sectionTitle" Text="{Binding ProfileFormTitle}"/>
 
-										  IsChecked="{Binding NewAutoUpdate}"/>
-						</Grid>
+          <!-- Name -->
+          <Border Classes="settingsItem">
+            <Grid ColumnDefinitions="120,*" ColumnSpacing="16">
+              <TextBlock Classes="settingsTitle"
+                         Text="{DynamicResource Profiles.Form.NameLabel}"
+                         VerticalAlignment="Center"/>
+              <TextBox Grid.Column="1"
+                       Text="{Binding NewProfileName}"
+                       Watermark="{DynamicResource Profiles.Form.NameWatermark}"/>
+            </Grid>
+          </Border>
 
-						<Grid ColumnDefinitions="100,*" ColumnSpacing="12"
-							  IsVisible="{Binding IsRemoteProfile}">
-							<TextBlock Grid.Column="0" Text="{DynamicResource Profiles.Form.IntervalLabel}" VerticalAlignment="Center"/>
-							<TextBox Grid.Column="1"
-									 Text="{Binding NewUpdateIntervalMinutes}"
-									 Watermark="{DynamicResource Profiles.Form.IntervalWatermark}"/>
-						</Grid>
+          <!-- Type -->
+          <Border Classes="settingsItem">
+            <Grid ColumnDefinitions="120,*" ColumnSpacing="16">
+              <TextBlock Classes="settingsTitle"
+                         Text="{DynamicResource Profiles.Form.TypeLabel}"
+                         VerticalAlignment="Center"/>
+              <ComboBox Grid.Column="1"
+                        ItemsSource="{Binding ProfileTypes}"
+                        SelectedIndex="{Binding NewProfileType}"
+                        IsEnabled="{Binding IsTypeEditable}"
+                        HorizontalAlignment="Stretch"/>
+            </Grid>
+          </Border>
 
-						<Grid ColumnDefinitions="100,*" ColumnSpacing="12"
-							  IsVisible="{Binding IsRemoteEditStatusVisible}">
-							<TextBlock Grid.Column="0" Text="{DynamicResource Profiles.Form.LastUpdatedLabel}" VerticalAlignment="Center"/>
-							<TextBlock Grid.Column="1" Text="{Binding EditLastUpdated}"
-									   VerticalAlignment="Center"
-									   Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
-						</Grid>
+          <!-- Local Mode Selector -->
+          <Border Classes="settingsItem"
+                  IsVisible="{Binding ShowLocalFileModeSelector}">
+            <Grid ColumnDefinitions="120,*" ColumnSpacing="16">
+              <TextBlock Classes="settingsTitle"
+                         Text="{DynamicResource Profiles.Form.FileLabel}"
+                         VerticalAlignment="Center"/>
+              <ComboBox Grid.Column="1"
+                        ItemsSource="{Binding LocalModes}"
+                        SelectedIndex="{Binding NewLocalMode}"
+                        IsEnabled="{Binding IsLocalModeEditable}"
+                        HorizontalAlignment="Stretch"/>
+            </Grid>
+          </Border>
 
-						<Grid ColumnDefinitions="100,*" ColumnSpacing="12"
-							  IsVisible="{Binding ShowContentAction}">
-							<TextBlock Grid.Column="0" Text="{DynamicResource Profiles.Form.ActionLabel}" VerticalAlignment="Center"/>
-							<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-								<Button Content="{Binding ContentActionText}"
-										Command="{Binding ToggleContentEditorCommand}"/>
-								<Button Content="{Binding OpenExternalText}"
-										Command="{Binding OpenInExternalEditorCommand}"
-										IsVisible="{Binding ShowExternalEditorAction}"/>
-								<Button Content="{Binding CopyAsLocalText}"
-										IsVisible="{Binding IsRemoteProfile}"
-										Command="{Binding CopyAsLocalCommand}"/>
-								<Button Content="{Binding UpdateConfigText}"
-										IsVisible="{Binding IsRemoteProfile}"
-										Command="{Binding UpdateEditingProfileCommand}"/>
-							</StackPanel>
-						</Grid>
+          <!-- Local File Picker -->
+          <Border Classes="settingsItem"
+                  IsVisible="{Binding ShowLocalImportFilePicker}">
+            <Grid ColumnDefinitions="120,*,Auto" ColumnSpacing="12">
+              <TextBlock Classes="settingsTitle"
+                         Text="{DynamicResource Profiles.Form.FileLabel}"
+                         VerticalAlignment="Center"/>
+              <TextBox Grid.Column="1"
+                       Text="{Binding NewLocalFilePath}"
+                       IsReadOnly="True"
+                       Watermark="{DynamicResource Profiles.Form.FileWatermark}"/>
+              <Button Grid.Column="2"
+                      Content="{DynamicResource Profiles.Form.BrowseButton}"
+                      Command="{Binding BrowseLocalFileCommand}"
+                      IsEnabled="{Binding IsLocalModeEditable}"/>
+            </Grid>
+          </Border>
 
-						<TextBlock Text="{DynamicResource Profiles.Form.ContentLabel}"
-								   IsVisible="{Binding ShowInlineConfigEditor}"/>
-						<TextBox Text="{Binding ConfigContent}"
-								 Watermark="{DynamicResource Profiles.Form.ContentWatermark}"
-								 AcceptsReturn="True"
-								 TextWrapping="NoWrap"
-								 Height="260"
-								 FontFamily="monospace"
-								 FontSize="11"
-								 IsReadOnly="{Binding IsConfigReadOnly}"
-								 IsVisible="{Binding ShowInlineConfigEditor}"/>
-					</StackPanel>
+          <!-- URL (remote only) -->
+          <Border Classes="settingsItem"
+                  IsVisible="{Binding IsRemoteProfile}">
+            <Grid ColumnDefinitions="120,*" ColumnSpacing="16">
+              <TextBlock Classes="settingsTitle"
+                         Text="{DynamicResource Profiles.Form.UrlLabel}"
+                         VerticalAlignment="Center"/>
+              <TextBox Grid.Column="1"
+                       Text="{Binding NewProfileUrl}"
+                       Watermark="{DynamicResource Profiles.Form.UrlWatermark}"/>
+            </Grid>
+          </Border>
 
-					<TextBlock Text="{Binding NewProfileStatus}"
-							   IsVisible="{Binding NewProfileStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-							   Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
+          <!-- Auto Update (remote only) -->
+          <Border Classes="settingsItem"
+                  IsVisible="{Binding IsRemoteProfile}">
+            <Grid ColumnDefinitions="120,*,Auto" ColumnSpacing="16">
+              <TextBlock Classes="settingsTitle"
+                         Text="{DynamicResource Profiles.Form.AutoUpdateLabel}"
+                         VerticalAlignment="Center"/>
+              <ToggleSwitch Grid.Column="2"
+                            IsChecked="{Binding NewAutoUpdate}"/>
+            </Grid>
+          </Border>
 
-					<ProgressBar IsIndeterminate="True"
-								 IsVisible="{Binding IsCreating}"
-								 Height="4"/>
+          <!-- Update Interval (remote only) -->
+          <Border Classes="settingsItem"
+                  IsVisible="{Binding IsRemoteProfile}">
+            <Grid ColumnDefinitions="120,*" ColumnSpacing="16">
+              <TextBlock Classes="settingsTitle"
+                         Text="{DynamicResource Profiles.Form.IntervalLabel}"
+                         VerticalAlignment="Center"/>
+              <TextBox Grid.Column="1"
+                       Text="{Binding NewUpdateIntervalMinutes}"
+                       Watermark="{DynamicResource Profiles.Form.IntervalWatermark}"/>
+            </Grid>
+          </Border>
 
-					<StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-						<Button Content="{DynamicResource Profiles.Form.CreateButton}" Command="{Binding CreateProfileCommand}"
-								Classes="accent" IsEnabled="{Binding !IsCreating}"
-								IsVisible="{Binding IsCreatingMode}"/>
-						<Button Content="{DynamicResource Profiles.Form.SaveButton}" Command="{Binding SaveProfileCommand}"
-								Classes="accent" IsEnabled="{Binding CanSaveProfile}"
-								IsVisible="{Binding IsEditingMode}"/>
-						<Button Content="{DynamicResource Profiles.Form.CancelButton}" Command="{Binding CancelCreateCommand}"
-								IsEnabled="{Binding !IsCreating}"/>
-					</StackPanel>
-				</StackPanel>
-			</ScrollViewer>
+          <!-- Last Updated (edit mode) -->
+          <Border Classes="settingsItem"
+                  IsVisible="{Binding IsRemoteEditStatusVisible}">
+            <Grid ColumnDefinitions="120,*" ColumnSpacing="16">
+              <TextBlock Classes="settingsTitle"
+                         Text="{DynamicResource Profiles.Form.LastUpdatedLabel}"
+                         VerticalAlignment="Center"/>
+              <TextBlock Grid.Column="1"
+                         Text="{Binding EditLastUpdated}"
+                         VerticalAlignment="Center"
+                         Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
+            </Grid>
+          </Border>
 
-			<Grid Grid.RowSpan="3"
-				  IsVisible="{Binding ShowConfigFullscreenView}"
-				  Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
-				  Panel.ZIndex="10">
-				<Grid Margin="12">
-					<Border x:Name="ConfigEditorHost"
-							Background="{DynamicResource CartonControlBackgroundBaseLowBrush}"
-							BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
-							BorderThickness="1"
-							CornerRadius="10"
-							ClipToBounds="True">
-						<controls:JsonConfigEditor HorizontalAlignment="Stretch"
-												 x:Name="ConfigEditor"
-												 VerticalAlignment="Stretch"
-												 Text="{Binding ConfigContent, Mode=TwoWay}"
-												 IsReadOnly="{Binding IsConfigReadOnly}"/>
-					</Border>
-				</Grid>
-			</Grid>
-		</Grid>
-	</Grid>
+          <!-- Content Actions -->
+          <Border Classes="settingsItem"
+                  IsVisible="{Binding ShowContentAction}">
+            <Grid ColumnDefinitions="120,*" ColumnSpacing="16">
+              <TextBlock Classes="settingsTitle"
+                         Text="{DynamicResource Profiles.Form.ActionLabel}"
+                         VerticalAlignment="Center"/>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                <Button Content="{Binding ContentActionText}"
+                        Command="{Binding ToggleContentEditorCommand}"/>
+                <Button Content="{Binding OpenExternalText}"
+                        Command="{Binding OpenInExternalEditorCommand}"
+                        IsVisible="{Binding ShowExternalEditorAction}"/>
+                <Button Content="{Binding CopyAsLocalText}"
+                        IsVisible="{Binding IsRemoteProfile}"
+                        Command="{Binding CopyAsLocalCommand}"/>
+                <Button Content="{Binding UpdateConfigText}"
+                        IsVisible="{Binding IsRemoteProfile}"
+                        Command="{Binding UpdateEditingProfileCommand}"/>
+              </StackPanel>
+            </Grid>
+          </Border>
+
+          <!-- Inline Config Editor -->
+          <Border Classes="settingsItem"
+                  IsVisible="{Binding ShowInlineConfigEditor}"
+                  Padding="12">
+            <StackPanel Spacing="8">
+              <TextBlock Classes="settingsTitle"
+                         Text="{DynamicResource Profiles.Form.ContentLabel}"/>
+              <TextBox Text="{Binding ConfigContent}"
+                       Watermark="{DynamicResource Profiles.Form.ContentWatermark}"
+                       AcceptsReturn="True"
+                       TextWrapping="NoWrap"
+                       Height="260"
+                       FontFamily="monospace"
+                       FontSize="11"
+                       IsReadOnly="{Binding IsConfigReadOnly}"/>
+            </StackPanel>
+          </Border>
+
+          <!-- Status -->
+          <TextBlock Text="{Binding NewProfileStatus}"
+                     IsVisible="{Binding NewProfileStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                     Classes="settingsDescription"
+                     Margin="16,0"/>
+
+          <!-- Progress -->
+          <ProgressBar IsIndeterminate="True"
+                       IsVisible="{Binding IsCreating}"
+                       Height="4"/>
+
+          <!-- Action Buttons -->
+          <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Content="{DynamicResource Profiles.Form.CreateButton}"
+                    Command="{Binding CreateProfileCommand}"
+                    Classes="accent"
+                    IsEnabled="{Binding !IsCreating}"
+                    IsVisible="{Binding IsCreatingMode}"/>
+            <Button Content="{DynamicResource Profiles.Form.SaveButton}"
+                    Command="{Binding SaveProfileCommand}"
+                    Classes="accent"
+                    IsEnabled="{Binding CanSaveProfile}"
+                    IsVisible="{Binding IsEditingMode}"/>
+            <Button Content="{DynamicResource Profiles.Form.CancelButton}"
+                    Command="{Binding CancelCreateCommand}"
+                    IsEnabled="{Binding !IsCreating}"/>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- JSON Editor Fullscreen Overlay -->
+      <Grid IsVisible="{Binding ShowConfigFullscreenView}"
+            Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+            Panel.ZIndex="10">
+        <Grid Margin="12">
+          <Border x:Name="ConfigEditorHost"
+                  Background="{DynamicResource CartonControlBackgroundBaseLowBrush}"
+                  BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
+                  BorderThickness="1"
+                  CornerRadius="10"
+                  ClipToBounds="True">
+            <controls:JsonConfigEditor HorizontalAlignment="Stretch"
+                                       x:Name="ConfigEditor"
+                                       VerticalAlignment="Stretch"
+                                       Text="{Binding ConfigContent, Mode=TwoWay}"
+                                       IsReadOnly="{Binding IsConfigReadOnly}"/>
+          </Border>
+        </Grid>
+      </Grid>
+    </Grid>
+  </Grid>
 
 </UserControl>

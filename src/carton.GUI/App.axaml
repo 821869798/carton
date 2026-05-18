@@ -34,6 +34,63 @@
       <Setter Property="BoxShadow" Value="0 2 8 0 #10000000"/>
     </Style>
 
+    <Style Selector="TextBlock.sectionTitle">
+      <Setter Property="FontSize" Value="18"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Margin" Value="0,4,0,8"/>
+    </Style>
+
+    <Style Selector="Border.settingsItem">
+      <Setter Property="Background" Value="{DynamicResource CartonSettingsItemBackgroundBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource CartonSettingsItemBorderBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="16,12"/>
+      <Setter Property="MinHeight" Value="52"/>
+    </Style>
+
+    <Style Selector="Border.settingsItem:pointerover">
+      <Setter Property="Background" Value="{DynamicResource CartonSettingsItemPointerOverBackgroundBrush}"/>
+    </Style>
+
+    <Style Selector="Button.settingsItemLink">
+      <Setter Property="Background" Value="{DynamicResource CartonSettingsItemBackgroundBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource CartonSettingsItemBorderBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="16,12"/>
+      <Setter Property="MinHeight" Value="52"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+    </Style>
+
+    <Style Selector="Button.settingsItemLink:pointerover">
+      <Setter Property="Background" Value="{DynamicResource CartonSettingsItemPointerOverBackgroundBrush}"/>
+    </Style>
+
+    <Style Selector="TextBlock.settingsTitle">
+      <Setter Property="FontWeight" Value="Medium"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style Selector="TextBlock.settingsDescription">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+
+    <Style Selector="Border.fluentBadge">
+      <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundBaseLowBrush}"/>
+      <Setter Property="CornerRadius" Value="3"/>
+      <Setter Property="Padding" Value="6,2"/>
+    </Style>
+
+    <Style Selector="TextBlock.fluentBadgeText">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseMediumHighBrush}"/>
+    </Style>
+
     <Style Selector="Border.toast">
       <Setter Property="Background" Value="#F2282E39"/>
       <Setter Property="CornerRadius" Value="999"/>

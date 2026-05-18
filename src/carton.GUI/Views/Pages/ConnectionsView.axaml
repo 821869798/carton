@@ -4,128 +4,193 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:carton.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="400"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="500"
              x:Class="carton.Views.Pages.ConnectionsView"
              x:DataType="vm:ConnectionsViewModel">
 
+  <UserControl.Styles>
+    <Style Selector="Border.connectionCard">
+      <Setter Property="Background" Value="{DynamicResource CartonSettingsItemBackgroundBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource CartonSettingsItemBorderBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Margin" Value="0,0,0,4"/>
+      <Setter Property="BoxShadow" Value="0 1 3 0 #18000000"/>
+    </Style>
+
+    <Style Selector="Border.connectionCard:pointerover">
+      <Setter Property="Background" Value="{DynamicResource CartonSettingsItemPointerOverBackgroundBrush}"/>
+      <Setter Property="BoxShadow" Value="0 2 6 0 #22000000"/>
+    </Style>
+
+    <Style Selector="Button.connCloseButton">
+      <Setter Property="Width" Value="28"/>
+      <Setter Property="Height" Value="28"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="CornerRadius" Value="14"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
+    </Style>
+    <Style Selector="Button.connCloseButton:pointerover">
+      <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorSecondaryBrush}"/>
+      <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseHighBrush}"/>
+    </Style>
+    <Style Selector="Button.connCloseButton:pressed">
+      <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorTertiaryBrush}"/>
+    </Style>
+  </UserControl.Styles>
+
   <Grid RowDefinitions="Auto,*">
-    <Grid Grid.Row="0"
-          Margin="16"
-          ColumnDefinitions="Auto,*,Auto"
-          ColumnSpacing="12">
-      <Button Grid.Column="0"
-              Content="{DynamicResource Connections.Button.CloseAll}"
-              Command="{Binding CloseAllCommand}"
-              Padding="12,6"/>
-      <TextBox Grid.Column="1"
-               Text="{Binding SearchText}"
-               Watermark="{DynamicResource Connections.Search.Watermark}"
-               MinWidth="220"
-               HorizontalAlignment="Stretch"/>
-      <TextBlock Grid.Column="2"
-                 VerticalAlignment="Center">
-        <Run Text="{DynamicResource Connections.Label.CountPrefix}"/>
-        <Run Text="{Binding VisibleConnectionCount}"/>
-        <Run Text="/"/>
-        <Run Text="{Binding ConnectionCount}"/>
-      </TextBlock>
-    </Grid>
-
-    <Border Grid.Row="1" Margin="16"
-            BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
-            BorderThickness="1"
-            CornerRadius="8">
-      <ListBox ItemsSource="{Binding Connections}"
-               ScrollViewer.VerticalScrollBarVisibility="Auto"
-               ScrollViewer.HorizontalScrollBarVisibility="Auto">
-        <ListBox.ItemsPanel>
-          <ItemsPanelTemplate>
-            <VirtualizingStackPanel/>
-          </ItemsPanelTemplate>
-        </ListBox.ItemsPanel>
-        <ListBox.Styles>
-          <Style Selector="ListBoxItem">
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-          </Style>
-        </ListBox.Styles>
-        <ListBox.ItemTemplate>
-          <DataTemplate DataType="vm:ConnectionItemViewModel">
-            <Border BorderBrush="{DynamicResource CartonControlForegroundBaseLowBrush}"
-                    BorderThickness="0,0,0,1"
-                    Padding="0,8">
-              <StackPanel Spacing="8">
-                <Grid ColumnDefinitions="*,Auto"
-                      ColumnSpacing="12">
-                  <StackPanel Spacing="4">
-                    <TextBlock Text="{Binding Process}"
-                               FontWeight="SemiBold"
-                               TextTrimming="CharacterEllipsis"/>
-                    <WrapPanel ItemSpacing="8">
-                      <Border Padding="6,2"
-                              Background="{DynamicResource CartonControlForegroundBaseLowBrush}"
-                              CornerRadius="4">
-                        <TextBlock Text="{Binding Protocol}"
-                                   FontSize="11"
-                                   Foreground="{DynamicResource CartonControlForegroundBaseMediumHighBrush}"
-                                   TextTrimming="CharacterEllipsis"/>
-                      </Border>
-                      <Border Padding="6,2"
-                              Background="{DynamicResource CartonControlForegroundBaseLowBrush}"
-                              CornerRadius="4">
-                        <TextBlock Text="{Binding Outbound}"
-                                   FontSize="11"
-                                   Foreground="{DynamicResource CartonControlForegroundBaseHighBrush}"
-                                   TextTrimming="CharacterEllipsis"/>
-                      </Border>
-                    </WrapPanel>
-                  </StackPanel>
-
-                  <StackPanel Spacing="4"
-                              HorizontalAlignment="Right">
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="12"
-                                HorizontalAlignment="Right">
-                      <TextBlock Text="{Binding Upload}"
-                                 FontSize="12"
-                                 Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
-                      <TextBlock Text="{Binding Download}"
-                                 FontSize="12"
-                                 Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
-                    </StackPanel>
-                    <Button Content="{DynamicResource Connections.Button.Close}"
-                            Padding="8,4"
-                            MinWidth="64"
-                            HorizontalAlignment="Right"
-                            Command="{Binding DataContext.CloseConnectionCommand, ElementName=ConnectionsViewRoot}"
-                            CommandParameter="{Binding .}"/>
-                  </StackPanel>
-                </Grid>
-
-                <Grid ColumnDefinitions="*,Auto,*"
-                      ColumnSpacing="6">
-                  <TextBlock Grid.Column="0"
-                             Text="{Binding Source}"
-                             TextWrapping="Wrap"
-                             MaxLines="2"
-                             TextTrimming="CharacterEllipsis"
-                             ToolTip.Tip="{Binding Source}"/>
-                  <TextBlock Grid.Column="1"
-                             Text="->"
-                             VerticalAlignment="Center"
-                             Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
-                  <TextBlock Grid.Column="2"
-                             Text="{Binding Destination}"
-                             TextWrapping="Wrap"
-                             MaxLines="2"
-                             TextTrimming="CharacterEllipsis"
-                             ToolTip.Tip="{Binding Destination}"/>
-                </Grid>
-              </StackPanel>
-            </Border>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
+    <!-- Toolbar -->
+    <Border Grid.Row="0"
+            Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+            BorderBrush="{DynamicResource CartonControlForegroundBaseLowBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="16,10">
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+        <Button Grid.Column="0"
+                Content="{DynamicResource Connections.Button.CloseAll}"
+                Command="{Binding CloseAllCommand}"
+                Padding="12,6"/>
+        <TextBox Grid.Column="1"
+                 Text="{Binding SearchText}"
+                 Watermark="{DynamicResource Connections.Search.Watermark}"
+                 HorizontalAlignment="Stretch"/>
+        <Border Grid.Column="2"
+                Classes="fluentBadge"
+                VerticalAlignment="Center"
+                Padding="10,4">
+          <TextBlock Classes="fluentBadgeText" FontSize="12">
+            <Run Text="{Binding VisibleConnectionCount}"/>
+            <Run Text=" / "/>
+            <Run Text="{Binding ConnectionCount}"/>
+          </TextBlock>
+        </Border>
+      </Grid>
     </Border>
+
+    <!-- Connection List -->
+    <ScrollViewer Grid.Row="1">
+      <StackPanel Margin="20" Spacing="0">
+        <TextBlock Classes="sectionTitle"
+                   Text="{DynamicResource Navigation.Connections}"
+                   Margin="0,4,0,12"/>
+
+        <ItemsControl ItemsSource="{Binding Connections}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="vm:ConnectionItemViewModel">
+              <Border Classes="connectionCard">
+                <Grid ColumnDefinitions="4,*" MinHeight="72">
+                  <!-- Left accent bar -->
+                  <Border Grid.Column="0"
+                          Background="{DynamicResource CartonAccentBrush}"
+                          CornerRadius="2,0,0,2"
+                          Opacity="0.6"/>
+
+                  <!-- Content -->
+                  <StackPanel Grid.Column="1"
+                              Margin="14,12,14,12"
+                              Spacing="6">
+                    <!-- Row 1: Process + Stats + Close -->
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                      <TextBlock Grid.Column="0"
+                                 Text="{Binding Process}"
+                                 FontWeight="SemiBold"
+                                 FontSize="14"
+                                 TextTrimming="CharacterEllipsis"
+                                 VerticalAlignment="Center"/>
+
+                      <StackPanel Grid.Column="1"
+                                  Orientation="Horizontal"
+                                  Spacing="10"
+                                  VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="3">
+                          <TextBlock Text="&#xE898;"
+                                     FontFamily="Segoe Fluent Icons"
+                                     FontSize="11"
+                                     Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"
+                                     VerticalAlignment="Center"/>
+                          <TextBlock Text="{Binding Upload}"
+                                     FontSize="12"
+                                     Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"
+                                     VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="3">
+                          <TextBlock Text="&#xE896;"
+                                     FontFamily="Segoe Fluent Icons"
+                                     FontSize="11"
+                                     Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"
+                                     VerticalAlignment="Center"/>
+                          <TextBlock Text="{Binding Download}"
+                                     FontSize="12"
+                                     Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"
+                                     VerticalAlignment="Center"/>
+                        </StackPanel>
+                      </StackPanel>
+
+                      <Button Grid.Column="2"
+                              Classes="connCloseButton"
+                              Command="{Binding DataContext.CloseConnectionCommand, ElementName=ConnectionsViewRoot}"
+                              CommandParameter="{Binding .}"
+                              ToolTip.Tip="{DynamicResource Connections.Button.Close}">
+                        <PathIcon Width="10" Height="10"
+                                  Data="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z"/>
+                      </Button>
+                    </Grid>
+
+                    <!-- Row 2: Badges + Source/Dest inline -->
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                      <WrapPanel Grid.Column="0" ItemSpacing="5" VerticalAlignment="Center">
+                        <Border Background="{DynamicResource CartonControlForegroundBaseLowBrush}"
+                                CornerRadius="3"
+                                Padding="5,1">
+                          <TextBlock Text="{Binding Protocol}"
+                                     FontSize="11"
+                                     Foreground="{DynamicResource CartonControlForegroundBaseMediumHighBrush}"/>
+                        </Border>
+                        <Border Background="{DynamicResource CartonControlForegroundBaseLowBrush}"
+                                CornerRadius="3"
+                                Padding="5,1">
+                          <TextBlock Text="{Binding Outbound}"
+                                     FontSize="11"
+                                     Foreground="{DynamicResource CartonControlForegroundBaseHighBrush}"/>
+                        </Border>
+                      </WrapPanel>
+
+                      <StackPanel Grid.Column="1"
+                                  Orientation="Horizontal"
+                                  Spacing="6"
+                                  VerticalAlignment="Center"
+                                  Margin="6,0">
+                        <TextBlock Text="{Binding Source}"
+                                   FontSize="12"
+                                   MaxLines="1"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"
+                                   ToolTip.Tip="{Binding Source}"/>
+                        <TextBlock Text="&#xE76C;"
+                                   FontFamily="Segoe Fluent Icons"
+                                   FontSize="10"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"/>
+                        <TextBlock Text="{Binding Destination}"
+                                   FontSize="12"
+                                   MaxLines="1"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"
+                                   ToolTip.Tip="{Binding Destination}"/>
+                      </StackPanel>
+                    </Grid>
+                  </StackPanel>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </ScrollViewer>
   </Grid>
 
 </UserControl>
