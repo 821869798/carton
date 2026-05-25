@@ -345,6 +345,8 @@
 	<x:String x:Key="Status.RemoteConfigRefreshViaProxyFailed">通过本地 mixed 代理刷新远程配置失败</x:String>
 	<x:String x:Key="Settings.General.RemoteConfigProxy">远程配置更新使用代理</x:String>
 	<x:String x:Key="Settings.General.RemoteConfigProxy.Description">启动 sing-box 后有效。</x:String>
+	<x:String x:Key="Settings.General.CustomUserAgent">订阅下载自定义 User-Agent</x:String>
+	<x:String x:Key="Settings.General.CustomUserAgent.Description">下载远程配置时覆盖 User-Agent 请求头。</x:String>
 	<x:String x:Key="Profiles.Status.Updating">正在更新...</x:String>
 	<x:String x:Key="Profiles.Status.UpdateSucceeded">更新成功</x:String>
 	<x:String x:Key="Profiles.Status.UpdateSucceededViaProxy">已通过 mixed 代理更新成功</x:String>

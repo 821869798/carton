@@ -101,6 +101,8 @@ public static class HttpClientFactory
         client.DefaultRequestHeaders.TryAddWithoutValidation(UserAgentHeaderName, BuildExternalUserAgent());
     }
 
+    public static string DefaultUserAgent => BuildExternalUserAgent();
+
     private static string BuildExternalUserAgent()
     {
         var kernelVersion = CartonApplicationInfo.EffectiveSingBoxVersion;

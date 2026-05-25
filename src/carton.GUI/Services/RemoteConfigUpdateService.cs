@@ -55,7 +55,16 @@ public sealed class RemoteConfigUpdateService
 
         try
         {
-            var content = await client.GetStringAsync(profile.Url);
+            using var request = new HttpRequestMessage(HttpMethod.Get, profile.Url);
+            var prefs = _preferencesService.Load();
+            if (!string.IsNullOrWhiteSpace(prefs.CustomUserAgent))
+            {
+                request.Headers.TryAddWithoutValidation("User-Agent", prefs.CustomUserAgent);
+            }
+
+            using var response = await client.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadAsStringAsync();
             if (string.IsNullOrWhiteSpace(content))
             {
                 return new RemoteConfigUpdateResult(false, null, "Downloaded remote config is empty.", useProxy);

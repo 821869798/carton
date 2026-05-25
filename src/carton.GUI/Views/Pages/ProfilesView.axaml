@@ -232,8 +232,6 @@
       <ScrollViewer IsVisible="{Binding !IsProfileFormMode}">
         <StackPanel Margin="20" Spacing="6" MaxWidth="560">
           <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Classes="sectionTitle"
-                       Text="{DynamicResource Profiles.Header.Title}"/>
             <Button Grid.Column="1"
                     Classes="accent"
                     Command="{Binding ShowCreateProfileDialogCommand}"

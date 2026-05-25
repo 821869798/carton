@@ -118,6 +118,12 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     private bool _useProxyForRemoteConfigUpdates;
 
     [ObservableProperty]
+    private bool _customUserAgentEnabled;
+
+    [ObservableProperty]
+    private string _customUserAgent = string.Empty;
+
+    [ObservableProperty]
     private KernelCacheCleanupPolicy _selectedKernelCacheCleanupPolicy = KernelCacheCleanupPolicy.ClearOnChannelChange;
 
     [ObservableProperty]
@@ -151,6 +157,18 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     partial void OnSelectedUpdateChannelChanged(string value) => OnUpdateChannelChanged(value);
     partial void OnAutoCheckAppUpdatesChanged(bool value) => UpdatePreference(p => p.AutoCheckAppUpdates = value);
     partial void OnUseProxyForRemoteConfigUpdatesChanged(bool value) => UpdatePreference(p => p.UseProxyForRemoteConfigUpdates = value);
+    partial void OnCustomUserAgentEnabledChanged(bool value)
+    {
+        if (value && string.IsNullOrWhiteSpace(CustomUserAgent))
+        {
+            CustomUserAgent = HttpClientFactory.DefaultUserAgent;
+        }
+        else if (!value)
+        {
+            CustomUserAgent = string.Empty;
+        }
+    }
+    partial void OnCustomUserAgentChanged(string value) => UpdatePreference(p => p.CustomUserAgent = value);
     partial void OnSelectedKernelCacheCleanupPolicyChanged(KernelCacheCleanupPolicy value) => UpdatePreference(p => p.KernelCacheCleanupPolicy = value);
     partial void OnLoopbackStatusChanged(string value) => OnPropertyChanged(nameof(HasLoopbackStatus));
     partial void OnSelectedKernelDownloadMirrorChanged(DownloadMirror value)
@@ -461,6 +479,8 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         SelectedUpdateChannel = UpdateChannelToString(_currentPreferences.UpdateChannel);
         AutoCheckAppUpdates = _currentPreferences.AutoCheckAppUpdates;
         UseProxyForRemoteConfigUpdates = _currentPreferences.UseProxyForRemoteConfigUpdates;
+        CustomUserAgent = _currentPreferences.CustomUserAgent;
+        CustomUserAgentEnabled = !string.IsNullOrWhiteSpace(_currentPreferences.CustomUserAgent);
         SelectedKernelCacheCleanupPolicy = _currentPreferences.KernelCacheCleanupPolicy;
         SelectedKernelDownloadMirror = _currentPreferences.KernelDownloadMirror;
         IsDataInExeDirectory = File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, carton.Core.Utilities.PathHelper.PortableMarkerFileName));
@@ -1236,6 +1256,8 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         SelectedUpdateChannel = UpdateChannelToString(_currentPreferences.UpdateChannel);
         AutoCheckAppUpdates = _currentPreferences.AutoCheckAppUpdates;
         UseProxyForRemoteConfigUpdates = _currentPreferences.UseProxyForRemoteConfigUpdates;
+        CustomUserAgent = _currentPreferences.CustomUserAgent;
+        CustomUserAgentEnabled = !string.IsNullOrWhiteSpace(_currentPreferences.CustomUserAgent);
         SelectedKernelCacheCleanupPolicy = _currentPreferences.KernelCacheCleanupPolicy;
         SelectedKernelDownloadMirror = _currentPreferences.KernelDownloadMirror;
         _suppressPreferenceUpdates = false;

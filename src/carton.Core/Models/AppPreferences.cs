@@ -8,6 +8,7 @@ public class AppPreferences
     public bool AutoStartOnLaunch { get; set; }
     public bool AutoDisconnectConnectionsOnNodeSwitch { get; set; } = false;
     public bool UseProxyForRemoteConfigUpdates { get; set; }
+    public string CustomUserAgent { get; set; } = string.Empty;
     public KernelCacheCleanupPolicy KernelCacheCleanupPolicy { get; set; } = KernelCacheCleanupPolicy.ClearOnChannelChange;
     public KernelInstallChannel? LastInstalledKernelChannel { get; set; }
     public AppTheme Theme { get; set; } = AppTheme.System;

@@ -582,6 +582,21 @@
             <ToggleSwitch Grid.Column="1" IsChecked="{Binding UseProxyForRemoteConfigUpdates}" VerticalAlignment="Center"/>
           </Grid>
         </Border>
+        <Border Classes="settingsItem">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+              <StackPanel Spacing="3">
+                <TextBlock Classes="settingsTitle" Text="{DynamicResource Settings.General.CustomUserAgent}"/>
+                <TextBlock Classes="settingsDescription" Text="{DynamicResource Settings.General.CustomUserAgent.Description}"/>
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding CustomUserAgentEnabled}" VerticalAlignment="Center"/>
+            </Grid>
+            <TextBox Text="{Binding CustomUserAgent, UpdateSourceTrigger=LostFocus}"
+                     IsVisible="{Binding CustomUserAgentEnabled}"
+                     Watermark="User-Agent"
+                     Margin="0,4,0,0"/>
+          </StackPanel>
+        </Border>
         <Border Classes="settingsItem" IsVisible="{Binding IsWindows}">
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
             <StackPanel Spacing="3">
