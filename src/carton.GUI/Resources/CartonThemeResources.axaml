@@ -8,15 +8,15 @@
 
       <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
-          <SolidColorBrush x:Key="CartonControlBackgroundChromeMediumBrush" Color="#FFF3F3F3" />
-          <SolidColorBrush x:Key="CartonControlBackgroundChromeMediumLowBrush" Color="#FFF8F8F8" />
+          <SolidColorBrush x:Key="CartonControlBackgroundChromeMediumBrush" Color="#FFF1F1F1" />
+          <SolidColorBrush x:Key="CartonControlBackgroundChromeMediumLowBrush" Color="#FFF7F7F7" />
           <SolidColorBrush x:Key="CartonControlBackgroundChromeHighBrush" Color="#FFFFFFFF" />
           <SolidColorBrush x:Key="CartonSettingsItemBackgroundBrush" Color="#FFFFFFFF" />
           <SolidColorBrush x:Key="CartonSettingsItemPointerOverBackgroundBrush" Color="#FFF9F9F9" />
-          <SolidColorBrush x:Key="CartonSettingsItemBorderBrush" Color="#14000000" />
-          <SolidColorBrush x:Key="CartonControlBackgroundBaseLowBrush" Color="#10000000" />
+          <SolidColorBrush x:Key="CartonSettingsItemBorderBrush" Color="#16000000" />
+          <SolidColorBrush x:Key="CartonControlBackgroundBaseLowBrush" Color="#14000000" />
           <SolidColorBrush x:Key="CartonControlBackgroundAltHighBrush" Color="#FFFFFFFF" />
-          <SolidColorBrush x:Key="CartonControlBackgroundAltMediumHighBrush" Color="#FFF7F7F7" />
+          <SolidColorBrush x:Key="CartonControlBackgroundAltMediumHighBrush" Color="#FFF5F5F5" />
           <SolidColorBrush x:Key="CartonControlForegroundBaseHighBrush" Color="#FF1F1F1F" />
           <SolidColorBrush x:Key="CartonControlForegroundBaseMediumHighBrush" Color="#CC000000" />
           <SolidColorBrush x:Key="CartonControlForegroundBaseMediumBrush" Color="#99000000" />
