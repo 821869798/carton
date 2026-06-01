@@ -117,7 +117,7 @@
   <x:String x:Key="Dashboard.Field.LogLevel">日志等级</x:String>
 	<x:String x:Key="Dashboard.Option.AllowLan">允许局域网连接</x:String>
 	<x:String x:Key="Dashboard.Option.SystemProxy">系统代理</x:String>
-	<x:String x:Key="Dashboard.Option.Tun">虚拟网卡 (TUN)</x:String>
+	<x:String x:Key="Dashboard.Option.Tun">虚拟网卡</x:String>
 	<x:String x:Key="Dashboard.Button.ResetToConfig">重置为配置值</x:String>
 	<x:String x:Key="Dashboard.Port.Edit">编辑端口</x:String>
 	<x:String x:Key="Dashboard.Port.Scope.LocalOnly">仅本机</x:String>

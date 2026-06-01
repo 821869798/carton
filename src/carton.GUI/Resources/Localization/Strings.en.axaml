@@ -123,7 +123,7 @@
   <x:String x:Key="Dashboard.Field.LogLevel">Log Level</x:String>
   <x:String x:Key="Dashboard.Option.AllowLan">Allow LAN Connections</x:String>
 	<x:String x:Key="Dashboard.Option.SystemProxy">System Proxy</x:String>
-  <x:String x:Key="Dashboard.Option.Tun">Virtual Adapter (TUN)</x:String>
+  <x:String x:Key="Dashboard.Option.Tun">Virtual Adapter</x:String>
   <x:String x:Key="Dashboard.Button.ResetToConfig">Reset to Config</x:String>
   <x:String x:Key="Dashboard.Port.Edit">Edit Port</x:String>
   <x:String x:Key="Dashboard.Port.Scope.LocalOnly">Local Only</x:String>
