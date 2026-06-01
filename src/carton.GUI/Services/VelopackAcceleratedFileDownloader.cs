@@ -21,7 +21,7 @@ public sealed class VelopackAcceleratedFileDownloader : HttpClientFileDownloader
         string url,
         string targetFile,
         Action<int> progress,
-        IDictionary<string, string> headers,
+        IDictionary<string, string>? headers,
         double timeout,
         CancellationToken cancelToken)
     {
