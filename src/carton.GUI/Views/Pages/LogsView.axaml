@@ -24,6 +24,7 @@
     <Style Selector="Border.logRow">
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="MinHeight" Value="28"/>
+      <Setter Property="Padding" Value="11,0,0,0"/>
     </Style>
     <Style Selector="Border.logRow:pointerover">
       <Setter Property="Background" Value="{DynamicResource CartonSettingsItemPointerOverBackgroundBrush}"/>
@@ -60,12 +61,6 @@
       <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI, Segoe UI Emoji, Segoe UI Symbol"/>
     </Style>
 
-    <Style Selector="Border.levelBar">
-      <Setter Property="IsVisible" Value="False"/>
-    </Style>
-    <Style Selector="ListBoxItem:selected Border.levelBar">
-      <Setter Property="IsVisible" Value="True"/>
-    </Style>
   </UserControl.Styles>
 
   <Grid RowDefinitions="Auto,*">
@@ -151,40 +146,28 @@
       <ListBox.ItemTemplate>
         <DataTemplate DataType="vm:LogEntryViewModel">
           <Border Classes="logRow">
-            <Grid ColumnDefinitions="4,7,72,68,55,*" ColumnSpacing="0">
-              <!-- Level color bar (visible only when selected) -->
-              <Border Grid.Column="0"
-                      Classes="levelBar"
-                      Width="4"
-                      CornerRadius="2"
-                      Background="{Binding Level, Converter={StaticResource LogLevelBrushConverter}}"
-                      VerticalAlignment="Stretch"
-                      Margin="0,2"/>
-
-              <!-- Spacer -->
-              <Border Grid.Column="1"/>
-
+            <Grid ColumnDefinitions="72,68,55,*" ColumnSpacing="0">
               <!-- Time -->
-              <TextBlock Grid.Column="2"
+              <TextBlock Grid.Column="0"
                          Classes="logTime"
                          Text="{Binding Time}"
                          Margin="0,0,6,0"/>
 
               <!-- Source -->
-              <TextBlock Grid.Column="3"
+              <TextBlock Grid.Column="1"
                          Classes="logSource"
                          Text="{Binding SourceDisplayName}"
                          Margin="0,0,6,0"/>
 
               <!-- Level -->
-              <TextBlock Grid.Column="4"
+              <TextBlock Grid.Column="2"
                          Classes="logLevel"
                          Text="{Binding Level}"
                          Foreground="{Binding Level, Converter={StaticResource LogLevelBrushConverter}}"
                          Margin="0,0,6,0"/>
 
               <!-- Message -->
-              <TextBlock Grid.Column="5"
+              <TextBlock Grid.Column="3"
                          Classes="logMessage"
                          Text="{Binding Message}"/>
             </Grid>

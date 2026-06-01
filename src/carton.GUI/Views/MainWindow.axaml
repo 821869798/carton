@@ -235,7 +235,7 @@
               Margin="10,0,0,0"
               HorizontalAlignment="Left"
               VerticalAlignment="Top"
-              Background="#0078D4"
+              Background="{DynamicResource CartonAccentBrush}"
               CornerRadius="2"
               IsHitTestVisible="False"
               Opacity="1"
