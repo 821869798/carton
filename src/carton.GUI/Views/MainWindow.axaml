@@ -162,13 +162,15 @@
                                Opacity="0"
                                TextAlignment="Center"
                                FontSize="13"
-                               FontWeight="SemiBold"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource CartonAccentForegroundBrush}"
                                IsHitTestVisible="False"/>
                     <TextBlock Text="{Binding SessionStartTimeText}"
                                TextAlignment="Center"
                                FontSize="13"
-                               FontWeight="SemiBold"
+                               FontWeight="Bold"
                                FontFeatures="tnum"
+                               Foreground="{DynamicResource CartonAccentForegroundBrush}"
                                IsHitTestVisible="False"/>
                   </Grid>
                 </StackPanel>
