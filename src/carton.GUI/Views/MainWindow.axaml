@@ -189,7 +189,7 @@
           </DataTemplate>
         </ui:NavigationView.MenuItemTemplate>
         <ui:NavigationView.Content>
-          <Grid Background="{DynamicResource CartonWindowBackgroundBrush}">
+          <Grid>
           <views:DashboardView DataContext="{Binding DashboardViewModel}"
                                IsVisible="{Binding #MainWindowRoot.DataContext.IsDashboardPage}"/>
           <views:GroupsView DataContext="{Binding ActiveGroupsViewModel}"
