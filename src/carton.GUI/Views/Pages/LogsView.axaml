@@ -58,7 +58,6 @@
       <Setter Property="VerticalAlignment" Value="Center"/>
       <Setter Property="TextWrapping" Value="NoWrap"/>
       <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
-      <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI, Segoe UI Emoji, Segoe UI Symbol"/>
     </Style>
 
   </UserControl.Styles>

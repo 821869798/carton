@@ -1,5 +1,7 @@
 using System;
 using Avalonia;
+using Avalonia.Media;
+using Avalonia.Media.Fonts;
 using carton.Core.Services;
 using carton.GUI.Services;
 using Velopack;
@@ -46,5 +48,17 @@ sealed class Program
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
+            // Pin the default UI font to the embedded Inter family so Latin text
+            // renders consistently across platforms. Without this, Linux lacks the
+            // Windows fonts referenced in XAML and substitutes CJK faces whose Latin
+            // glyphs look wrong; CJK text still falls back to the platform default.
+            .With(new FontManagerOptions
+            {
+                DefaultFamilyName = "avares://Avalonia.Fonts.Inter/Assets#Inter",
+                FontFallbacks = new[]
+                {
+                    new FontFallback { FontFamily = FontFamily.Default },
+                },
+            })
             .LogToTrace();
 }
