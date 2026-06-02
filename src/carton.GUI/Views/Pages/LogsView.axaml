@@ -66,7 +66,7 @@
   <Grid RowDefinitions="Auto,*">
     <!-- Toolbar -->
     <Border Grid.Row="0"
-            Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+            Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"
             BorderBrush="{DynamicResource CartonControlForegroundBaseLowBrush}"
             BorderThickness="0,0,0,1"
             Padding="16,10">
@@ -133,7 +133,7 @@
              ItemsSource="{Binding Logs}"
              SelectionMode="Multiple"
              SelectedItem="{Binding SelectedLog}"
-             Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+             Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"
              BorderThickness="0">
       <ListBox.KeyBindings>
         <KeyBinding Gesture="Ctrl+C" Command="{Binding CopySelectedLogCommand}"/>

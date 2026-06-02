@@ -103,7 +103,7 @@
   <Grid RowDefinitions="Auto,Auto,Auto,*">
     <!-- Header -->
     <Border Grid.Row="0"
-            Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+            Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"
             BorderBrush="{DynamicResource CartonControlForegroundBaseLowBrush}"
             BorderThickness="0,0,0,1"
             Padding="12,10">
@@ -160,7 +160,7 @@
     <Border Grid.Row="1"
             x:Name="ConfigSearchBar"
             IsVisible="False"
-            Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+            Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"
             BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
             BorderThickness="0,0,0,1"
             Padding="10,8">
@@ -216,7 +216,7 @@
     <!-- Import Status Bar -->
     <Border Grid.Row="2"
             IsVisible="{Binding ImportStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-            Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+            Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"
             BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
             BorderThickness="0,0,0,1"
             Padding="10,6">
@@ -399,28 +399,25 @@
             </Grid>
           </Border>
 
-          <!-- Auto Update (remote only) -->
+          <!-- Auto Update / Interval (remote only) -->
           <Border Classes="settingsItem"
                   IsVisible="{Binding IsRemoteProfile}">
-            <Grid ColumnDefinitions="120,*,Auto" ColumnSpacing="16">
+            <Grid ColumnDefinitions="120,Auto,*,Auto,120" ColumnSpacing="12">
               <TextBlock Classes="settingsTitle"
-                         Text="{DynamicResource Profiles.Form.AutoUpdateLabel}"
-                         VerticalAlignment="Center"/>
-              <ToggleSwitch Grid.Column="2"
-                            IsChecked="{Binding NewAutoUpdate}"/>
-            </Grid>
-          </Border>
-
-          <!-- Update Interval (remote only) -->
-          <Border Classes="settingsItem"
-                  IsVisible="{Binding IsRemoteProfile}">
-            <Grid ColumnDefinitions="120,*" ColumnSpacing="16">
-              <TextBlock Classes="settingsTitle"
+                          Text="{DynamicResource Profiles.Form.AutoUpdateLabel}"
+                          VerticalAlignment="Center"/>
+              <ToggleSwitch Grid.Column="1"
+                            IsChecked="{Binding NewAutoUpdate}"
+                            VerticalAlignment="Center"/>
+              <TextBlock Grid.Column="3"
+                         Classes="settingsTitle"
                          Text="{DynamicResource Profiles.Form.IntervalLabel}"
                          VerticalAlignment="Center"/>
-              <TextBox Grid.Column="1"
+              <TextBox Grid.Column="4"
                        Text="{Binding NewUpdateIntervalMinutes}"
-                       Watermark="{DynamicResource Profiles.Form.IntervalWatermark}"/>
+                       Watermark="{DynamicResource Profiles.Form.IntervalWatermark}"
+                       VerticalAlignment="Center"
+                       VerticalContentAlignment="Center"/>
             </Grid>
           </Border>
 

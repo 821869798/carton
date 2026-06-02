@@ -70,8 +70,8 @@
   <x:String x:Key="Profiles.Form.UrlLabel">URL:</x:String>
   <x:String x:Key="Profiles.Form.UrlWatermark">Subscription URL</x:String>
   <x:String x:Key="Profiles.Form.AutoUpdateLabel">Auto Update:</x:String>
-  <x:String x:Key="Profiles.Form.IntervalLabel">Interval:</x:String>
-  <x:String x:Key="Profiles.Form.IntervalWatermark">Minutes</x:String>
+  <x:String x:Key="Profiles.Form.IntervalLabel">Interval (minutes):</x:String>
+  <x:String x:Key="Profiles.Form.IntervalWatermark">e.g. 60</x:String>
   <x:String x:Key="Profiles.Form.LastUpdatedLabel">Last Updated:</x:String>
   <x:String x:Key="Profiles.Form.ActionLabel">Action:</x:String>
   <x:String x:Key="Profiles.Form.ContentLabel">Content:</x:String>

@@ -70,8 +70,8 @@
   <x:String x:Key="Profiles.Form.UrlLabel">链接：</x:String>
   <x:String x:Key="Profiles.Form.UrlWatermark">订阅链接</x:String>
   <x:String x:Key="Profiles.Form.AutoUpdateLabel">自动更新：</x:String>
-  <x:String x:Key="Profiles.Form.IntervalLabel">间隔：</x:String>
-  <x:String x:Key="Profiles.Form.IntervalWatermark">单位（分钟）</x:String>
+  <x:String x:Key="Profiles.Form.IntervalLabel">间隔（分钟）：</x:String>
+  <x:String x:Key="Profiles.Form.IntervalWatermark">例如 60</x:String>
   <x:String x:Key="Profiles.Form.LastUpdatedLabel">最近更新时间：</x:String>
   <x:String x:Key="Profiles.Form.ActionLabel">操作：</x:String>
   <x:String x:Key="Profiles.Form.ContentLabel">内容：</x:String>

@@ -13,7 +13,7 @@
 
   <Grid RowDefinitions="Auto,Auto,*">
     <Border Grid.Row="0"
-            Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+            Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"
             Padding="16">
       <StackPanel Orientation="Horizontal" Spacing="12">
         <TextBlock Text="{DynamicResource Navigation.Groups}"
@@ -29,7 +29,7 @@
 
     <Border Grid.Row="1"
             IsVisible="{Binding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-            Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+            Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"
             BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
             BorderThickness="0,0,0,1"
             Padding="10,6">

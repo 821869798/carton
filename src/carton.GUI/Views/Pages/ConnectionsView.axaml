@@ -45,7 +45,7 @@
   <Grid RowDefinitions="Auto,*">
     <!-- Toolbar -->
     <Border Grid.Row="0"
-            Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+            Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"
             BorderBrush="{DynamicResource CartonControlForegroundBaseLowBrush}"
             BorderThickness="0,0,0,1"
             Padding="16,10">
