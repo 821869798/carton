@@ -435,13 +435,16 @@ public static class WindowsElevatedHelperHost
                 {
                     lastApiAddress = request.ApiAddress;
                     lastApiSecret = request.ApiSecret;
-                    Directory.CreateDirectory(Path.GetDirectoryName(request.LogPath) ?? ".");
-                    var stream = new FileStream(
-                        request.LogPath,
-                        FileMode.Append,
-                        FileAccess.Write,
-                        FileShare.ReadWrite | FileShare.Delete);
-                    logWriter = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+                    if (!string.IsNullOrWhiteSpace(request.LogPath))
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(request.LogPath) ?? ".");
+                        var stream = new FileStream(
+                            request.LogPath,
+                            FileMode.Append,
+                            FileAccess.Write,
+                            FileShare.ReadWrite | FileShare.Delete);
+                        logWriter = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+                    }
 
                     var process = new Process
                     {
@@ -676,7 +679,7 @@ public static class WindowsElevatedHelperHost
         }
     }
 
-    private static async Task PumpStreamAsync(StreamReader reader, StreamWriter writer, Action<string>? onLine = null)
+    private static async Task PumpStreamAsync(StreamReader reader, StreamWriter? writer, Action<string>? onLine = null)
     {
         try
         {
@@ -689,6 +692,11 @@ public static class WindowsElevatedHelperHost
                 }
 
                 onLine?.Invoke(line);
+                if (writer == null)
+                {
+                    continue;
+                }
+
                 lock (writer)
                 {
                     writer.WriteLine(line);
@@ -734,6 +742,11 @@ public static class WindowsElevatedHelperHost
 
     private static string? TryReadRecentLog(string path, int maxLines)
     {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
         try
         {
             if (!File.Exists(path))

@@ -51,9 +51,13 @@ public partial class SingBoxManager
         {
             await StopElevatedLogTailAsync();
 
+#if DEBUG
             var logFileName = $"sing-box.elevated.{DateTime.Now:yyyyMMdd-HHmmss-fff}.log";
             var elevatedLogPath = Path.Combine(_workingDirectory, "logs", logFileName);
             Directory.CreateDirectory(Path.GetDirectoryName(elevatedLogPath)!);
+#else
+            var elevatedLogPath = string.Empty;
+#endif
 
             var startProcessTiming = Stopwatch.StartNew();
             var result = await StartElevatedProcessForCurrentPlatformAsync(configPath, elevatedLogPath);
@@ -63,7 +67,9 @@ public partial class SingBoxManager
             if (!result.Success)
             {
                 var msg = string.IsNullOrWhiteSpace(result.ErrorMessage) ? "Elevated start failed" : result.ErrorMessage;
-                var recentLog = await ReadRecentLogLinesAsync(elevatedLogPath, 20);
+                var recentLog = string.IsNullOrWhiteSpace(elevatedLogPath)
+                    ? string.Empty
+                    : await ReadRecentLogLinesAsync(elevatedLogPath, 20);
                 if (!string.IsNullOrWhiteSpace(recentLog))
                 {
                     msg = $"{msg}: {recentLog}";
@@ -85,8 +91,11 @@ public partial class SingBoxManager
                 LogManager("[INFO] No PID from helper response, will discover via API port");
             }
 
-            _elevatedLogPath = elevatedLogPath;
-            StartElevatedLogTail(elevatedLogPath);
+            if (!string.IsNullOrWhiteSpace(elevatedLogPath))
+            {
+                _elevatedLogPath = elevatedLogPath;
+                StartElevatedLogTail(elevatedLogPath);
+            }
 
             var readyTiming = Stopwatch.StartNew();
             var ready = await WaitForApiReadyAsync(
@@ -95,7 +104,9 @@ public partial class SingBoxManager
             LogTiming(ready ? "start_elevated.api_ready" : "start_elevated.api_not_ready", readyTiming.Elapsed);
             if (!ready)
             {
-                var recentLog = await ReadRecentLogLinesAsync(elevatedLogPath, 20);
+                var recentLog = string.IsNullOrWhiteSpace(elevatedLogPath)
+                    ? string.Empty
+                    : await ReadRecentLogLinesAsync(elevatedLogPath, 20);
                 var msg = string.IsNullOrWhiteSpace(_lastStartupWaitFailureReason)
                     ? "sing-box API did not become reachable in time"
                     : _lastStartupWaitFailureReason;
