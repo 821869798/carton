@@ -567,8 +567,8 @@ public sealed class JsonConfigEditor : Grid
         private const int LineSliceOverscan = 50;
 
         private readonly JsonConfigEditor _owner;
-        private readonly List<LineInfo> _lines = new();
-        private readonly List<Token> _tokens = new();
+        private readonly List<JsonLine> _lines = new();
+        private readonly List<JsonToken> _tokens = new();
         private FormattedText? _sampleFormattedText;
         private double _charWidth = 8;
         private double _lineHeight = 18;
@@ -1162,8 +1162,8 @@ public sealed class JsonConfigEditor : Grid
 
             Task.Run(() =>
             {
-                var tokens = new List<Token>(Math.Max(64, text.Length / 16));
-                BuildTokensInto(text, tokens, token);
+                var tokens = new List<JsonToken>(Math.Max(64, text.Length / 16));
+                JsonSyntax.Tokenize(text, tokens, token);
                 if (token.IsCancellationRequested) return;
 
                 Dispatcher.UIThread.Post(() =>
@@ -1178,88 +1178,9 @@ public sealed class JsonConfigEditor : Grid
             }, token);
         }
 
-        private static void BuildTokensInto(string text, List<Token> tokens, CancellationToken cancellation)
-        {
-            var index = 0;
-            var checkpoint = 0;
-            while (index < text.Length)
-            {
-                if (index - checkpoint >= 65_536)
-                {
-                    if (cancellation.IsCancellationRequested) return;
-                    checkpoint = index;
-                }
-
-                var ch = text[index];
-                if (ch == '"')
-                {
-                    var start = index;
-                    index = ReadJsonString(text, index + 1);
-                    tokens.Add(new Token(start, index - start, IsLikelyPropertyName(text, index) ? TokenKind.Property : TokenKind.String));
-                    continue;
-                }
-
-                if (char.IsDigit(ch) || ch == '-')
-                {
-                    var start = index++;
-                    while (index < text.Length && IsNumberChar(text[index]))
-                    {
-                        index++;
-                    }
-
-                    tokens.Add(new Token(start, index - start, TokenKind.Number));
-                    continue;
-                }
-
-                if (TryReadKeyword(text, index, out var keywordLength))
-                {
-                    tokens.Add(new Token(index, keywordLength, TokenKind.Keyword));
-                    index += keywordLength;
-                    continue;
-                }
-
-                if (ch is '{' or '}' or '[' or ']' or ':' or ',')
-                {
-                    tokens.Add(new Token(index, 1, TokenKind.Punctuation));
-                }
-
-                index++;
-            }
-        }
-
         private void BuildLines()
         {
-            _lines.Clear();
-            var text = Text;
-            var start = 0;
-            var longest = 1;
-            var lineColumns = 0;
-            for (var i = 0; i < text.Length; i++)
-            {
-                var ch = text[i];
-                if (ch == '\n')
-                {
-                    var lineEnd = i > start && text[i - 1] == '\r' ? i - 1 : i;
-                    _lines.Add(new LineInfo(start, lineEnd));
-                    if (lineColumns > longest)
-                    {
-                        longest = lineColumns;
-                    }
-                    start = i + 1;
-                    lineColumns = 0;
-                }
-                else if (ch != '\r')
-                {
-                    lineColumns += IsWideChar(ch) ? 2 : 1;
-                }
-            }
-
-            _lines.Add(new LineInfo(start, text.Length));
-            if (lineColumns > longest)
-            {
-                longest = lineColumns;
-            }
-            _longestLineLength = longest;
+            JsonSyntax.BuildLines(Text, _lines, out _longestLineLength);
 
             if (_lineFormattedTextCache.Length != _lines.Count)
             {
@@ -1273,66 +1194,12 @@ public sealed class JsonConfigEditor : Grid
 
         private void BuildTokens()
         {
-            _tokens.Clear();
-            var text = Text;
-            var index = 0;
-            while (index < text.Length)
-            {
-                var ch = text[index];
-                if (ch == '"')
-                {
-                    var start = index;
-                    index = ReadJsonString(text, index + 1);
-                    _tokens.Add(new Token(start, index - start, IsLikelyPropertyName(text, index) ? TokenKind.Property : TokenKind.String));
-                    continue;
-                }
-
-                if (char.IsDigit(ch) || ch == '-')
-                {
-                    var start = index++;
-                    while (index < text.Length && IsNumberChar(text[index]))
-                    {
-                        index++;
-                    }
-
-                    _tokens.Add(new Token(start, index - start, TokenKind.Number));
-                    continue;
-                }
-
-                if (TryReadKeyword(text, index, out var keywordLength))
-                {
-                    _tokens.Add(new Token(index, keywordLength, TokenKind.Keyword));
-                    index += keywordLength;
-                    continue;
-                }
-
-                if (ch is '{' or '}' or '[' or ']' or ':' or ',')
-                {
-                    _tokens.Add(new Token(index, 1, TokenKind.Punctuation));
-                }
-
-                index++;
-            }
+            JsonSyntax.Tokenize(Text, _tokens);
         }
 
         private void BuildLineTokenIndex()
         {
-            _lineFirstTokenIndex.Clear();
-            if (_lineFirstTokenIndex.Capacity < _lines.Count)
-            {
-                _lineFirstTokenIndex.Capacity = _lines.Count;
-            }
-
-            var tokenIdx = 0;
-            for (var i = 0; i < _lines.Count; i++)
-            {
-                var line = _lines[i];
-                while (tokenIdx < _tokens.Count && _tokens[tokenIdx].Start + _tokens[tokenIdx].Length <= line.StartOffset)
-                {
-                    tokenIdx++;
-                }
-                _lineFirstTokenIndex.Add(tokenIdx);
-            }
+            JsonSyntax.BuildLineTokenIndex(_lines, _tokens, _lineFirstTokenIndex);
         }
 
         private void DrawText(DrawingContext context, double lineNumberWidth)
@@ -1362,7 +1229,7 @@ public sealed class JsonConfigEditor : Grid
                     var p = line.StartOffset;
                     for (; p < line.EndOffset; p++)
                     {
-                        var w = IsWideChar(text[p]) ? 2 : 1;
+                        var w = JsonSyntax.DisplayWidth(text[p]);
                         if (col + w > firstVisibleCol) break;
                         col += w;
                     }
@@ -1371,7 +1238,7 @@ public sealed class JsonConfigEditor : Grid
                     var sliceStartCol = col;
                     for (; p < line.EndOffset && col < lastVisibleCol; p++)
                     {
-                        col += IsWideChar(text[p]) ? 2 : 1;
+                        col += JsonSyntax.DisplayWidth(text[p]);
                     }
 
                     var sliceEnd = p;
@@ -1417,7 +1284,12 @@ public sealed class JsonConfigEditor : Grid
 
                     foreach (var token in GetLineTokens(lineIndex))
                     {
-                        formatted.SetForegroundBrush(GetBrush(token.Kind), token.Start - line.StartOffset, token.Length);
+                        // 词法 token 可能跨行(例如删掉闭合引号后字符串延伸到后续行),
+                        // 需把绘制区间裁剪到本行范围内,否则 startIndex/count 会越界。
+                        var paintStart = Math.Max(token.Start, line.StartOffset) - line.StartOffset;
+                        var paintEnd = Math.Min(token.Start + token.Length, line.EndOffset) - line.StartOffset;
+                        if (paintEnd <= paintStart) continue;
+                        formatted.SetForegroundBrush(GetBrush(token.Kind), paintStart, paintEnd - paintStart);
                     }
 
                     _lineFormattedTextCache[lineIndex] = formatted;
@@ -1617,41 +1489,14 @@ public sealed class JsonConfigEditor : Grid
         }
 
         // 将字符偏移换算成显示列（CJK/全角记 2 列），与渲染、extent 的列宽口径一致。
-        private int OffsetToDisplayColumn(LineInfo line, int offset)
-        {
-            var text = Text;
-            var end = Math.Clamp(offset, line.StartOffset, line.EndOffset);
-            var columns = 0;
-            for (var i = line.StartOffset; i < end; i++)
-            {
-                columns += IsWideChar(text[i]) ? 2 : 1;
-            }
-
-            return columns;
-        }
+        private int OffsetToDisplayColumn(JsonLine line, int offset)
+            => JsonSyntax.OffsetToDisplayColumn(Text, line, offset);
 
         // 将显示列换算回字符偏移，落在宽字符中间时就近吸附到字符边界。
-        private int DisplayColumnToOffset(LineInfo line, int targetColumn)
-        {
-            var text = Text;
-            var columns = 0;
-            for (var i = line.StartOffset; i < line.EndOffset; i++)
-            {
-                var w = IsWideChar(text[i]) ? 2 : 1;
-                if (columns + w > targetColumn)
-                {
-                    var distToStart = targetColumn - columns;
-                    var distToEnd = columns + w - targetColumn;
-                    return distToEnd < distToStart ? i + 1 : i;
-                }
+        private int DisplayColumnToOffset(JsonLine line, int targetColumn)
+            => JsonSyntax.DisplayColumnToOffset(Text, line, targetColumn);
 
-                columns += w;
-            }
-
-            return line.EndOffset;
-        }
-
-        private IEnumerable<Token> GetLineTokens(int lineIndex)
+        private IEnumerable<JsonToken> GetLineTokens(int lineIndex)
         {
             var endOffset = _lines[lineIndex].EndOffset;
             var startIdx = _lineFirstTokenIndex[lineIndex];
@@ -1679,19 +1524,6 @@ public sealed class JsonConfigEditor : Grid
             return _longestLineLength;
         }
 
-        private static bool IsWideChar(char ch)
-        {
-            // CJK 及常见全角字符在等宽字体下约占两个西文字符宽度。
-            return ch >= 0x1100 &&
-                   (ch <= 0x115F ||                       // Hangul Jamo
-                    ch is >= (char)0x2E80 and <= (char)0xA4CF ||   // CJK 部首、假名、CJK 统一表意文字等
-                    ch is >= (char)0xAC00 and <= (char)0xD7A3 ||   // Hangul 音节
-                    ch is >= (char)0xF900 and <= (char)0xFAFF ||   // CJK 兼容表意
-                    ch is >= (char)0xFE30 and <= (char)0xFE4F ||   // CJK 兼容形式
-                    ch is >= (char)0xFF00 and <= (char)0xFF60 ||   // 全角 ASCII
-                    ch is >= (char)0xFFE0 and <= (char)0xFFE6);    // 全角符号
-        }
-
         private (int FirstVisibleLine, int LastVisibleLine) GetVisibleLineRange()
         {
             if (_lines.Count == 0)
@@ -1703,64 +1535,6 @@ public sealed class JsonConfigEditor : Grid
             var visibleLineCount = (int)Math.Ceiling(Bounds.Height / _lineHeight) + 1;
             var lastVisibleLine = Math.Min(_lines.Count - 1, firstVisibleLine + visibleLineCount);
             return (firstVisibleLine, lastVisibleLine);
-        }
-
-        private static int ReadJsonString(string text, int index)
-        {
-            var escaped = false;
-            while (index < text.Length)
-            {
-                var ch = text[index++];
-                if (escaped)
-                {
-                    escaped = false;
-                    continue;
-                }
-
-                if (ch == '\\')
-                {
-                    escaped = true;
-                    continue;
-                }
-
-                if (ch == '"')
-                {
-                    break;
-                }
-            }
-
-            return index;
-        }
-
-        private static bool IsLikelyPropertyName(string text, int index)
-        {
-            while (index < text.Length && char.IsWhiteSpace(text[index]))
-            {
-                index++;
-            }
-
-            return index < text.Length && text[index] == ':';
-        }
-
-        private static bool IsNumberChar(char ch)
-        {
-            return char.IsDigit(ch) || ch is '.' or 'e' or 'E' or '+' or '-';
-        }
-
-        private static bool TryReadKeyword(string text, int index, out int length)
-        {
-            foreach (var keyword in new[] { "true", "false", "null" })
-            {
-                if (text.AsSpan(index).StartsWith(keyword, StringComparison.Ordinal) &&
-                    (index + keyword.Length == text.Length || !char.IsLetterOrDigit(text[index + keyword.Length])))
-                {
-                    length = keyword.Length;
-                    return true;
-                }
-            }
-
-            length = 0;
-            return false;
         }
 
         private bool IsLightTheme => ActualThemeVariant == ThemeVariant.Light;
@@ -1786,27 +1560,14 @@ public sealed class JsonConfigEditor : Grid
 
         private IBrush GetCaretBrush() => IsLightTheme ? LightCaretBrush : DarkCaretBrush;
 
-        private IBrush GetBrush(TokenKind kind) => kind switch
+        private IBrush GetBrush(JsonTokenKind kind) => kind switch
         {
-            TokenKind.String => IsLightTheme ? LightStringBrush : DarkStringBrush,
-            TokenKind.Property => IsLightTheme ? LightPropertyBrush : DarkPropertyBrush,
-            TokenKind.Number => IsLightTheme ? LightNumberBrush : DarkNumberBrush,
-            TokenKind.Keyword => IsLightTheme ? LightKeywordBrush : DarkKeywordBrush,
-            TokenKind.Punctuation => IsLightTheme ? LightPunctuationBrush : DarkPunctuationBrush,
+            JsonTokenKind.String => IsLightTheme ? LightStringBrush : DarkStringBrush,
+            JsonTokenKind.Property => IsLightTheme ? LightPropertyBrush : DarkPropertyBrush,
+            JsonTokenKind.Number => IsLightTheme ? LightNumberBrush : DarkNumberBrush,
+            JsonTokenKind.Keyword => IsLightTheme ? LightKeywordBrush : DarkKeywordBrush,
+            JsonTokenKind.Punctuation => IsLightTheme ? LightPunctuationBrush : DarkPunctuationBrush,
             _ => GetTextBrush()
         };
-
-        private readonly record struct LineInfo(int StartOffset, int EndOffset);
-        private readonly record struct Token(int Start, int Length, TokenKind Kind);
-
-        private enum TokenKind
-        {
-            Plain,
-            String,
-            Property,
-            Number,
-            Keyword,
-            Punctuation
-        }
     }
 }
