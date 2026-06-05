@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
@@ -10,6 +11,8 @@ public sealed class FileDownloadProgress
 {
     public long BytesReceived { get; init; }
     public long TotalBytes { get; init; }
+    public double BytesPerSecond { get; init; }
+    public int ActiveChunks { get; init; }
     public int Percent => TotalBytes > 0 ? (int)Math.Clamp(BytesReceived * 100 / TotalBytes, 0, 100) : 0;
 }
 
@@ -46,16 +49,19 @@ public sealed class AcceleratedFileDownloader
     private const string DownloadFileExtension = ".download";
 
     private readonly HttpClient _httpClient;
-    private readonly Action<string>? _log;
+    private readonly Action<string>? _statusLog;
+    private readonly Action<string>? _diagnosticLog;
     private readonly FileDownloadOptions _options;
 
     public AcceleratedFileDownloader(
         HttpClient httpClient,
         Action<string>? log = null,
+        Action<string>? diagnosticLog = null,
         FileDownloadOptions? options = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-        _log = log;
+        _statusLog = log;
+        _diagnosticLog = diagnosticLog ?? log;
         _options = options ?? FileDownloadOptions.Default;
     }
 
@@ -72,17 +78,45 @@ public sealed class AcceleratedFileDownloader
         var completion = new TaskCompletionSource<AsyncCompletedEventArgs>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         var configuration = CreateConfiguration();
+        var createdHttpClients = new ConcurrentBag<HttpClient>();
+        configuration.CustomHttpClientFactory = () =>
+        {
+            var client = CreateDownloadHttpClient();
+            createdHttpClients.Add(client);
+            return client;
+        };
         var download = new DownloadService(configuration);
+        var lastDiagnosticLogAt = DateTimeOffset.MinValue;
+
+        _diagnosticLog?.Invoke(
+            $"Download config: chunks={configuration.ChunkCount}, parallel={configuration.ParallelCount}, " +
+            $"minChunking={ParallelDownloadMinFileSizeBytes} bytes, minChunk={MinimumChunkSizeBytes} bytes, " +
+            $"blockTimeout={configuration.BlockTimeout} ms, noDataTimeout={_options.NoDataTimeout.TotalSeconds:0.#} s");
 
         download.DownloadStarted += (_, e) =>
         {
-            _log?.Invoke($"Downloading {Path.GetFileName(e.FileName)} ({e.TotalBytesToReceive} bytes)...");
+            _statusLog?.Invoke($"Downloading {Path.GetFileName(e.FileName)} ({e.TotalBytesToReceive} bytes)...");
             throttler.Report(0, e.TotalBytesToReceive, force: true);
         };
 
         download.DownloadProgressChanged += (_, e) =>
         {
-            throttler.Report(e.ReceivedBytesSize, e.TotalBytesToReceive);
+            throttler.Report(
+                e.ReceivedBytesSize,
+                e.TotalBytesToReceive,
+                e.BytesPerSecondSpeed,
+                e.ActiveChunks);
+
+            var now = DateTimeOffset.UtcNow;
+            if (lastDiagnosticLogAt == DateTimeOffset.MinValue ||
+                now - lastDiagnosticLogAt >= TimeSpan.FromSeconds(5) ||
+                (e.TotalBytesToReceive > 0 && e.ReceivedBytesSize >= e.TotalBytesToReceive))
+            {
+                _diagnosticLog?.Invoke(
+                    $"Download progress: {e.ReceivedBytesSize}/{e.TotalBytesToReceive} bytes, " +
+                    $"speed={e.BytesPerSecondSpeed:0} B/s, activeChunks={e.ActiveChunks}");
+                lastDiagnosticLogAt = now;
+            }
         };
 
         download.DownloadFileCompleted += (_, e) =>
@@ -103,9 +137,17 @@ public sealed class AcceleratedFileDownloader
                 throw new IOException("Download did not produce the target file.");
             }
         }
-        catch (Exception ex) when (IsDownloaderNoDataTimeout(ex, _options.NoDataTimeout))
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested &&
+                                   IsDownloaderNoDataTimeout(ex, _options.NoDataTimeout))
         {
             throw new DownloadStalledException(_options.NoDataTimeout, ex);
+        }
+        finally
+        {
+            foreach (var client in createdHttpClients)
+            {
+                client.Dispose();
+            }
         }
     }
 
@@ -126,17 +168,18 @@ public sealed class AcceleratedFileDownloader
             EnableAutoResumeDownload = true,
             DownloadFileExtension = DownloadFileExtension,
             FileExistPolicy = FileExistPolicy.Delete,
-            RequestConfiguration = CreateRequestConfiguration(),
-            CustomHttpClientFactory = () =>
-            {
-                var client = new HttpClient
-                {
-                    Timeout = Timeout.InfiniteTimeSpan
-                };
-                CopyHeaders(_httpClient.DefaultRequestHeaders, client.DefaultRequestHeaders);
-                return client;
-            }
+            RequestConfiguration = CreateRequestConfiguration()
         };
+    }
+
+    private HttpClient CreateDownloadHttpClient()
+    {
+        var client = new HttpClient
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
+        CopyHeaders(_httpClient.DefaultRequestHeaders, client.DefaultRequestHeaders);
+        return client;
     }
 
     private RequestConfiguration CreateRequestConfiguration()
@@ -242,15 +285,6 @@ public sealed class AcceleratedFileDownloader
         await Task.CompletedTask.ConfigureAwait(false);
     }
 
-    private static void ReportProgress(IProgress<FileDownloadProgress>? progress, long bytesReceived, long totalBytes)
-    {
-        progress?.Report(new FileDownloadProgress
-        {
-            BytesReceived = bytesReceived,
-            TotalBytes = totalBytes
-        });
-    }
-
     private sealed class ProgressThrottler
     {
         private readonly IProgress<FileDownloadProgress>? _progress;
@@ -265,14 +299,21 @@ public sealed class AcceleratedFileDownloader
             _minimumInterval = minimumInterval;
         }
 
-        public void Report(long bytesReceived, long totalBytes, bool force = false)
+        public void Report(
+            long bytesReceived,
+            long totalBytes,
+            double bytesPerSecond = 0,
+            int activeChunks = 0,
+            bool force = false)
         {
             lock (_gate)
             {
                 _lastProgress = new FileDownloadProgress
                 {
                     BytesReceived = bytesReceived,
-                    TotalBytes = totalBytes
+                    TotalBytes = totalBytes,
+                    BytesPerSecond = bytesPerSecond,
+                    ActiveChunks = activeChunks
                 };
 
                 var now = DateTimeOffset.UtcNow;

@@ -82,7 +82,10 @@ public class KernelManager : IKernelManager
         var fileName = $"sing-box{platform.Suffix}";
         _dataKernelPath = Path.Combine(_dataBinDirectory, fileName);
         _builtinKernelPath = Path.Combine(AppContext.BaseDirectory, fileName);
-        _fileDownloader = new AcceleratedFileDownloader(_httpClient, message => StatusChanged?.Invoke(this, message));
+        _fileDownloader = new AcceleratedFileDownloader(
+            _httpClient,
+            message => StatusChanged?.Invoke(this, message),
+            diagnosticLog: _ => { });
 
         Directory.CreateDirectory(_dataBinDirectory);
     }
