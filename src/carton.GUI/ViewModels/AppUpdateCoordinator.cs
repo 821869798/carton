@@ -23,6 +23,7 @@ public partial class AppUpdateCoordinator : ObservableObject
     private bool _suppressChannelNormalization;
     private bool _isCompletionPromptVisible;
     private bool _isLatestAppVersion;
+    private DateTimeOffset _lastAppUpdateProgressUiAt = DateTimeOffset.MinValue;
 
     [ObservableProperty]
     private string _selectedUpdateChannel = "release";
@@ -66,8 +67,11 @@ public partial class AppUpdateCoordinator : ObservableObject
     [ObservableProperty]
     private bool _showStartupUpdateDialog;
 
-    public string AppUpdateProgressDetail => AppUpdateTotalBytes > 0
-        ? $"{FormatHelper.FormatBytes(AppUpdateBytesReceived)} / {FormatHelper.FormatBytes(AppUpdateTotalBytes)}"
+    public string AppUpdateProgressDetail => AppUpdateTotalBytes > 0 || AppUpdateBytesReceived > 0
+        ? FormatHelper.FormatByteProgress(
+            AppUpdateBytesReceived,
+            AppUpdateTotalBytes,
+            GetString("Common.Unknown", "unknown"))
         : string.Empty;
 
     public string LatestAvailableVersionDisplay
@@ -354,6 +358,7 @@ public partial class AppUpdateCoordinator : ObservableObject
         AppUpdateStatus = BuildDownloadStatus();
 
         var progress = new Progress<AppUpdateDownloadProgress>(UpdateDownloadProgress);
+        var retryDownload = false;
         try
         {
             await _appUpdateService.DownloadUpdateAsync(_pendingAppUpdate, SelectedUpdateChannel, progress);
@@ -374,10 +379,19 @@ public partial class AppUpdateCoordinator : ObservableObject
             {
                 ShowStartupUpdateDialog = true;
             }
+            else
+            {
+                retryDownload = await ShowDownloadFailedPromptAsync(ex.Message);
+            }
         }
         finally
         {
             IsDownloadingAppUpdate = false;
+        }
+
+        if (retryDownload)
+        {
+            await DownloadAppUpdateCoreAsync(silentDownload: false);
         }
     }
 
@@ -525,6 +539,26 @@ public partial class AppUpdateCoordinator : ObservableObject
         {
             _isCompletionPromptVisible = false;
         }
+    }
+
+    private async Task<bool> ShowDownloadFailedPromptAsync(string detail)
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop ||
+            desktop.MainWindow == null)
+        {
+            return false;
+        }
+
+        return await DownloadUiHelper.ShowRetryDialogAsync(
+            desktop.MainWindow,
+            GetString("Settings.Update.DownloadFailedDialog.Title", "Download failed"),
+            GetString(
+                "Settings.Update.DownloadFailedDialog.Message",
+                "The update download stopped receiving data and was interrupted.\n\n{0}\n\nRetry now?"),
+            GetString("Settings.Update.DownloadFailedDialog.RetryButton", "Retry"),
+            GetString("Settings.Update.DownloadFailedDialog.CancelButton", "Cancel"),
+            detail,
+            GetString("Common.Unknown", "unknown"));
     }
 
     private async Task ShowManualUpdatePromptAsync()
@@ -691,10 +725,22 @@ public partial class AppUpdateCoordinator : ObservableObject
         AppUpdateProgress = 0;
         AppUpdateBytesReceived = 0;
         AppUpdateTotalBytes = 0;
+        _lastAppUpdateProgressUiAt = DateTimeOffset.MinValue;
     }
 
     private void UpdateDownloadProgress(AppUpdateDownloadProgress progress)
     {
+        var now = DateTimeOffset.UtcNow;
+        var isComplete = progress.Percent >= 100 ||
+                         (progress.TotalBytes > 0 && progress.BytesReceived >= progress.TotalBytes);
+        if (!isComplete &&
+            _lastAppUpdateProgressUiAt != DateTimeOffset.MinValue &&
+            now - _lastAppUpdateProgressUiAt < TimeSpan.FromMilliseconds(500))
+        {
+            return;
+        }
+
+        _lastAppUpdateProgressUiAt = now;
         AppUpdateProgress = progress.Percent;
         AppUpdateBytesReceived = progress.BytesReceived;
         AppUpdateTotalBytes = progress.TotalBytes;
@@ -704,7 +750,7 @@ public partial class AppUpdateCoordinator : ObservableObject
     private string BuildDownloadStatus()
     {
         var baseStatus = GetString("Settings.Update.Status.Downloading", "Downloading update...");
-        return AppUpdateTotalBytes > 0
+        return !string.IsNullOrWhiteSpace(AppUpdateProgressDetail)
             ? $"{baseStatus} {AppUpdateProgressDetail}"
             : baseStatus;
     }

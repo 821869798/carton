@@ -1,5 +1,8 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
+using Downloader;
 
 namespace carton.Core.Services;
 
@@ -10,21 +13,50 @@ public sealed class FileDownloadProgress
     public int Percent => TotalBytes > 0 ? (int)Math.Clamp(BytesReceived * 100 / TotalBytes, 0, 100) : 0;
 }
 
+public sealed class FileDownloadOptions
+{
+    public static FileDownloadOptions Default { get; } = new();
+
+    public TimeSpan NoDataTimeout { get; init; } = TimeSpan.FromSeconds(5);
+    public int MaxRetryAttempts { get; init; } = 2;
+}
+
+public sealed class DownloadStalledException : IOException
+{
+    public DownloadStalledException(TimeSpan timeout)
+        : base($"No download data was received for {timeout.TotalSeconds:0.#} seconds.")
+    {
+        Timeout = timeout;
+    }
+
+    public DownloadStalledException(TimeSpan timeout, Exception innerException)
+        : base($"No download data was received for {timeout.TotalSeconds:0.#} seconds.", innerException)
+    {
+        Timeout = timeout;
+    }
+
+    public TimeSpan Timeout { get; }
+}
+
 public sealed class AcceleratedFileDownloader
 {
-    private const int SequentialDownloadBufferSize = 128 * 1024;
-    private const int ParallelDownloadBufferSize = 512 * 1024;
-    private const int DefaultMaxSegments = 16;
+    private const int DefaultChunkCount = 8;
     private const long ParallelDownloadMinFileSizeBytes = 8L * 1024 * 1024;
-    private const long ParallelDownloadMinSegmentSizeBytes = 1L * 1024 * 1024;
+    private const long MinimumChunkSizeBytes = 1L * 1024 * 1024;
+    private const string DownloadFileExtension = ".download";
 
     private readonly HttpClient _httpClient;
     private readonly Action<string>? _log;
+    private readonly FileDownloadOptions _options;
 
-    public AcceleratedFileDownloader(HttpClient httpClient, Action<string>? log = null)
+    public AcceleratedFileDownloader(
+        HttpClient httpClient,
+        Action<string>? log = null,
+        FileDownloadOptions? options = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _log = log;
+        _options = options ?? FileDownloadOptions.Default;
     }
 
     public async Task DownloadFileAsync(
@@ -33,198 +65,181 @@ public sealed class AcceleratedFileDownloader
         IProgress<FileDownloadProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        TryDeleteFile(targetFile);
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(targetFile)) ?? Environment.CurrentDirectory);
+        var throttler = new ProgressThrottler(progress, TimeSpan.FromMilliseconds(500));
+        throttler.Report(0, 0, force: true);
 
-        var probe = await ProbeDownloadAsync(downloadUrl, cancellationToken).ConfigureAwait(false);
-        if (probe.SupportsRange && probe.TotalBytes > 0)
+        var completion = new TaskCompletionSource<AsyncCompletedEventArgs>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var configuration = CreateConfiguration();
+        var download = new DownloadService(configuration);
+
+        download.DownloadStarted += (_, e) =>
         {
-            var segmentCount = GetParallelSegmentCount(probe.TotalBytes);
-            try
-            {
-                _log?.Invoke($"Downloading with {segmentCount} connections...");
-                await DownloadFileInParallelAsync(downloadUrl, targetFile, probe.TotalBytes, segmentCount, progress, cancellationToken)
-                    .ConfigureAwait(false);
-                return;
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                TryDeleteFile(targetFile);
-                _log?.Invoke($"Multi-connection download unavailable, retrying with single connection: {ex.Message}");
-            }
-        }
-        else if (probe.TotalBytes > 0)
+            _log?.Invoke($"Downloading {Path.GetFileName(e.FileName)} ({e.TotalBytesToReceive} bytes)...");
+            throttler.Report(0, e.TotalBytesToReceive, force: true);
+        };
+
+        download.DownloadProgressChanged += (_, e) =>
         {
-            _log?.Invoke("Server does not support range download, using single connection...");
-        }
+            throttler.Report(e.ReceivedBytesSize, e.TotalBytesToReceive);
+        };
 
-        await DownloadFileSequentialAsync(downloadUrl, targetFile, progress, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<DownloadProbeResult> ProbeDownloadAsync(string downloadUrl, CancellationToken cancellationToken)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
-        request.Headers.Range = new RangeHeaderValue(0, 0);
-
-        using var response = await _httpClient.SendAsync(
-            request,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-
-        var rangedTotalBytes = response.Content.Headers.ContentRange?.Length ?? 0;
-        if (response.StatusCode == HttpStatusCode.PartialContent && rangedTotalBytes > 0)
+        download.DownloadFileCompleted += (_, e) =>
         {
-            return new DownloadProbeResult(
-                rangedTotalBytes,
-                SupportsRange: rangedTotalBytes >= ParallelDownloadMinFileSizeBytes);
-        }
-
-        var fallbackBytes = response.Content.Headers.ContentLength ?? 0;
-        return new DownloadProbeResult(fallbackBytes, SupportsRange: false);
-    }
-
-    private async Task DownloadFileSequentialAsync(
-        string downloadUrl,
-        string targetFile,
-        IProgress<FileDownloadProgress>? progress,
-        CancellationToken cancellationToken)
-    {
-        using var response = await _httpClient.GetAsync(
-            downloadUrl,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-
-        var totalBytes = ResolveTotalBytes(response);
-        await DownloadFileSequentialFromResponseAsync(response, targetFile, totalBytes, progress, cancellationToken)
-            .ConfigureAwait(false);
-    }
-
-    private async Task DownloadFileInParallelAsync(
-        string downloadUrl,
-        string targetFile,
-        long totalBytes,
-        int segmentCount,
-        IProgress<FileDownloadProgress>? progress,
-        CancellationToken cancellationToken)
-    {
-        var ranges = BuildRanges(totalBytes, segmentCount);
-        var downloadedBytes = 0L;
+            completion.TrySetResult(e);
+        };
 
         try
         {
-            await using (var output = new FileStream(
-                             targetFile,
-                             FileMode.Create,
-                             FileAccess.Write,
-                             FileShare.ReadWrite,
-                             1,
-                             useAsync: true))
+            await download.DownloadFileTaskAsync(downloadUrl, targetFile, cancellationToken).ConfigureAwait(false);
+            if (completion.Task.IsCompleted)
             {
-                output.SetLength(totalBytes);
+                await HandleCompletionAsync(completion.Task.Result, targetFile, cancellationToken).ConfigureAwait(false);
+                throttler.Flush();
             }
+            else if (!File.Exists(targetFile))
+            {
+                throw new IOException("Download did not produce the target file.");
+            }
+        }
+        catch (Exception ex) when (IsDownloaderNoDataTimeout(ex, _options.NoDataTimeout))
+        {
+            throw new DownloadStalledException(_options.NoDataTimeout, ex);
+        }
+    }
 
-            await Parallel.ForEachAsync(
-                Enumerable.Range(0, ranges.Count),
-                new ParallelOptions
+    private DownloadConfiguration CreateConfiguration()
+    {
+        return new DownloadConfiguration
+        {
+            BufferBlockSize = 128 * 1024,
+            ChunkCount = DefaultChunkCount,
+            ParallelDownload = true,
+            ParallelCount = DefaultChunkCount,
+            MaxTryAgainOnFailure = Math.Max(0, _options.MaxRetryAttempts),
+            BlockTimeout = (int)Math.Clamp(_options.NoDataTimeout.TotalMilliseconds, 1, int.MaxValue),
+            HttpClientTimeout = (int)TimeSpan.FromHours(1).TotalMilliseconds,
+            ClearPackageOnCompletionWithFailure = false,
+            MinimumSizeOfChunking = ParallelDownloadMinFileSizeBytes,
+            MinimumChunkSize = MinimumChunkSizeBytes,
+            EnableAutoResumeDownload = true,
+            DownloadFileExtension = DownloadFileExtension,
+            FileExistPolicy = FileExistPolicy.Delete,
+            RequestConfiguration = CreateRequestConfiguration(),
+            CustomHttpClientFactory = () =>
+            {
+                var client = new HttpClient
                 {
-                    MaxDegreeOfParallelism = segmentCount,
-                    CancellationToken = cancellationToken
-                },
-                async (index, token) =>
-                {
-                    var (start, end) = ranges[index];
+                    Timeout = Timeout.InfiniteTimeSpan
+                };
+                CopyHeaders(_httpClient.DefaultRequestHeaders, client.DefaultRequestHeaders);
+                return client;
+            }
+        };
+    }
 
-                    using var request = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
-                    request.Headers.Range = new RangeHeaderValue(start, end);
+    private RequestConfiguration CreateRequestConfiguration()
+    {
+        var request = new RequestConfiguration
+        {
+            Accept = "*/*",
+            AllowAutoRedirect = true,
+            KeepAlive = true,
+            UserAgent = ResolveUserAgent(),
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
+            ConnectTimeout = (int)Math.Clamp(_options.NoDataTimeout.TotalMilliseconds, 1, int.MaxValue)
+        };
 
-                    using var response = await _httpClient.SendAsync(
-                        request,
-                        HttpCompletionOption.ResponseHeadersRead,
-                        token).ConfigureAwait(false);
+        if (_httpClient.DefaultRequestHeaders.Authorization != null)
+        {
+            request.Authorization = _httpClient.DefaultRequestHeaders.Authorization;
+        }
 
-                    if (response.StatusCode != HttpStatusCode.PartialContent)
-                    {
-                        throw new InvalidOperationException($"Server returned {response.StatusCode} for range request.");
-                    }
+        foreach (var header in _httpClient.DefaultRequestHeaders)
+        {
+            AddRequestHeader(request, header.Key, header.Value);
+        }
 
-                    await using var source = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
-                    await using var target = new FileStream(
-                        targetFile,
-                        FileMode.Open,
-                        FileAccess.Write,
-                        FileShare.ReadWrite,
-                        ParallelDownloadBufferSize,
-                        FileOptions.Asynchronous | FileOptions.RandomAccess);
-                    target.Seek(start, SeekOrigin.Begin);
+        return request;
+    }
 
-                    var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(ParallelDownloadBufferSize);
-                    try
-                    {
-                        while (true)
-                        {
-                            var read = await source.ReadAsync(buffer.AsMemory(0, ParallelDownloadBufferSize), token).ConfigureAwait(false);
-                            if (read <= 0)
-                            {
-                                break;
-                            }
+    private string ResolveUserAgent()
+    {
+        var userAgent = _httpClient.DefaultRequestHeaders.UserAgent;
+        return userAgent.Count == 0
+            ? HttpClientFactory.DefaultUserAgent
+            : string.Join(" ", userAgent.Select(value => value.ToString()));
+    }
 
-                            await target.WriteAsync(buffer.AsMemory(0, read), token).ConfigureAwait(false);
-                            var currentBytes = Interlocked.Add(ref downloadedBytes, read);
-                            ReportProgress(progress, currentBytes, totalBytes);
-                        }
-                    }
-                    finally
-                    {
-                        System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
-                    }
-                }).ConfigureAwait(false);
+    private static void AddRequestHeader(RequestConfiguration request, string name, IEnumerable<string> values)
+    {
+        var value = string.Join(", ", values);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        if (string.Equals(name, "User-Agent", StringComparison.OrdinalIgnoreCase))
+        {
+            request.UserAgent = value;
+            return;
+        }
+
+        if (string.Equals(name, "Accept", StringComparison.OrdinalIgnoreCase))
+        {
+            request.Accept = value;
+            return;
+        }
+
+        if (string.Equals(name, "Authorization", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            request.Headers[name] = value;
         }
         catch
         {
-            TryDeleteFile(targetFile);
-            throw;
         }
     }
 
-    private static async Task DownloadFileSequentialFromResponseAsync(
-        HttpResponseMessage response,
+    private static void CopyHeaders(HttpHeaders source, HttpHeaders destination)
+    {
+        foreach (var header in source)
+        {
+            destination.TryAddWithoutValidation(header.Key, header.Value);
+        }
+    }
+
+    private async Task HandleCompletionAsync(
+        AsyncCompletedEventArgs completion,
         string targetFile,
-        long totalBytes,
-        IProgress<FileDownloadProgress>? progress,
         CancellationToken cancellationToken)
     {
-        await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        await using var fileStream = new FileStream(
-            targetFile,
-            FileMode.Create,
-            FileAccess.Write,
-            FileShare.None,
-            SequentialDownloadBufferSize,
-            useAsync: true);
-
-        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(SequentialDownloadBufferSize);
-        try
+        if (completion.Cancelled)
         {
-            var bytesRead = 0L;
+            throw new OperationCanceledException(cancellationToken);
+        }
 
-            while (true)
+        if (completion.Error != null)
+        {
+            if (IsDownloaderNoDataTimeout(completion.Error, _options.NoDataTimeout))
             {
-                var read = await contentStream.ReadAsync(buffer.AsMemory(0, SequentialDownloadBufferSize), cancellationToken).ConfigureAwait(false);
-                if (read <= 0)
-                {
-                    break;
-                }
-
-                await fileStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-                bytesRead += read;
-                ReportProgress(progress, bytesRead, totalBytes);
+                throw new DownloadStalledException(_options.NoDataTimeout, completion.Error);
             }
+
+            throw new IOException($"Download failed: {completion.Error.Message}", completion.Error);
         }
-        finally
+
+        if (!File.Exists(targetFile))
         {
-            System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+            throw new IOException("Download completed without creating the target file.");
         }
+
+        await Task.CompletedTask.ConfigureAwait(false);
     }
 
     private static void ReportProgress(IProgress<FileDownloadProgress>? progress, long bytesReceived, long totalBytes)
@@ -236,54 +251,72 @@ public sealed class AcceleratedFileDownloader
         });
     }
 
-    private static long ResolveTotalBytes(HttpResponseMessage response)
+    private sealed class ProgressThrottler
     {
-        var rangedTotalBytes = response.Content.Headers.ContentRange?.Length ?? 0;
-        if (rangedTotalBytes > 0)
+        private readonly IProgress<FileDownloadProgress>? _progress;
+        private readonly TimeSpan _minimumInterval;
+        private readonly object _gate = new();
+        private FileDownloadProgress _lastProgress = new();
+        private DateTimeOffset _lastReportedAt = DateTimeOffset.MinValue;
+
+        public ProgressThrottler(IProgress<FileDownloadProgress>? progress, TimeSpan minimumInterval)
         {
-            return rangedTotalBytes;
+            _progress = progress;
+            _minimumInterval = minimumInterval;
         }
 
-        return response.Content.Headers.ContentLength ?? 0;
-    }
-
-    private static int GetParallelSegmentCount(long totalBytes)
-    {
-        var bySize = (int)Math.Ceiling(totalBytes / (double)ParallelDownloadMinSegmentSizeBytes);
-        return Math.Clamp(bySize, 2, DefaultMaxSegments);
-    }
-
-    private static IReadOnlyList<(long Start, long End)> BuildRanges(long totalBytes, int segmentCount)
-    {
-        var ranges = new List<(long Start, long End)>(segmentCount);
-        var chunk = totalBytes / segmentCount;
-        var remainder = totalBytes % segmentCount;
-
-        var start = 0L;
-        for (var i = 0; i < segmentCount; i++)
+        public void Report(long bytesReceived, long totalBytes, bool force = false)
         {
-            var size = chunk + (i < remainder ? 1 : 0);
-            var end = start + size - 1;
-            ranges.Add((start, end));
-            start = end + 1;
-        }
-
-        return ranges;
-    }
-
-    private static void TryDeleteFile(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
+            lock (_gate)
             {
-                File.Delete(path);
+                _lastProgress = new FileDownloadProgress
+                {
+                    BytesReceived = bytesReceived,
+                    TotalBytes = totalBytes
+                };
+
+                var now = DateTimeOffset.UtcNow;
+                if (!force &&
+                    _lastReportedAt != DateTimeOffset.MinValue &&
+                    now - _lastReportedAt < _minimumInterval &&
+                    (totalBytes <= 0 || bytesReceived < totalBytes))
+                {
+                    return;
+                }
+
+                _progress?.Report(_lastProgress);
+                _lastReportedAt = now;
             }
         }
-        catch
+
+        public void Flush()
         {
+            lock (_gate)
+            {
+                _progress?.Report(_lastProgress);
+                _lastReportedAt = DateTimeOffset.UtcNow;
+            }
         }
     }
 
-    private sealed record DownloadProbeResult(long TotalBytes, bool SupportsRange);
+    private static bool IsDownloaderNoDataTimeout(Exception exception, TimeSpan timeout)
+    {
+        var timeoutMilliseconds = (int)Math.Clamp(timeout.TotalMilliseconds, 1, int.MaxValue);
+        for (var current = exception; current != null; current = current.InnerException)
+        {
+            if (current is TimeoutException or TaskCanceledException)
+            {
+                return true;
+            }
+
+            if (current.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
+                current.Message.Contains("timed out", StringComparison.OrdinalIgnoreCase) ||
+                current.Message.Contains(timeoutMilliseconds.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

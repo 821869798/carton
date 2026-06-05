@@ -16,4 +16,12 @@ public static class FormatHelper
 
         return $"{value:0.##} {ByteSuffixes[index]}";
     }
+
+    public static string FormatByteProgress(long bytesReceived, long totalBytes, string unknownLabel = "unknown")
+    {
+        var received = FormatBytes(Math.Max(0, bytesReceived));
+        return totalBytes > 0
+            ? $"{received} / {FormatBytes(totalBytes)}"
+            : $"{received} / {unknownLabel}";
+    }
 }

@@ -275,6 +275,10 @@
   <x:String x:Key="Settings.Update.ApplyPrompt.Message">Version {0} has finished downloading. Restart now to apply it?</x:String>
   <x:String x:Key="Settings.Update.ApplyPrompt.RestartButton">Restart Now</x:String>
   <x:String x:Key="Settings.Update.ApplyPrompt.LaterButton">Later</x:String>
+  <x:String x:Key="Settings.Update.DownloadFailedDialog.Title">Download Failed</x:String>
+  <x:String x:Key="Settings.Update.DownloadFailedDialog.Message">The update download stopped receiving data and was interrupted.&#x0a;&#x0a;{0}&#x0a;&#x0a;Retry now?</x:String>
+  <x:String x:Key="Settings.Update.DownloadFailedDialog.RetryButton">Retry</x:String>
+  <x:String x:Key="Settings.Update.DownloadFailedDialog.CancelButton">Cancel</x:String>
 
 	<x:String x:Key="Settings.Section.Appearance">Appearance</x:String>
 	<x:String x:Key="Settings.Appearance.Theme">Theme</x:String>
@@ -361,6 +365,10 @@ This action cannot be undone. Continue?</x:String>
   <x:String x:Key="Settings.Kernel.ReplaceDialog.ReplaceNow">Replace Now</x:String>
   <x:String x:Key="Settings.Kernel.ReplaceDialog.Continue">Continue</x:String>
   <x:String x:Key="Settings.Kernel.ReplaceDialog.Later">Later</x:String>
+  <x:String x:Key="Settings.Kernel.DownloadFailedDialog.Title">Kernel Download Failed</x:String>
+  <x:String x:Key="Settings.Kernel.DownloadFailedDialog.Message">The kernel download stopped receiving data and was interrupted.&#x0a;&#x0a;{0}&#x0a;&#x0a;Retry now?</x:String>
+  <x:String x:Key="Settings.Kernel.DownloadFailedDialog.RetryButton">Retry</x:String>
+  <x:String x:Key="Settings.Kernel.DownloadFailedDialog.CancelButton">Cancel</x:String>
   <x:String x:Key="Settings.Kernel.CustomMissingLibcronetDialog.Title">Missing libcronet.dll</x:String>
   <x:String x:Key="Settings.Kernel.CustomMissingLibcronetDialog.Message">libcronet.dll was not found next to the selected kernel executable. Missing this file may prevent the NaiveProxy protocol from working correctly. Continue installing this kernel?</x:String>
   <x:String x:Key="Settings.Kernel.CustomMissingLibcronetDialog.Continue">Continue</x:String>

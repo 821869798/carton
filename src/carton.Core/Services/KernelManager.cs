@@ -374,7 +374,9 @@ public class KernelManager : IKernelManager
                 _ => originalUrl
             };
 
-            var archiveFile = Path.Combine(Path.GetTempPath(), $"sing-box-{Guid.NewGuid():N}{archiveExt}");
+            var archiveFile = Path.Combine(
+                Path.GetTempPath(),
+                BuildStablePackageTempFileName("sing-box", version, currentPlatform.OS, currentPlatform.Arch, archiveExt));
             await DownloadFileAsync(downloadUrlForMirror, archiveFile);
             StatusChanged?.Invoke(this, $"Downloaded sing-box {version}");
 
@@ -480,7 +482,9 @@ public class KernelManager : IKernelManager
         foreach (var candidate in GetRef1ndAssetCandidates(platform, tagName))
         {
             var tempExt = GetPackageExtension(candidate);
-            var tempFile = Path.Combine(Path.GetTempPath(), $"sing-box-ref1nd-{Guid.NewGuid():N}{tempExt}");
+            var tempFile = Path.Combine(
+                Path.GetTempPath(),
+                BuildStablePackageTempFileName("sing-box-ref1nd", tagName, platform.OS, platform.Arch, tempExt, candidate));
             var downloadUrl = $"{Ref1ndDownloadUrl}/{tagName}/{candidate}";
 
             try
@@ -562,6 +566,28 @@ public class KernelManager : IKernelManager
         }
 
         return Path.GetExtension(assetName);
+    }
+
+    private static string BuildStablePackageTempFileName(
+        string prefix,
+        string version,
+        string os,
+        string arch,
+        string extension,
+        string? assetName = null)
+    {
+        var identity = string.IsNullOrWhiteSpace(assetName)
+            ? $"{prefix}-{version}-{os}-{arch}"
+            : $"{prefix}-{version}-{os}-{arch}-{Path.GetFileNameWithoutExtension(assetName)}";
+        var safeIdentity = SanitizeFileName(identity);
+        return $"{safeIdentity}{extension}";
+    }
+
+    private static string SanitizeFileName(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var chars = value.Trim().Select(ch => invalid.Contains(ch) ? '-' : ch).ToArray();
+        return new string(chars);
     }
 
     private async Task<string?> GetLatestGitHubReleaseVersionAsync(

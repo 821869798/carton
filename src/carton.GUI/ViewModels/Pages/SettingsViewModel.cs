@@ -518,7 +518,11 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             UpdateProgress = e.Progress;
-            UpdateStatus = $"{e.Status} {e.BytesReceived / 1024 / 1024:F1}MB / {e.TotalBytes / 1024 / 1024:F1}MB";
+            UpdateStatus = DownloadUiHelper.FormatStatus(
+                e.Status,
+                e.BytesReceived,
+                e.TotalBytes,
+                GetString("Common.Unknown", "unknown"));
         });
     }
 
@@ -613,35 +617,50 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         if (_kernelManager == null || IsUpdatingKernel) return;
 
         IsUpdatingKernel = true;
+        var retryDownload = false;
         var hadInstalledKernel = _kernelManager.IsKernelInstalled;
         var package = _pendingKernelPackage;
-        if (package == null || !File.Exists(package.TempFilePath))
+        try
         {
-            UpdateStatus = GetString("Settings.Kernel.StartingDownload", "Starting download...");
-            package = await _kernelManager.DownloadPackageAsync(GetKnownLatestVersionForSelectedMirror(), SelectedKernelDownloadMirror);
-            if (package == null)
+            if (package == null || !File.Exists(package.TempFilePath))
             {
-                IsUpdatingKernel = false;
-                return;
+                UpdateStatus = GetString("Settings.Kernel.StartingDownload", "Starting download...");
+                package = await _kernelManager.DownloadPackageAsync(GetKnownLatestVersionForSelectedMirror(), SelectedKernelDownloadMirror);
+                if (package == null)
+                {
+                    retryDownload = await ShowKernelDownloadFailedPromptAsync(UpdateStatus);
+                }
+                else
+                {
+                    _pendingKernelPackage = package;
+                }
             }
 
-            _pendingKernelPackage = package;
+            if (package != null)
+            {
+                var success = await ApplyPendingKernelPackageAsync(package);
+
+                if (success)
+                {
+                    if (KernelCacheCleanupService.ShouldClearCache(_currentPreferences, package.SourceChannel, hadInstalledKernel))
+                    {
+                        ClearKernelCacheFile();
+                    }
+
+                    KernelCacheCleanupService.RecordInstalledChannel(_currentPreferences, package.SourceChannel);
+                    PersistPreferences();
+                    await RefreshKernelInfoAsync();
+                }
+            }
+        }
+        finally
+        {
+            IsUpdatingKernel = false;
         }
 
-        var success = await ApplyPendingKernelPackageAsync(package);
-
-        IsUpdatingKernel = false;
-
-        if (success)
+        if (retryDownload)
         {
-            if (KernelCacheCleanupService.ShouldClearCache(_currentPreferences, package.SourceChannel, hadInstalledKernel))
-            {
-                ClearKernelCacheFile();
-            }
-
-            KernelCacheCleanupService.RecordInstalledChannel(_currentPreferences, package.SourceChannel);
-            PersistPreferences();
-            await RefreshKernelInfoAsync();
+            await UpdateKernel();
         }
     }
 
@@ -1010,6 +1029,27 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         };
 
         return await dialog.ShowDialog<bool>(owner);
+    }
+
+    private async Task<bool> ShowKernelDownloadFailedPromptAsync(string detail)
+    {
+        var desktop = Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+        var owner = desktop?.MainWindow;
+        if (owner == null)
+        {
+            return false;
+        }
+
+        return await DownloadUiHelper.ShowRetryDialogAsync(
+            owner,
+            GetString("Settings.Kernel.DownloadFailedDialog.Title", "Kernel download failed"),
+            GetString(
+                "Settings.Kernel.DownloadFailedDialog.Message",
+                "The kernel download stopped receiving data and was interrupted.\n\n{0}\n\nRetry now?"),
+            GetString("Settings.Kernel.DownloadFailedDialog.RetryButton", "Retry"),
+            GetString("Settings.Kernel.DownloadFailedDialog.CancelButton", "Cancel"),
+            detail,
+            GetString("Common.Unknown", "unknown"));
     }
 
     private async Task<bool> ConfirmCustomWindowsKernelWithoutNaiveProxyRuntimeAsync(string executablePath, Window owner)

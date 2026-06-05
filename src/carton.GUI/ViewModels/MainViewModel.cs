@@ -347,7 +347,11 @@ public partial class MainViewModel : ViewModelBase
             HasKernelDownloadFailed = false;
             OnPropertyChanged(nameof(KernelPrimaryActionText));
             DownloadProgress = e.Progress;
-            DownloadStatus = $"{e.Status} {e.BytesReceived / 1024 / 1024:F1}MB / {e.TotalBytes / 1024 / 1024:F1}MB";
+            DownloadStatus = DownloadUiHelper.FormatStatus(
+                e.Status,
+                e.BytesReceived,
+                e.TotalBytes,
+                GetString("Common.Unknown", "unknown"));
         });
     }
 
@@ -1021,7 +1025,20 @@ public partial class MainViewModel : ViewModelBase
         try
         {
             var client = HttpClientFactory.External;
-            var content = await client.GetStringAsync(profile.Url);
+            var content = await HttpDownloadHelper.DownloadTextAsync(
+                client,
+                profile.Url,
+                (bytesReceived, totalBytes) =>
+                {
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        ConnectionStatus = DownloadUiHelper.FormatStatus(
+                            loadingMessage,
+                            bytesReceived,
+                            totalBytes,
+                            GetString("Common.Unknown", "unknown"));
+                    });
+                });
             if (string.IsNullOrWhiteSpace(content))
             {
                 var message = GetString("Status.RemoteConfigEmpty", "Downloaded remote config is empty");

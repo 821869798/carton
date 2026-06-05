@@ -404,10 +404,27 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
                     return;
                 }
 
-                NewProfileStatus = "Downloading from URL...";
-
                 var httpClient = HttpClientFactory.External;
-                configContent = await httpClient.GetStringAsync(NewProfileUrl);
+                var loadingStatus = "Downloading from URL...";
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    NewProfileStatus = loadingStatus;
+                });
+
+                configContent = await HttpDownloadHelper.DownloadTextAsync(
+                    httpClient,
+                    NewProfileUrl,
+                    (bytesReceived, totalBytes) =>
+                    {
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            NewProfileStatus = DownloadUiHelper.FormatStatus(
+                                loadingStatus,
+                                bytesReceived,
+                                totalBytes,
+                                GetString("Common.Unknown", "unknown"));
+                        });
+                    });
             }
 
             var updateInterval = ParseUpdateIntervalMinutes();
@@ -884,7 +901,20 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
             }
 
             var mixedPort = await ResolveActiveMixedPortAsync();
-            var result = await _remoteConfigUpdateService!.UpdateAsync(profileModel, mixedPort);
+            var result = await _remoteConfigUpdateService!.UpdateAsync(
+                profileModel,
+                mixedPort,
+                (bytesReceived, totalBytes) =>
+                {
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        ImportStatus = DownloadUiHelper.FormatStatus(
+                            GetString("Profiles.Status.Updating", "Updating..."),
+                            bytesReceived,
+                            totalBytes,
+                            GetString("Common.Unknown", "unknown"));
+                    });
+                });
             if (!result.Success)
             {
                 ImportStatus = $"{GetString("Profiles.Status.UpdateFailed", "Update failed")}: {result.ErrorMessage}";

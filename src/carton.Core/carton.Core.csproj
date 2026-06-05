@@ -11,4 +11,8 @@
 		<EmbeddedResource Remove="obj\**;bin\**;obj-codex\**" />
 		<None Remove="obj\**;bin\**;obj-codex\**" />
 	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Downloader" Version="5.8.0" />
+	</ItemGroup>
 </Project>

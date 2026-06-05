@@ -248,6 +248,10 @@
   <x:String x:Key="Settings.Update.ApplyPrompt.Message">版本 {0} 已下载完成，是否现在重启并应用更新？</x:String>
   <x:String x:Key="Settings.Update.ApplyPrompt.RestartButton">立即重启</x:String>
   <x:String x:Key="Settings.Update.ApplyPrompt.LaterButton">稍后</x:String>
+  <x:String x:Key="Settings.Update.DownloadFailedDialog.Title">下载失败</x:String>
+  <x:String x:Key="Settings.Update.DownloadFailedDialog.Message">更新下载长时间没有收到数据，已中断本次下载。&#x0a;&#x0a;{0}&#x0a;&#x0a;是否立即重试？</x:String>
+  <x:String x:Key="Settings.Update.DownloadFailedDialog.RetryButton">重试</x:String>
+  <x:String x:Key="Settings.Update.DownloadFailedDialog.CancelButton">取消</x:String>
 
 	<x:String x:Key="Settings.Section.Appearance">外观</x:String>
 	<x:String x:Key="Settings.Appearance.Theme">主题</x:String>
@@ -334,6 +338,10 @@
   <x:String x:Key="Settings.Kernel.ReplaceDialog.ReplaceNow">立即替换</x:String>
   <x:String x:Key="Settings.Kernel.ReplaceDialog.Continue">继续</x:String>
   <x:String x:Key="Settings.Kernel.ReplaceDialog.Later">稍后</x:String>
+  <x:String x:Key="Settings.Kernel.DownloadFailedDialog.Title">内核下载失败</x:String>
+  <x:String x:Key="Settings.Kernel.DownloadFailedDialog.Message">内核下载长时间没有收到数据，已中断本次下载。&#x0a;&#x0a;{0}&#x0a;&#x0a;是否立即重试？</x:String>
+  <x:String x:Key="Settings.Kernel.DownloadFailedDialog.RetryButton">重试</x:String>
+  <x:String x:Key="Settings.Kernel.DownloadFailedDialog.CancelButton">取消</x:String>
   <x:String x:Key="Settings.Kernel.CustomMissingLibcronetDialog.Title">缺少 libcronet.dll</x:String>
   <x:String x:Key="Settings.Kernel.CustomMissingLibcronetDialog.Message">所选内核可执行文件同目录下没有找到 libcronet.dll。缺少该文件可能会影响 NaiveProxy 协议的正常运行，是否继续安装这个内核？</x:String>
   <x:String x:Key="Settings.Kernel.CustomMissingLibcronetDialog.Continue">继续安装</x:String>
@@ -357,7 +365,8 @@
 	<x:String x:Key="Profiles.Status.UpdateSucceeded">更新成功</x:String>
 	<x:String x:Key="Profiles.Status.UpdateSucceededViaProxy">已通过 mixed 代理更新成功</x:String>
 	<x:String x:Key="Profiles.Status.UpdateFailed">更新失败</x:String>
-	<x:String x:Key="Profiles.Status.ProfileNotFound">配置不存在</x:String>	<x:String x:Key="Settings.Kernel.CacheCleanupPolicy">缓存清理</x:String>
+	<x:String x:Key="Profiles.Status.ProfileNotFound">配置不存在</x:String>
+	<x:String x:Key="Settings.Kernel.CacheCleanupPolicy">缓存清理</x:String>
 	<x:String x:Key="Settings.Kernel.CacheCleanupPolicy.ClearOnChannelChange">仅非同渠道更换时清理</x:String>
 	<x:String x:Key="Settings.Kernel.CacheCleanupPolicy.Never">任何时候都不清理</x:String>
 	<x:String x:Key="Settings.General.ElevatedTask.Title">管理员启动任务</x:String>

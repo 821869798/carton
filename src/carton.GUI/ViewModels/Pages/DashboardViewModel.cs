@@ -1260,7 +1260,19 @@ public partial class DashboardViewModel : PageViewModelBase
 
         try
         {
-            var result = await _remoteConfigUpdateService!.UpdateAsync(profile);
+            var result = await _remoteConfigUpdateService!.UpdateAsync(
+                profile,
+                progress: (bytesReceived, totalBytes) =>
+                {
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        StartupStatus = DownloadUiHelper.FormatStatus(
+                            loadingMessage,
+                            bytesReceived,
+                            totalBytes,
+                            GetString("Common.Unknown", "unknown"));
+                    });
+                });
             if (!result.Success || string.IsNullOrWhiteSpace(result.ConfigPath))
             {
                 var message = GetString("Status.RemoteConfigDownloadFailed", "Failed to download remote config");
@@ -1321,7 +1333,20 @@ public partial class DashboardViewModel : PageViewModelBase
         _toastWriter?.Invoke(loadingMessage, 1800);
 
         var latestProfile = await _profileManager!.GetAsync(profile.Id) ?? profile;
-        var result = await _remoteConfigUpdateService.UpdateAsync(latestProfile, mixedPort);
+        var result = await _remoteConfigUpdateService.UpdateAsync(
+            latestProfile,
+            mixedPort,
+            (bytesReceived, totalBytes) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    StartupStatus = DownloadUiHelper.FormatStatus(
+                        loadingMessage,
+                        bytesReceived,
+                        totalBytes,
+                        GetString("Common.Unknown", "unknown"));
+                });
+            });
         if (result.Success)
         {
             await LoadProfilesAsync();

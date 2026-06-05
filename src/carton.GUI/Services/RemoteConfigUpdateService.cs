@@ -31,7 +31,10 @@ public sealed class RemoteConfigUpdateService
     public bool ShouldDeferRefreshUntilStarted(Profile profile, bool hasLocalConfig)
         => hasLocalConfig && IsProxyUpdateEnabled() && ShouldRefreshOnStart(profile);
 
-    public async Task<RemoteConfigUpdateResult> UpdateAsync(Profile profile, int? mixedPort = null)
+    public async Task<RemoteConfigUpdateResult> UpdateAsync(
+        Profile profile,
+        int? mixedPort = null,
+        Action<long, long>? progress = null)
     {
         if (profile.Type != ProfileType.Remote)
         {
@@ -62,9 +65,10 @@ public sealed class RemoteConfigUpdateService
                 request.Headers.TryAddWithoutValidation("User-Agent", prefs.CustomUserAgent);
             }
 
-            using var response = await client.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            var content = await response.Content.ReadAsStringAsync();
+            var content = await HttpDownloadHelper.DownloadTextAsync(
+                client,
+                request,
+                progress);
             if (string.IsNullOrWhiteSpace(content))
             {
                 return new RemoteConfigUpdateResult(false, null, "Downloaded remote config is empty.", useProxy);
