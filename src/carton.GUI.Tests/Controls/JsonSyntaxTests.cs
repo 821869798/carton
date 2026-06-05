@@ -227,4 +227,83 @@ public class JsonSyntaxTests
         JsonSyntax.BuildLineTokenIndex(lines, Tokens(text), firstTokenIndex);
         Assert.Equal(lines.Count, firstTokenIndex.Count);
     }
+
+    // ---- 垂直移动（上下方向键）以显示列为中介，跨含 CJK 的行保持列对齐 ----
+
+    [Fact]
+    public void VerticalMove_PreservesDisplayColumnAcrossWideCharLine()
+    {
+        // 第 0 行含 CJK，第 1 行纯 ASCII。光标在第 0 行 "中" 之后（显示列 2），
+        // 下移到第 1 行应落在显示列 2 处（offset 2），而非按字符列得到的 offset 1。
+        var text = "中x\nabcd";
+        var lines = Lines(text);
+
+        var caret = 1; // "中" 之后
+        var displayColumn = JsonSyntax.OffsetToDisplayColumn(text, lines[0], caret);
+        Assert.Equal(2, displayColumn);
+
+        var target = JsonSyntax.DisplayColumnToOffset(text, lines[1], displayColumn);
+        // lines[1] 从绝对 offset 3 开始（"中x\n"），显示列 2 → 'c' 之前 = 3 + 2 = 5。
+        Assert.Equal(5, target);
+        Assert.Equal('c', text[target]); // 与上方 "中" 右边缘视觉对齐
+    }
+
+    // ---- emoji / 代理对（星平面码点）按码点测量 ----
+
+    [Fact]
+    public void Emoji_CountsAsTwoColumns()
+    {
+        // 😀 = U+1F600，UTF-16 是代理对（2 个 char），显示占 2 列。
+        var text = "😀";
+        Assert.Equal(2, text.Length); // 确认是代理对
+        var (w, charCount) = JsonSyntax.DisplayWidthAt(text, 0);
+        Assert.Equal(2, w);
+        Assert.Equal(2, charCount);
+    }
+
+    [Fact]
+    public void Emoji_LongestColumnsCountsAsTwo()
+    {
+        JsonSyntax.BuildLines("😀\nab", new List<JsonLine>(), out var longest);
+        Assert.Equal(2, longest);
+    }
+
+    [Fact]
+    public void OffsetToColumn_SkipsBothSurrogateChars()
+    {
+        // "a😀b"：a=列0..1，😀=列1..3，b=列3..4。
+        var text = "a😀b";
+        var line = new JsonLine(0, text.Length);
+        Assert.Equal(0, JsonSyntax.OffsetToDisplayColumn(text, line, 0)); // a 前
+        Assert.Equal(1, JsonSyntax.OffsetToDisplayColumn(text, line, 1)); // 😀 前
+        Assert.Equal(3, JsonSyntax.OffsetToDisplayColumn(text, line, 3)); // b 前（跳过 2 个 char）
+        Assert.Equal(4, JsonSyntax.OffsetToDisplayColumn(text, line, 4)); // 行尾
+    }
+
+    [Fact]
+    public void ColumnToOffset_SnapsToCodePointBoundaryNotSurrogateHalf()
+    {
+        var text = "a😀b";
+        var line = new JsonLine(0, text.Length);
+        // 落在 😀 占据的第 2 列正中（列 2）时，平局吸附到起始边界 offset 1（不会切到代理对中间）。
+        Assert.Equal(1, JsonSyntax.DisplayColumnToOffset(text, line, 2));
+        // 列 3 正好是 😀 之后、b 之前 = offset 3。
+        Assert.Equal(3, JsonSyntax.DisplayColumnToOffset(text, line, 3));
+    }
+
+    [Fact]
+    public void DisplayColumnToOffset_NeverReturnsLowSurrogateIndex()
+    {
+        // 任何目标列还原出的偏移都不能落在代理对的低位（index 2）。
+        var text = "a😀b";
+        var line = new JsonLine(0, text.Length);
+        for (var col = 0; col <= 5; col++)
+        {
+            var offset = JsonSyntax.DisplayColumnToOffset(text, line, col);
+            if (offset < text.Length)
+            {
+                Assert.False(char.IsLowSurrogate(text[offset]), $"col {col} 落在代理对低位");
+            }
+        }
+    }
 }

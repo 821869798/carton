@@ -18,7 +18,7 @@ using Avalonia.Threading;
 
 namespace carton.GUI.Controls;
 
-public sealed class JsonConfigEditor : Grid
+public sealed partial class JsonConfigEditor : Grid
 {
     public const double DefaultEditorFontSize = 13;
 
@@ -526,7 +526,7 @@ public sealed class JsonConfigEditor : Grid
 
     private readonly record struct SearchMatch(int Start, int Length);
 
-    private sealed class EditorSurface : Control
+    private sealed partial class EditorSurface : Control
     {
         private static readonly Typeface EditorTypeface = new("Consolas, Cascadia Mono, monospace");
         private static readonly IBrush DarkBackgroundBrush = new SolidColorBrush(Color.FromRgb(30, 30, 30));
@@ -563,8 +563,6 @@ public sealed class JsonConfigEditor : Grid
         private const double MaxFontSize = 24;
         private const double FontSizeStep = 1;
         private const int BackgroundTokenizeThreshold = 50_000;
-        private const int LineSliceThreshold = 2000;
-        private const int LineSliceOverscan = 50;
 
         private readonly JsonConfigEditor _owner;
         private readonly List<JsonLine> _lines = new();
@@ -581,7 +579,6 @@ public sealed class JsonConfigEditor : Grid
         private double _verticalOffset;
         private double _fontSize = DefaultFontSize;
         private readonly List<int> _lineFirstTokenIndex = new();
-        private FormattedText?[] _lineFormattedTextCache = Array.Empty<FormattedText?>();
         private int _longestLineLength = 1;
         private CancellationTokenSource? _tokenizeCts;
         private int _tokenizeVersion;
@@ -594,7 +591,7 @@ public sealed class JsonConfigEditor : Grid
             ActualThemeVariantChanged += (_, _) =>
             {
                 _sampleFormattedText = null;
-                Array.Clear(_lineFormattedTextCache);
+                _glyphCache.Clear();
                 InvalidateVisual();
             };
             RebuildDocumentState();
@@ -669,7 +666,7 @@ public sealed class JsonConfigEditor : Grid
         {
             EnsureMetrics();
             var targetIndex = Math.Clamp(start + Math.Max(0, length / 2), 0, Text.Length);
-            var (lineIndex, _) = GetLineAndColumn(targetIndex);
+            var lineIndex = GetLineIndexForOffset(targetIndex);
             var column = OffsetToDisplayColumn(_lines[lineIndex], targetIndex);
             var lineNumberWidth = GetLineNumberColumnWidth();
             var targetX = lineNumberWidth + HorizontalPadding + column * _charWidth;
@@ -731,304 +728,11 @@ public sealed class JsonConfigEditor : Grid
 
             _fontSize = newFontSize;
             _sampleFormattedText = null;
+            _glyphCache.Clear();
             RebuildDocumentState();
             EnsureCaretVisible();
             _owner.UpdateScrollBars();
             InvalidateVisual();
-        }
-
-        protected override void OnPointerPressed(PointerPressedEventArgs e)
-        {
-            base.OnPointerPressed(e);
-            Focus();
-            var index = GetIndexFromPoint(e.GetPosition(this));
-            _caretIndex = index;
-            _selectionAnchor = e.KeyModifiers.HasFlag(KeyModifiers.Shift)
-                ? (_selectionAnchor >= 0 ? _selectionAnchor : _caretIndex)
-                : index;
-            _pointerSelecting = true;
-            InvalidateVisual();
-            e.Handled = true;
-        }
-
-        protected override void OnPointerMoved(PointerEventArgs e)
-        {
-            base.OnPointerMoved(e);
-            if (!_pointerSelecting)
-            {
-                return;
-            }
-
-            _caretIndex = GetIndexFromPoint(e.GetPosition(this));
-            EnsureCaretVisible();
-            InvalidateVisual();
-            e.Handled = true;
-        }
-
-        protected override void OnPointerReleased(PointerReleasedEventArgs e)
-        {
-            base.OnPointerReleased(e);
-            _pointerSelecting = false;
-            e.Handled = true;
-        }
-
-        protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
-        {
-            base.OnPointerWheelChanged(e);
-            if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
-            {
-                if (Math.Abs(e.Delta.Y) > double.Epsilon)
-                {
-                    AdjustFontSize(Math.Sign(e.Delta.Y) * FontSizeStep);
-                }
-
-                e.Handled = true;
-                return;
-            }
-
-            EnsureMetrics();
-            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
-            {
-                // 鼠标滚轮只产生竖直 delta，按住 Shift 时将其映射为水平滚动。
-                var delta = Math.Abs(e.Delta.X) > double.Epsilon ? e.Delta.X : e.Delta.Y;
-                _owner.ScrollSurfaceBy(new Vector(-delta * _charWidth * 3, 0));
-                e.Handled = true;
-                return;
-            }
-
-            _owner.ScrollSurfaceBy(new Vector(
-                -e.Delta.X * _charWidth * 3,
-                -e.Delta.Y * _lineHeight * 3));
-            e.Handled = true;
-        }
-
-        protected override void OnTextInput(TextInputEventArgs e)
-        {
-            base.OnTextInput(e);
-            if (_owner.IsReadOnly || string.IsNullOrEmpty(e.Text))
-            {
-                return;
-            }
-
-            InsertText(e.Text);
-            e.Handled = true;
-        }
-
-        protected override async void OnKeyDown(KeyEventArgs e)
-        {
-            base.OnKeyDown(e);
-
-            if (HandleEditorShortcut(e))
-            {
-                e.Handled = true;
-                return;
-            }
-
-            if (HandleClipboardShortcutAsync(e) is { } task)
-            {
-                await task;
-                e.Handled = true;
-                return;
-            }
-
-            if (HandleNavigation(e) || HandleEditing(e))
-            {
-                e.Handled = true;
-            }
-        }
-
-        private string Text => _owner.Text ?? string.Empty;
-
-        private bool HandleEditorShortcut(KeyEventArgs e)
-        {
-            if (e.Key == Key.F3)
-            {
-                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
-                {
-                    _owner.FindPrevious();
-                }
-                else
-                {
-                    _owner.FindNext();
-                }
-
-                return true;
-            }
-
-            if (!e.KeyModifiers.HasFlag(KeyModifiers.Control))
-            {
-                return false;
-            }
-
-            switch (e.Key)
-            {
-                case Key.F:
-                    _owner.OpenSearch();
-                    return true;
-                case Key.Z when !_owner.IsReadOnly && e.KeyModifiers.HasFlag(KeyModifiers.Shift):
-                    _owner.Redo();
-                    return true;
-                case Key.Z when !_owner.IsReadOnly:
-                    _owner.Undo();
-                    return true;
-                case Key.Y when !_owner.IsReadOnly:
-                    _owner.Redo();
-                    return true;
-                default:
-                    return false;
-            }
-        }
-
-        private Task? HandleClipboardShortcutAsync(KeyEventArgs e)
-        {
-            if (!e.KeyModifiers.HasFlag(KeyModifiers.Control))
-            {
-                return null;
-            }
-
-            return e.Key switch
-            {
-                Key.A => Task.Run(SelectAllOnUiThread),
-                Key.C => CopySelectionAsync(),
-                Key.X when !_owner.IsReadOnly => CutSelectionAsync(),
-                Key.V when !_owner.IsReadOnly => PasteSelectionAsync(),
-                _ => null
-            };
-        }
-
-        private void SelectAllOnUiThread()
-        {
-            Dispatcher.UIThread.Post(() =>
-            {
-                _selectionAnchor = 0;
-                _caretIndex = Text.Length;
-                EnsureCaretVisible();
-                InvalidateVisual();
-            });
-        }
-
-        private async Task CopySelectionAsync()
-        {
-            var selected = GetSelectedText();
-            if (string.IsNullOrEmpty(selected))
-            {
-                return;
-            }
-
-            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop &&
-                desktop.MainWindow?.Clipboard != null)
-            {
-                await desktop.MainWindow.Clipboard.SetTextAsync(selected);
-            }
-        }
-
-        private async Task CutSelectionAsync()
-        {
-            var selected = GetSelectedText();
-            if (string.IsNullOrEmpty(selected))
-            {
-                return;
-            }
-
-            await CopySelectionAsync();
-            DeleteSelectionOrCharacter(backspace: true);
-        }
-
-        private async Task PasteSelectionAsync()
-        {
-            if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop ||
-                desktop.MainWindow?.Clipboard == null)
-            {
-                return;
-            }
-
-            var text = await desktop.MainWindow.Clipboard.TryGetTextAsync();
-            if (!string.IsNullOrEmpty(text))
-            {
-                InsertText(text);
-            }
-        }
-
-        private bool HandleNavigation(KeyEventArgs e)
-        {
-            var keepSelection = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
-            switch (e.Key)
-            {
-                case Key.Left:
-                    MoveCaret(Math.Max(0, _caretIndex - 1), keepSelection);
-                    return true;
-                case Key.Right:
-                    MoveCaret(Math.Min(Text.Length, _caretIndex + 1), keepSelection);
-                    return true;
-                case Key.Up:
-                    MoveVertical(-1, keepSelection);
-                    return true;
-                case Key.Down:
-                    MoveVertical(1, keepSelection);
-                    return true;
-                case Key.Home:
-                    MoveToLineBoundary(toEnd: false, keepSelection);
-                    return true;
-                case Key.End:
-                    MoveToLineBoundary(toEnd: true, keepSelection);
-                    return true;
-                default:
-                    return false;
-            }
-        }
-
-        private bool HandleEditing(KeyEventArgs e)
-        {
-            if (_owner.IsReadOnly)
-            {
-                return false;
-            }
-
-            switch (e.Key)
-            {
-                case Key.Back:
-                    DeleteSelectionOrCharacter(backspace: true);
-                    return true;
-                case Key.Delete:
-                    DeleteSelectionOrCharacter(backspace: false);
-                    return true;
-                case Key.Enter:
-                    InsertText(Environment.NewLine);
-                    return true;
-                case Key.Tab:
-                    InsertText("  ");
-                    return true;
-                default:
-                    return false;
-            }
-        }
-
-        private void MoveCaret(int newIndex, bool keepSelection)
-        {
-            if (!keepSelection)
-            {
-                _selectionAnchor = newIndex;
-            }
-
-            _caretIndex = newIndex;
-            EnsureCaretVisible();
-            InvalidateVisual();
-        }
-
-        private void MoveVertical(int delta, bool keepSelection)
-        {
-            var (lineIndex, column) = GetLineAndColumn(_caretIndex);
-            var targetLineIndex = Math.Clamp(lineIndex + delta, 0, _lines.Count - 1);
-            var targetLine = _lines[targetLineIndex];
-            var targetIndex = Math.Min(targetLine.EndOffset, targetLine.StartOffset + column);
-            MoveCaret(targetIndex, keepSelection);
-        }
-
-        private void MoveToLineBoundary(bool toEnd, bool keepSelection)
-        {
-            var (lineIndex, _) = GetLineAndColumn(_caretIndex);
-            var line = _lines[lineIndex];
-            MoveCaret(toEnd ? line.EndOffset : line.StartOffset, keepSelection);
         }
 
         private void InsertText(string text)
@@ -1044,14 +748,41 @@ public sealed class JsonConfigEditor : Grid
                 return;
             }
 
+            // 按码点删除：代理对（emoji 等）一次删除两个 char，避免切出半个非法字符。
             if (backspace && _caretIndex > 0)
             {
-                SetTextInternal(Text.Remove(_caretIndex - 1, 1), _caretIndex - 1);
+                var prev = PrevCharIndex(_caretIndex);
+                SetTextInternal(Text.Remove(prev, _caretIndex - prev), prev);
             }
             else if (!backspace && _caretIndex < Text.Length)
             {
-                SetTextInternal(Text.Remove(_caretIndex, 1), _caretIndex);
+                var next = NextCharIndex(_caretIndex);
+                SetTextInternal(Text.Remove(_caretIndex, next - _caretIndex), _caretIndex);
             }
+        }
+
+        // 以 UTF-16 偏移为坐标，按码点前后移动一个位置（代理对算一步）。
+        private int NextCharIndex(int index)
+        {
+            var text = Text;
+            if (index < text.Length && char.IsHighSurrogate(text[index]) &&
+                index + 1 < text.Length && char.IsLowSurrogate(text[index + 1]))
+            {
+                return index + 2;
+            }
+
+            return Math.Min(text.Length, index + 1);
+        }
+
+        private int PrevCharIndex(int index)
+        {
+            var text = Text;
+            if (index >= 2 && char.IsLowSurrogate(text[index - 1]) && char.IsHighSurrogate(text[index - 2]))
+            {
+                return index - 2;
+            }
+
+            return Math.Max(0, index - 1);
         }
 
         private void ReplaceSelection(string replacement)
@@ -1172,7 +903,6 @@ public sealed class JsonConfigEditor : Grid
                     _tokens.Clear();
                     _tokens.AddRange(tokens);
                     BuildLineTokenIndex();
-                    Array.Clear(_lineFormattedTextCache);
                     InvalidateVisual();
                 });
             }, token);
@@ -1181,15 +911,6 @@ public sealed class JsonConfigEditor : Grid
         private void BuildLines()
         {
             JsonSyntax.BuildLines(Text, _lines, out _longestLineLength);
-
-            if (_lineFormattedTextCache.Length != _lines.Count)
-            {
-                _lineFormattedTextCache = new FormattedText?[_lines.Count];
-            }
-            else
-            {
-                Array.Clear(_lineFormattedTextCache);
-            }
         }
 
         private void BuildTokens()
@@ -1201,373 +922,5 @@ public sealed class JsonConfigEditor : Grid
         {
             JsonSyntax.BuildLineTokenIndex(_lines, _tokens, _lineFirstTokenIndex);
         }
-
-        private void DrawText(DrawingContext context, double lineNumberWidth)
-        {
-            var text = Text;
-            var lineStartX = lineNumberWidth + HorizontalPadding - HorizontalOffset;
-            var (firstVisibleLine, lastVisibleLine) = GetVisibleLineRange();
-            var viewportStartX = lineNumberWidth + HorizontalPadding;
-            var firstVisibleCol = (int)Math.Max(0, HorizontalOffset / _charWidth) - LineSliceOverscan;
-            if (firstVisibleCol < 0) firstVisibleCol = 0;
-            var lastVisibleCol = firstVisibleCol + (int)Math.Ceiling(Bounds.Width / _charWidth) + LineSliceOverscan * 2;
-
-            for (var lineIndex = firstVisibleLine; lineIndex <= lastVisibleLine; lineIndex++)
-            {
-                var line = _lines[lineIndex];
-                var y = VerticalPadding + lineIndex * _lineHeight - VerticalOffset;
-                var lineLength = line.EndOffset - line.StartOffset;
-                if (lineLength <= 0)
-                {
-                    continue;
-                }
-
-                if (lineLength > LineSliceThreshold)
-                {
-                    // 用显示列宽（CJK 记 2 列）定位可见切片，保持与 GetExtent 的列宽口径一致。
-                    var col = 0;
-                    var p = line.StartOffset;
-                    for (; p < line.EndOffset; p++)
-                    {
-                        var w = JsonSyntax.DisplayWidth(text[p]);
-                        if (col + w > firstVisibleCol) break;
-                        col += w;
-                    }
-
-                    var sliceStart = p;
-                    var sliceStartCol = col;
-                    for (; p < line.EndOffset && col < lastVisibleCol; p++)
-                    {
-                        col += JsonSyntax.DisplayWidth(text[p]);
-                    }
-
-                    var sliceEnd = p;
-                    if (sliceEnd <= sliceStart)
-                    {
-                        continue;
-                    }
-
-                    var sliceText = text[sliceStart..sliceEnd];
-                    var sliceFormatted = new FormattedText(
-                        sliceText,
-                        CultureInfo.CurrentCulture,
-                        FlowDirection.LeftToRight,
-                        EditorTypeface,
-                        _fontSize,
-                        GetTextBrush());
-
-                    foreach (var token in GetLineTokens(lineIndex))
-                    {
-                        var tokenEnd = token.Start + token.Length;
-                        if (tokenEnd <= sliceStart) continue;
-                        if (token.Start >= sliceEnd) break;
-                        var paintStart = Math.Max(token.Start, sliceStart) - sliceStart;
-                        var paintEnd = Math.Min(tokenEnd, sliceEnd) - sliceStart;
-                        sliceFormatted.SetForegroundBrush(GetBrush(token.Kind), paintStart, paintEnd - paintStart);
-                    }
-
-                    context.DrawText(sliceFormatted, new Point(viewportStartX + sliceStartCol * _charWidth - HorizontalOffset, y + _baseline - sliceFormatted.Baseline));
-                    continue;
-                }
-
-                var formatted = _lineFormattedTextCache[lineIndex];
-                if (formatted == null)
-                {
-                    var lineText = text[line.StartOffset..line.EndOffset];
-                    formatted = new FormattedText(
-                        lineText,
-                        CultureInfo.CurrentCulture,
-                        FlowDirection.LeftToRight,
-                        EditorTypeface,
-                        _fontSize,
-                        GetTextBrush());
-
-                    foreach (var token in GetLineTokens(lineIndex))
-                    {
-                        // 词法 token 可能跨行(例如删掉闭合引号后字符串延伸到后续行),
-                        // 需把绘制区间裁剪到本行范围内,否则 startIndex/count 会越界。
-                        var paintStart = Math.Max(token.Start, line.StartOffset) - line.StartOffset;
-                        var paintEnd = Math.Min(token.Start + token.Length, line.EndOffset) - line.StartOffset;
-                        if (paintEnd <= paintStart) continue;
-                        formatted.SetForegroundBrush(GetBrush(token.Kind), paintStart, paintEnd - paintStart);
-                    }
-
-                    _lineFormattedTextCache[lineIndex] = formatted;
-                }
-
-                context.DrawText(formatted, new Point(lineStartX, y + _baseline - formatted.Baseline));
-            }
-        }
-
-        private void DrawLineNumbers(DrawingContext context, double lineNumberWidth)
-        {
-            var (firstVisibleLine, lastVisibleLine) = GetVisibleLineRange();
-            var digits = _lines.Count.ToString().Length;
-
-            for (var lineIndex = firstVisibleLine; lineIndex <= lastVisibleLine; lineIndex++)
-            {
-                var y = VerticalPadding + lineIndex * _lineHeight - VerticalOffset;
-                var lineText = (lineIndex + 1).ToString().PadLeft(digits);
-                var formatted = new FormattedText(
-                    lineText,
-                    CultureInfo.CurrentCulture,
-                    FlowDirection.LeftToRight,
-                    EditorTypeface,
-                    _fontSize,
-                    GetLineNumberBrush());
-                context.DrawText(formatted, new Point(lineNumberWidth - formatted.Width - LineNumberGap, y));
-            }
-        }
-
-        private void AdjustFontSize(double delta)
-        {
-            SetFontSize(_fontSize + delta);
-        }
-
-        private void DrawSearchMatches(DrawingContext context, double lineNumberWidth)
-        {
-            if (_owner._searchMatches.Count == 0 || _lines.Count == 0)
-            {
-                return;
-            }
-
-            var (firstVisibleLine, lastVisibleLine) = GetVisibleLineRange();
-            if (lastVisibleLine < firstVisibleLine)
-            {
-                return;
-            }
-
-            var visibleStart = _lines[firstVisibleLine].StartOffset;
-            var visibleEnd = _lines[lastVisibleLine].EndOffset;
-
-            for (var i = 0; i < _owner._searchMatches.Count; i++)
-            {
-                var match = _owner._searchMatches[i];
-                if (match.Start >= visibleEnd)
-                {
-                    break;
-                }
-                if (match.Start + match.Length <= visibleStart)
-                {
-                    continue;
-                }
-
-                var isCurrent = i == _owner._currentSearchMatchIndex;
-                var brush = isCurrent ? GetCurrentSearchBrush() : GetSearchBrush();
-                DrawTextRangeHighlight(
-                    context,
-                    lineNumberWidth,
-                    match.Start,
-                    match.Start + match.Length,
-                    brush,
-                    isCurrent ? 2 : 0,
-                    isCurrent ? GetCurrentSearchOutlineBrush() : null);
-            }
-        }
-
-        private void DrawSelection(DrawingContext context, double lineNumberWidth)
-        {
-            if (!HasSelection)
-            {
-                return;
-            }
-
-            var (start, length) = GetSelectionRange();
-            DrawTextRangeHighlight(context, lineNumberWidth, start, start + length, GetSelectionBrush(), 0, null);
-        }
-
-        private void DrawTextRangeHighlight(
-            DrawingContext context,
-            double lineNumberWidth,
-            int start,
-            int end,
-            IBrush brush,
-            double inflate,
-            IPen? pen)
-        {
-            var lineStartX = lineNumberWidth + HorizontalPadding - HorizontalOffset;
-            var (firstVisibleLine, lastVisibleLine) = GetVisibleLineRange();
-
-            for (var lineIndex = firstVisibleLine; lineIndex <= lastVisibleLine; lineIndex++)
-            {
-                var line = _lines[lineIndex];
-                if (line.StartOffset >= end)
-                {
-                    break;
-                }
-                if (line.EndOffset < start)
-                {
-                    continue;
-                }
-
-                var segmentStart = Math.Max(start, line.StartOffset);
-                var segmentEnd = Math.Min(end, line.EndOffset);
-                if (segmentEnd < segmentStart)
-                {
-                    continue;
-                }
-
-                var startColumn = OffsetToDisplayColumn(line, segmentStart);
-                var endColumn = OffsetToDisplayColumn(line, segmentEnd);
-                if (segmentStart == segmentEnd && segmentEnd != end)
-                {
-                    endColumn++;
-                }
-
-                var rect = new Rect(
-                    lineStartX + startColumn * _charWidth,
-                    VerticalPadding + lineIndex * _lineHeight - VerticalOffset,
-                    Math.Max(2, (endColumn - startColumn) * _charWidth),
-                    _lineHeight).Inflate(inflate);
-                context.FillRectangle(brush, rect);
-                if (pen != null)
-                {
-                    context.DrawRectangle(pen, rect);
-                }
-            }
-        }
-
-        private void DrawCaret(DrawingContext context, double lineNumberWidth)
-        {
-            var (lineIndex, _) = GetLineAndColumn(_caretIndex);
-            var column = OffsetToDisplayColumn(_lines[lineIndex], _caretIndex);
-            var x = lineNumberWidth + HorizontalPadding + column * _charWidth - HorizontalOffset;
-            var y = VerticalPadding + lineIndex * _lineHeight - VerticalOffset;
-            context.FillRectangle(GetCaretBrush(), new Rect(x, y, 1.5, _lineHeight));
-        }
-
-        private void EnsureCaretVisible()
-        {
-            var lineNumberWidth = GetLineNumberColumnWidth();
-            var (lineIndex, _) = GetLineAndColumn(_caretIndex);
-            var column = OffsetToDisplayColumn(_lines[lineIndex], _caretIndex);
-            var caretX = lineNumberWidth + HorizontalPadding + column * _charWidth;
-            var caretY = VerticalPadding + lineIndex * _lineHeight;
-
-            if (caretX - HorizontalOffset > Bounds.Width - 20)
-            {
-                _owner._horizontalScrollBar.Value = caretX - Bounds.Width + 20;
-            }
-            else if (caretX - HorizontalOffset < lineNumberWidth + 4)
-            {
-                _owner._horizontalScrollBar.Value = Math.Max(0, caretX - lineNumberWidth - 4);
-            }
-
-            if (caretY - VerticalOffset > Bounds.Height - _lineHeight)
-            {
-                _owner._verticalScrollBar.Value = caretY - Bounds.Height + _lineHeight;
-            }
-            else if (caretY - VerticalOffset < 0)
-            {
-                _owner._verticalScrollBar.Value = Math.Max(0, caretY);
-            }
-        }
-
-        private int GetIndexFromPoint(Point point)
-        {
-            var lineNumberWidth = GetLineNumberColumnWidth();
-            var x = Math.Max(0, point.X + HorizontalOffset - lineNumberWidth - HorizontalPadding);
-            var y = Math.Max(0, point.Y + VerticalOffset - VerticalPadding);
-            var lineIndex = Math.Clamp((int)(y / _lineHeight), 0, _lines.Count - 1);
-            var targetColumn = Math.Max(0, (int)Math.Round(x / _charWidth, MidpointRounding.AwayFromZero));
-            return DisplayColumnToOffset(_lines[lineIndex], targetColumn);
-        }
-
-        private (int LineIndex, int Column) GetLineAndColumn(int index)
-        {
-            for (var i = 0; i < _lines.Count; i++)
-            {
-                var line = _lines[i];
-                if (index <= line.EndOffset)
-                {
-                    return (i, index - line.StartOffset);
-                }
-            }
-
-            var last = _lines[^1];
-            return (_lines.Count - 1, Math.Max(0, last.EndOffset - last.StartOffset));
-        }
-
-        // 将字符偏移换算成显示列（CJK/全角记 2 列），与渲染、extent 的列宽口径一致。
-        private int OffsetToDisplayColumn(JsonLine line, int offset)
-            => JsonSyntax.OffsetToDisplayColumn(Text, line, offset);
-
-        // 将显示列换算回字符偏移，落在宽字符中间时就近吸附到字符边界。
-        private int DisplayColumnToOffset(JsonLine line, int targetColumn)
-            => JsonSyntax.DisplayColumnToOffset(Text, line, targetColumn);
-
-        private IEnumerable<JsonToken> GetLineTokens(int lineIndex)
-        {
-            var endOffset = _lines[lineIndex].EndOffset;
-            var startIdx = _lineFirstTokenIndex[lineIndex];
-            for (var i = startIdx; i < _tokens.Count; i++)
-            {
-                var token = _tokens[i];
-                if (token.Start >= endOffset)
-                {
-                    yield break;
-                }
-
-                yield return token;
-            }
-        }
-
-        private double GetLineNumberColumnWidth()
-        {
-            EnsureMetrics();
-            var digits = Math.Max(2, _lines.Count.ToString().Length);
-            return 8 + digits * _charWidth + LineNumberGap + 8;
-        }
-
-        private int GetLongestLineLength()
-        {
-            return _longestLineLength;
-        }
-
-        private (int FirstVisibleLine, int LastVisibleLine) GetVisibleLineRange()
-        {
-            if (_lines.Count == 0)
-            {
-                return (0, -1);
-            }
-
-            var firstVisibleLine = Math.Max(0, (int)(VerticalOffset / _lineHeight));
-            var visibleLineCount = (int)Math.Ceiling(Bounds.Height / _lineHeight) + 1;
-            var lastVisibleLine = Math.Min(_lines.Count - 1, firstVisibleLine + visibleLineCount);
-            return (firstVisibleLine, lastVisibleLine);
-        }
-
-        private bool IsLightTheme => ActualThemeVariant == ThemeVariant.Light;
-
-        private IBrush GetBackgroundBrush() => IsLightTheme ? LightBackgroundBrush : DarkBackgroundBrush;
-
-        private IBrush GetLineNumberBackgroundBrush() => IsLightTheme ? LightLineNumberBackgroundBrush : DarkLineNumberBackgroundBrush;
-
-        private IBrush GetTextBrush() => IsLightTheme ? LightTextBrush : DarkTextBrush;
-
-        private IBrush GetLineNumberBrush() => IsLightTheme ? LightLineNumberBrush : DarkLineNumberBrush;
-
-        private IBrush GetSelectionBrush() => IsLightTheme ? LightSelectionBrush : DarkSelectionBrush;
-
-        private IBrush GetSearchBrush() => IsLightTheme ? LightSearchBrush : DarkSearchBrush;
-
-        private IBrush GetCurrentSearchBrush() => IsLightTheme ? LightCurrentSearchBrush : DarkCurrentSearchBrush;
-
-        private IPen GetCurrentSearchOutlineBrush()
-            => new Pen(IsLightTheme
-                ? new SolidColorBrush(Color.FromRgb(191, 101, 0))
-                : new SolidColorBrush(Color.FromRgb(255, 214, 102)));
-
-        private IBrush GetCaretBrush() => IsLightTheme ? LightCaretBrush : DarkCaretBrush;
-
-        private IBrush GetBrush(JsonTokenKind kind) => kind switch
-        {
-            JsonTokenKind.String => IsLightTheme ? LightStringBrush : DarkStringBrush,
-            JsonTokenKind.Property => IsLightTheme ? LightPropertyBrush : DarkPropertyBrush,
-            JsonTokenKind.Number => IsLightTheme ? LightNumberBrush : DarkNumberBrush,
-            JsonTokenKind.Keyword => IsLightTheme ? LightKeywordBrush : DarkKeywordBrush,
-            JsonTokenKind.Punctuation => IsLightTheme ? LightPunctuationBrush : DarkPunctuationBrush,
-            _ => GetTextBrush()
-        };
     }
 }

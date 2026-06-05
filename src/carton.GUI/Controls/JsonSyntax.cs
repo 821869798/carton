@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 
 namespace carton.GUI.Controls;
@@ -27,6 +28,8 @@ public static class JsonSyntax
     private static readonly string[] Keywords = { "true", "false", "null" };
 
     // CJK 及常见全角字符在等宽字体下约占两个西文字符宽度。
+    // 注意：参数是单个 UTF-16 char。对 BMP 平面足够；星平面字符（emoji、
+    // 扩展 CJK）由代理对组成，须用 RuneWidth/DisplayWidthAt 按码点判定。
     public static bool IsWideChar(char ch)
     {
         return ch >= 0x1100 &&
@@ -40,6 +43,42 @@ public static class JsonSyntax
     }
 
     public static int DisplayWidth(char ch) => IsWideChar(ch) ? 2 : 1;
+
+    // 按 Unicode 码点（scalar value）判定显示宽度。终端/编辑器通用约定：
+    // emoji 与星平面 CJK 记 2 列。组合记号等零宽情形较少见，这里从简不特判。
+    public static int RuneWidth(int scalar)
+    {
+        if (scalar <= 0xFFFF)
+        {
+            return IsWideChar((char)scalar) ? 2 : 1;
+        }
+
+        // 星平面：CJK 扩展 B-G、兼容补充，以及绝大多数 emoji/符号区均为宽字符。
+        if (scalar is >= 0x1F000 and <= 0x1FAFF ||   // 各类 emoji / 符号块
+            scalar is >= 0x20000 and <= 0x3FFFD)     // CJK 扩展 B 及以后
+        {
+            return 2;
+        }
+
+        // 其余星平面字符（古文字、音乐符号等）按 1 列处理，避免过度加宽。
+        return 1;
+    }
+
+    /// <summary>
+    /// 返回 text[index] 处一个码点的显示宽度及其占用的 UTF-16 char 数（代理对为 2）。
+    /// 偏移坐标仍是 UTF-16 索引，仅宽度/步进按码点计。
+    /// </summary>
+    public static (int Width, int CharCount) DisplayWidthAt(string text, int index)
+    {
+        var ch = text[index];
+        if (char.IsHighSurrogate(ch) && index + 1 < text.Length && char.IsLowSurrogate(text[index + 1]))
+        {
+            var scalar = char.ConvertToUtf32(ch, text[index + 1]);
+            return (RuneWidth(scalar), 2);
+        }
+
+        return (IsWideChar(ch) ? 2 : 1, 1);
+    }
 
     public static bool IsNumberChar(char ch)
     {
@@ -123,7 +162,9 @@ public static class JsonSyntax
             }
             else if (ch != '\r')
             {
-                lineColumns += DisplayWidth(ch);
+                var (w, charCount) = DisplayWidthAt(text, i);
+                lineColumns += w;
+                i += charCount - 1; // 跳过代理对的低位 char
             }
         }
 
@@ -216,34 +257,39 @@ public static class JsonSyntax
         }
     }
 
-    // 将字符偏移换算成显示列（CJK/全角记 2 列），与渲染、extent 的列宽口径一致。
+    // 将字符偏移换算成显示列（CJK/全角记 2 列、emoji 记 2 列），与渲染、extent 的列宽口径一致。
     public static int OffsetToDisplayColumn(string text, JsonLine line, int offset)
     {
         var end = Math.Clamp(offset, line.StartOffset, line.EndOffset);
         var columns = 0;
-        for (var i = line.StartOffset; i < end; i++)
+        var i = line.StartOffset;
+        while (i < end)
         {
-            columns += DisplayWidth(text[i]);
+            var (w, charCount) = DisplayWidthAt(text, i);
+            columns += w;
+            i += charCount;
         }
 
         return columns;
     }
 
-    // 将显示列换算回字符偏移，落在宽字符中间时就近吸附到字符边界。
+    // 将显示列换算回字符偏移，落在宽字符/emoji 中间时就近吸附到码点边界。
     public static int DisplayColumnToOffset(string text, JsonLine line, int targetColumn)
     {
         var columns = 0;
-        for (var i = line.StartOffset; i < line.EndOffset; i++)
+        var i = line.StartOffset;
+        while (i < line.EndOffset)
         {
-            var w = DisplayWidth(text[i]);
+            var (w, charCount) = DisplayWidthAt(text, i);
             if (columns + w > targetColumn)
             {
                 var distToStart = targetColumn - columns;
                 var distToEnd = columns + w - targetColumn;
-                return distToEnd < distToStart ? i + 1 : i;
+                return distToEnd < distToStart ? i + charCount : i;
             }
 
             columns += w;
+            i += charCount;
         }
 
         return line.EndOffset;
