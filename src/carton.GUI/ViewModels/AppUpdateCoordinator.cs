@@ -7,10 +7,12 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
 using Avalonia.Media;
+using carton.Core.Services;
 using carton.Core.Utilities;
 using carton.GUI.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using NuGet.Versioning;
 
 namespace carton.ViewModels;
 
@@ -218,6 +220,16 @@ public partial class AppUpdateCoordinator : ObservableObject
         AppUpdateStatus = GetString("Settings.Update.Status.Checking", "Checking for updates...");
         try
         {
+            if (TryApplyPendingRestartState())
+            {
+                if (showStartupDialogWhenAvailable)
+                {
+                    await ShowApplyDownloadedUpdatePromptAsync();
+                }
+
+                return;
+            }
+
             if (_requiresManualAppUpdate)
             {
                 var latestRelease = await _appUpdateService.GetLatestReleaseInfoAsync(checkedChannel);
@@ -235,7 +247,7 @@ public partial class AppUpdateCoordinator : ObservableObject
                 }
 
                 LatestAvailableVersion = latestRelease.Version;
-                if (IsRemoteVersionDifferent(latestRelease.Version, _appUpdateService.CurrentVersion))
+                if (IsRemoteVersionNewerThanCurrent(latestRelease.Version, _appUpdateService.CurrentVersion))
                 {
                     _pendingAppUpdate = null;
                     IsAppUpdateAvailable = true;
@@ -264,22 +276,19 @@ public partial class AppUpdateCoordinator : ObservableObject
 
             if (result == null)
             {
-                _pendingAppUpdate = null;
-                IsAppUpdateAvailable = false;
-                ResetDownloadProgress();
-                IsAppUpdateReadyToInstall = _appUpdateService.IsUpdatePendingRestart;
-                if (IsAppUpdateReadyToInstall)
+                if (!TryApplyPendingRestartState())
                 {
-                    LatestAvailableVersion = _appUpdateService.PendingRestartVersion ?? LatestAvailableVersion;
-                }
-                else if (!IsDownloadingAppUpdate)
-                {
-                    LatestAvailableVersion = string.Empty;
+                    _pendingAppUpdate = null;
+                    IsAppUpdateAvailable = false;
+                    ResetDownloadProgress();
+                    if (!IsDownloadingAppUpdate)
+                    {
+                        LatestAvailableVersion = string.Empty;
+                    }
+
+                    AppUpdateStatus = SetLatestAppUpdateStatus();
                 }
 
-                AppUpdateStatus = IsAppUpdateReadyToInstall
-                    ? GetString("Settings.Update.Status.Ready", "Update downloaded. Restart to apply.")
-                    : SetLatestAppUpdateStatus();
                 return;
             }
 
@@ -326,6 +335,12 @@ public partial class AppUpdateCoordinator : ObservableObject
         {
             AppUpdateStatus = GetString("Settings.Update.Status.ManualRequired", "New version available. Download it from the releases page.");
             await ShowManualUpdatePromptAsync();
+            return;
+        }
+
+        if (TryApplyPendingRestartState())
+        {
+            await ShowApplyDownloadedUpdatePromptAsync();
             return;
         }
 
@@ -682,6 +697,24 @@ public partial class AppUpdateCoordinator : ObservableObject
             : string.Empty;
     }
 
+    private bool TryApplyPendingRestartState()
+    {
+        if (_appUpdateService?.IsUpdatePendingRestart != true)
+        {
+            return false;
+        }
+
+        _pendingAppUpdate = null;
+        IsAppUpdateAvailable = false;
+        IsAppUpdateReadyToInstall = true;
+        LatestAvailableVersion = _appUpdateService.PendingRestartVersion ?? LatestAvailableVersion;
+        ResetDownloadProgress();
+        AppUpdateStatus = GetString("Settings.Update.Status.Ready", "Update downloaded. Restart to apply.");
+        OnPropertyChanged(nameof(LatestAvailableVersionDisplay));
+        OnPropertyChanged(nameof(ShouldShowAppUpdateStatus));
+        return true;
+    }
+
     private string SetLatestAppUpdateStatus()
     {
         _isLatestAppVersion = true;
@@ -786,8 +819,16 @@ public partial class AppUpdateCoordinator : ObservableObject
         return "release";
     }
 
-    private static bool IsRemoteVersionDifferent(string remoteVersion, string currentVersion)
+    private static bool IsRemoteVersionNewerThanCurrent(string remoteVersion, string currentVersion)
     {
-        return !string.Equals(remoteVersion, currentVersion, StringComparison.OrdinalIgnoreCase);
+        var normalizedRemoteVersion = GitHubReleaseLookup.NormalizeVersion(remoteVersion);
+        var normalizedCurrentVersion = GitHubReleaseLookup.NormalizeVersion(currentVersion);
+        if (!NuGetVersion.TryParse(normalizedRemoteVersion, out var parsedRemoteVersion) ||
+            !NuGetVersion.TryParse(normalizedCurrentVersion, out var parsedCurrentVersion))
+        {
+            return false;
+        }
+
+        return parsedRemoteVersion.CompareTo(parsedCurrentVersion) > 0;
     }
 }

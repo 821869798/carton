@@ -88,6 +88,9 @@ public sealed class AppUpdateService : IAppUpdateService
     private const string UnixPortableUpdaterExecutableName = "Carton_Updater";
     private const string DefaultWindowsMainExecutableName = "carton.exe";
     private const string DefaultUnixMainExecutableName = "carton";
+    private const string PendingDirectUpdateStateFileName = ".carton_pending_update";
+    private const string DirectUpdateKindInstaller = "installer";
+    private const string DirectUpdateKindPortable = "portable";
     private readonly string _repositoryUrl;
     private readonly Action<string>? _log;
     private readonly Lazy<IVelopackLocator> _locator;
@@ -138,6 +141,7 @@ public sealed class AppUpdateService : IAppUpdateService
         _supportsInAppUpdates = DetermineSupportsInAppUpdates();
         _supportsDirectInstallerUpdates = DetermineSupportsDirectInstallerUpdates();
         _supportsDirectPortableUpdates = DetermineSupportsDirectPortableUpdates();
+        RestorePendingDirectUpdateState();
     }
 
     public string CurrentVersion { get; }
@@ -201,7 +205,7 @@ public sealed class AppUpdateService : IAppUpdateService
             return null;
         }
 
-        if (!IsRemoteVersionDifferent(releaseInfo.Version))
+        if (!IsRemoteVersionNewerThanCurrent(releaseInfo.Version))
         {
             Log($"Current version ({CurrentVersion}) is up to date for channel={channel}");
             return null;
@@ -324,6 +328,7 @@ public sealed class AppUpdateService : IAppUpdateService
                     FileName = _downloadedInstallerPath,
                     UseShellExecute = true
                 });
+                ClearPendingDirectUpdateState();
                 Environment.Exit(0);
                 return;
             }
@@ -331,6 +336,7 @@ public sealed class AppUpdateService : IAppUpdateService
             if (!string.IsNullOrWhiteSpace(_downloadedPortableArchivePath) && File.Exists(_downloadedPortableArchivePath))
             {
                 StartPortableUpdater(_downloadedPortableArchivePath);
+                ClearPendingDirectUpdateState();
                 Environment.Exit(0);
                 return;
             }
@@ -559,9 +565,24 @@ public sealed class AppUpdateService : IAppUpdateService
             ? DefaultWindowsMainExecutableName
             : DefaultUnixMainExecutableName;
 
-    private bool IsRemoteVersionDifferent(string remoteVersion)
+    private bool IsRemoteVersionNewerThanCurrent(string remoteVersion)
+        => IsVersionNewerThanCurrent(remoteVersion);
+
+    private bool IsPendingDirectUpdateNewerThanCurrent(string updateVersion)
+        => IsVersionNewerThanCurrent(updateVersion);
+
+    private bool IsVersionNewerThanCurrent(string version)
     {
-        return !string.Equals(remoteVersion, CurrentVersion, StringComparison.OrdinalIgnoreCase);
+        var normalizedUpdateVersion = NormalizeVersion(version);
+        var normalizedCurrentVersion = NormalizeVersion(CurrentVersion);
+        if (!NuGetVersion.TryParse(normalizedUpdateVersion, out var pendingVersion) ||
+            !NuGetVersion.TryParse(normalizedCurrentVersion, out var currentVersion))
+        {
+            Log($"Failed to compare update version '{version}' with current version '{CurrentVersion}'.");
+            return false;
+        }
+
+        return pendingVersion.CompareTo(currentVersion) > 0;
     }
 
     private static (string owner, string repo) ParseRepository(string repositoryUrl)
@@ -701,6 +722,9 @@ public sealed class AppUpdateService : IAppUpdateService
 
         var fileName = Path.GetFileName(asset.Name);
         var tempPath = Path.Combine(Path.GetTempPath(), fileName);
+        var partialPath = tempPath + ".partial";
+        ClearDownloadedDirectUpdateState();
+        TryDeleteFile(partialPath);
         using var httpClient = new HttpClient
         {
             Timeout = Timeout.InfiniteTimeSpan
@@ -708,21 +732,33 @@ public sealed class AppUpdateService : IAppUpdateService
         httpClient.DefaultRequestHeaders.UserAgent.Add(
             new ProductInfoHeaderValue("carton", CartonApplicationInfo.Version));
         var downloader = new AcceleratedFileDownloader(httpClient, Log);
-        await downloader.DownloadFileAsync(
-            asset.DownloadUrl,
-            tempPath,
-            new Progress<FileDownloadProgress>(downloadProgress =>
-            {
-                var totalBytes = downloadProgress.TotalBytes > 0 ? downloadProgress.TotalBytes : asset.Size;
-                var percent = totalBytes > 0
-                    ? (int)Math.Clamp(downloadProgress.BytesReceived * 100 / totalBytes, 0, 100)
-                    : 0;
-                progress?.Report(new AppUpdateDownloadProgress(percent, downloadProgress.BytesReceived, totalBytes));
-            }),
-            cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await downloader.DownloadFileAsync(
+                asset.DownloadUrl,
+                partialPath,
+                new Progress<FileDownloadProgress>(downloadProgress =>
+                {
+                    var totalBytes = downloadProgress.TotalBytes > 0 ? downloadProgress.TotalBytes : asset.Size;
+                    var percent = totalBytes > 0
+                        ? (int)Math.Clamp(downloadProgress.BytesReceived * 100 / totalBytes, 0, 100)
+                        : 0;
+                    progress?.Report(new AppUpdateDownloadProgress(percent, downloadProgress.BytesReceived, totalBytes));
+                }),
+                cancellationToken).ConfigureAwait(false);
+
+            ValidateDownloadedDirectUpdateFile(partialPath, asset.Size);
+            File.Move(partialPath, tempPath, overwrite: true);
+        }
+        catch
+        {
+            TryDeleteFile(partialPath);
+            throw;
+        }
 
         _downloadedInstallerPath = tempPath;
         _downloadedInstallerVersion = update.Version;
+        PersistPendingDirectUpdateState(DirectUpdateKindInstaller, update.Version, tempPath);
     }
 
     private async Task DownloadPortableUpdateAsync(
@@ -738,6 +774,9 @@ public sealed class AppUpdateService : IAppUpdateService
 
         var fileName = Path.GetFileName(asset.Name);
         var tempPath = Path.Combine(Path.GetTempPath(), fileName);
+        var partialPath = tempPath + ".partial";
+        ClearDownloadedDirectUpdateState();
+        TryDeleteFile(partialPath);
         using var httpClient = new HttpClient
         {
             Timeout = Timeout.InfiniteTimeSpan
@@ -745,21 +784,167 @@ public sealed class AppUpdateService : IAppUpdateService
         httpClient.DefaultRequestHeaders.UserAgent.Add(
             new ProductInfoHeaderValue("carton", CartonApplicationInfo.Version));
         var downloader = new AcceleratedFileDownloader(httpClient, Log);
-        await downloader.DownloadFileAsync(
-            asset.DownloadUrl,
-            tempPath,
-            new Progress<FileDownloadProgress>(downloadProgress =>
-            {
-                var totalBytes = downloadProgress.TotalBytes > 0 ? downloadProgress.TotalBytes : asset.Size;
-                var percent = totalBytes > 0
-                    ? (int)Math.Clamp(downloadProgress.BytesReceived * 100 / totalBytes, 0, 100)
-                    : 0;
-                progress?.Report(new AppUpdateDownloadProgress(percent, downloadProgress.BytesReceived, totalBytes));
-            }),
-            cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await downloader.DownloadFileAsync(
+                asset.DownloadUrl,
+                partialPath,
+                new Progress<FileDownloadProgress>(downloadProgress =>
+                {
+                    var totalBytes = downloadProgress.TotalBytes > 0 ? downloadProgress.TotalBytes : asset.Size;
+                    var percent = totalBytes > 0
+                        ? (int)Math.Clamp(downloadProgress.BytesReceived * 100 / totalBytes, 0, 100)
+                        : 0;
+                    progress?.Report(new AppUpdateDownloadProgress(percent, downloadProgress.BytesReceived, totalBytes));
+                }),
+                cancellationToken).ConfigureAwait(false);
+
+            ValidateDownloadedDirectUpdateFile(partialPath, asset.Size);
+            File.Move(partialPath, tempPath, overwrite: true);
+        }
+        catch
+        {
+            TryDeleteFile(partialPath);
+            throw;
+        }
 
         _downloadedPortableArchivePath = tempPath;
         _downloadedPortableArchiveVersion = update.Version;
+        PersistPendingDirectUpdateState(DirectUpdateKindPortable, update.Version, tempPath);
+    }
+
+    private void RestorePendingDirectUpdateState()
+    {
+        var statePath = GetPendingDirectUpdateStatePath();
+        if (!File.Exists(statePath))
+        {
+            return;
+        }
+
+        try
+        {
+            var lines = File.ReadAllLines(statePath);
+            if (lines.Length < 3)
+            {
+                ClearPendingDirectUpdateState();
+                return;
+            }
+
+            var kind = lines[0].Trim();
+            var version = lines[1].Trim();
+            var updatePath = lines[2].Trim();
+            if (string.IsNullOrWhiteSpace(kind) ||
+                string.IsNullOrWhiteSpace(version) ||
+                string.IsNullOrWhiteSpace(updatePath) ||
+                !File.Exists(updatePath) ||
+                !IsPendingDirectUpdateNewerThanCurrent(version))
+            {
+                ClearPendingDirectUpdateState();
+                return;
+            }
+
+            if (string.Equals(kind, DirectUpdateKindInstaller, StringComparison.OrdinalIgnoreCase) &&
+                SupportsDirectInstallerUpdates)
+            {
+                _downloadedInstallerPath = updatePath;
+                _downloadedInstallerVersion = version;
+                return;
+            }
+
+            if (string.Equals(kind, DirectUpdateKindPortable, StringComparison.OrdinalIgnoreCase) &&
+                SupportsDirectPortableUpdates)
+            {
+                _downloadedPortableArchivePath = updatePath;
+                _downloadedPortableArchiveVersion = version;
+                return;
+            }
+
+            ClearPendingDirectUpdateState();
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to restore pending direct update state: {ex.Message}");
+            ClearPendingDirectUpdateState();
+        }
+    }
+
+    private void PersistPendingDirectUpdateState(string kind, string version, string updatePath)
+    {
+        try
+        {
+            var appDataPath = PathHelper.GetAppDataPath();
+            Directory.CreateDirectory(appDataPath);
+            File.WriteAllLines(
+                GetPendingDirectUpdateStatePath(),
+                [kind, version, updatePath]);
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to persist pending direct update state: {ex.Message}");
+        }
+    }
+
+    private void ClearDownloadedDirectUpdateState()
+    {
+        _downloadedInstallerPath = null;
+        _downloadedInstallerVersion = null;
+        _downloadedPortableArchivePath = null;
+        _downloadedPortableArchiveVersion = null;
+        ClearPendingDirectUpdateState();
+    }
+
+    private static void ValidateDownloadedDirectUpdateFile(string path, long expectedSize)
+    {
+        var fileInfo = new FileInfo(path);
+        if (!fileInfo.Exists)
+        {
+            throw new FileNotFoundException("Downloaded update file was not found.", path);
+        }
+
+        if (fileInfo.Length <= 0)
+        {
+            throw new IOException($"Downloaded update file is empty: {path}");
+        }
+
+        if (expectedSize > 0 && fileInfo.Length != expectedSize)
+        {
+            throw new IOException(
+                $"Downloaded update file size mismatch: expected {expectedSize} bytes, got {fileInfo.Length} bytes.");
+        }
+    }
+
+    private void ClearPendingDirectUpdateState()
+    {
+        try
+        {
+            var statePath = GetPendingDirectUpdateStatePath();
+            if (File.Exists(statePath))
+            {
+                File.Delete(statePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to clear pending direct update state: {ex.Message}");
+        }
+    }
+
+    private static string GetPendingDirectUpdateStatePath()
+        => Path.Combine(PathHelper.GetAppDataPath(), PendingDirectUpdateStateFileName);
+
+    private void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to delete file '{path}': {ex.Message}");
+        }
     }
 
     private static void StartPortableUpdater(string archivePath)
