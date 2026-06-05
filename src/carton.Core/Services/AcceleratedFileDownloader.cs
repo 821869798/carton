@@ -138,7 +138,7 @@ public sealed class AcceleratedFileDownloader
             }
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested &&
-                                   IsDownloaderNoDataTimeout(ex, _options.NoDataTimeout))
+                                   IsDownloaderNoDataTimeout(ex))
         {
             throw new DownloadStalledException(_options.NoDataTimeout, ex);
         }
@@ -215,7 +215,7 @@ public sealed class AcceleratedFileDownloader
             : string.Join(" ", userAgent.Select(value => value.ToString()));
     }
 
-    private static void AddRequestHeader(RequestConfiguration request, string name, IEnumerable<string> values)
+    private void AddRequestHeader(RequestConfiguration request, string name, IEnumerable<string> values)
     {
         var value = string.Join(", ", values);
         if (string.IsNullOrWhiteSpace(value))
@@ -244,8 +244,9 @@ public sealed class AcceleratedFileDownloader
         {
             request.Headers[name] = value;
         }
-        catch
+        catch (Exception ex)
         {
+            _diagnosticLog?.Invoke($"Skipped download request header '{name}': {ex.Message}");
         }
     }
 
@@ -269,7 +270,7 @@ public sealed class AcceleratedFileDownloader
 
         if (completion.Error != null)
         {
-            if (IsDownloaderNoDataTimeout(completion.Error, _options.NoDataTimeout))
+            if (IsDownloaderNoDataTimeout(completion.Error))
             {
                 throw new DownloadStalledException(_options.NoDataTimeout, completion.Error);
             }
@@ -340,9 +341,8 @@ public sealed class AcceleratedFileDownloader
         }
     }
 
-    private static bool IsDownloaderNoDataTimeout(Exception exception, TimeSpan timeout)
+    private static bool IsDownloaderNoDataTimeout(Exception exception)
     {
-        var timeoutMilliseconds = (int)Math.Clamp(timeout.TotalMilliseconds, 1, int.MaxValue);
         for (var current = exception; current != null; current = current.InnerException)
         {
             if (current is TimeoutException or TaskCanceledException)
@@ -351,8 +351,7 @@ public sealed class AcceleratedFileDownloader
             }
 
             if (current.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
-                current.Message.Contains("timed out", StringComparison.OrdinalIgnoreCase) ||
-                current.Message.Contains(timeoutMilliseconds.ToString(), StringComparison.OrdinalIgnoreCase))
+                current.Message.Contains("timed out", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
