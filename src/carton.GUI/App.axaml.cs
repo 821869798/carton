@@ -37,6 +37,8 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        GlobalExceptionHandler.RegisterDispatcher();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             DisableAvaloniaDataAnnotationValidation();

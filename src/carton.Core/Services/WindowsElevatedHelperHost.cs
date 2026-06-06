@@ -628,7 +628,19 @@ public static class WindowsElevatedHelperHost
             }
             catch (Exception ex)
             {
-                await WriteTextAsync(context.Response, HttpStatusCode.InternalServerError, ex.Message);
+                try
+                {
+                    await WriteTextAsync(context.Response, HttpStatusCode.InternalServerError, ex.Message);
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+                catch (HttpListenerException)
+                {
+                }
+                catch (InvalidOperationException)
+                {
+                }
             }
         }
 
@@ -847,7 +859,7 @@ public static class WindowsElevatedHelperHost
         }
         finally
         {
-            response.Close();
+            TryCloseResponse(response);
         }
     }
 
@@ -863,7 +875,7 @@ public static class WindowsElevatedHelperHost
         }
         finally
         {
-            response.Close();
+            TryCloseResponse(response);
         }
     }
 
@@ -882,7 +894,24 @@ public static class WindowsElevatedHelperHost
         }
         finally
         {
+            TryCloseResponse(response);
+        }
+    }
+
+    private static void TryCloseResponse(HttpListenerResponse response)
+    {
+        try
+        {
             response.Close();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (HttpListenerException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
         }
     }
 

@@ -15,6 +15,8 @@ sealed class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        GlobalExceptionHandler.Register();
+
         LaunchOptions = AppLaunchOptions.Parse(args);
 
         var velopackApp = VelopackApp.Build()

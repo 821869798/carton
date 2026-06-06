@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -53,7 +54,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
     private string _apiAddress => HttpClientFactory.LocalApiAddress;
     private int _apiPort => HttpClientFactory.LocalApiPort;
     private bool _disposed;
-    private readonly List<string> _errorOutput = new();
+    private readonly ConcurrentQueue<string> _errorOutput = new();
     private int? _elevatedPid;
     private string? _elevatedLogPath;
     private CancellationTokenSource? _elevatedLogCts;
@@ -209,7 +210,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
                 }
             }
 
-            _process = new Process
+            var process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
@@ -225,48 +226,78 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
                     StandardErrorEncoding = Encoding.UTF8
                 }
             };
-            ApplyLinuxLibrarySearchPath(_process.StartInfo);
+            _process = process;
+            ApplyLinuxLibrarySearchPath(process.StartInfo);
 
-            _process.OutputDataReceived += (_, e) =>
+            process.OutputDataReceived += (_, e) =>
             {
-                if (!string.IsNullOrEmpty(e.Data))
+                // Process redirection / exit callbacks run on thread-pool threads.
+                // Any exception escaping here would terminate the whole app via
+                // fail-fast (STATUS_STACK_BUFFER_OVERRUN / 0xC0000409) — the dialog
+                // users see as "stack-based buffer overrun". Never let one escape.
+                try
                 {
-                    LogKernel(e.Data);
-                }
-            };
-
-            _process.ErrorDataReceived += (_, e) =>
-            {
-                if (!string.IsNullOrEmpty(e.Data))
-                {
-                    _errorOutput.Add(e.Data);
-                    LogKernel($"[ERROR] {e.Data}");
-                }
-            };
-
-            _process.Exited += (_, _) =>
-            {
-                var exitCode = _process.ExitCode;
-                if (_state.Status == ServiceStatus.Running || _state.Status == ServiceStatus.Starting)
-                {
-                    var errorMsg = $"sing-box exited with code {exitCode}";
-                    if (_errorOutput.Count > 0)
+                    if (!string.IsNullOrEmpty(e.Data))
                     {
-                        errorMsg += $": {string.Join("\n", _errorOutput)}";
+                        LogKernel(e.Data);
                     }
-                    LogManager($"[ERROR] {errorMsg}");
-                    SetError(errorMsg);
+                }
+                catch (Exception ex)
+                {
+                    TryLogCallbackFailure("OutputDataReceived", ex);
                 }
             };
 
-            _process.EnableRaisingEvents = true;
+            process.ErrorDataReceived += (_, e) =>
+            {
+                try
+                {
+                    if (!string.IsNullOrEmpty(e.Data))
+                    {
+                        _errorOutput.Enqueue(e.Data);
+                        LogKernel($"[ERROR] {e.Data}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    TryLogCallbackFailure("ErrorDataReceived", ex);
+                }
+            };
+
+            process.Exited += (_, _) =>
+            {
+                try
+                {
+                    var exitCode = process.ExitCode;
+                    if (_state.Status == ServiceStatus.Running || _state.Status == ServiceStatus.Starting)
+                    {
+                        var errorMsg = $"sing-box exited with code {exitCode}";
+                        if (!_errorOutput.IsEmpty)
+                        {
+                            errorMsg += $": {string.Join("\n", _errorOutput)}";
+                        }
+                        LogManager($"[ERROR] {errorMsg}");
+                        SetError(errorMsg);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Swallow everything — including ObjectDisposedException /
+                    // InvalidOperationException raised when a concurrent Stop()
+                    // disposed the process (e.g. sing-box exiting on a Wi-Fi
+                    // switch while the user/app is also stopping it).
+                    TryLogCallbackFailure("Process.Exited", ex);
+                }
+            };
+
+            process.EnableRaisingEvents = true;
 
             LogManager("[INFO] Starting process...");
             var processStartTiming = Stopwatch.StartNew();
-            _process.Start();
-            TryAttachProcessToWindowsJob(_process);
-            _process.BeginOutputReadLine();
-            _process.BeginErrorReadLine();
+            process.Start();
+            TryAttachProcessToWindowsJob(process);
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
             LogTiming("start.process_started", processStartTiming.Elapsed);
 
             var readyTiming = Stopwatch.StartNew();
@@ -278,7 +309,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
                 {
                     var exitCode = _process.ExitCode;
                     var errorMsg = $"sing-box process exited unexpectedly with code {exitCode}";
-                    if (_errorOutput.Count > 0)
+                    if (!_errorOutput.IsEmpty)
                     {
                         errorMsg += $"\n{string.Join("\n", _errorOutput)}";
                     }
@@ -546,6 +577,23 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
     private void LogManager(string message)
     {
         ManagerLogReceived?.Invoke(this, message);
+    }
+
+    /// <summary>
+    /// Reports an exception that was swallowed inside a thread-pool callback
+    /// (process events) so it never escapes and fail-fasts the process.
+    /// The logging itself is guarded because event subscribers may throw too.
+    /// </summary>
+    private void TryLogCallbackFailure(string source, Exception ex)
+    {
+        try
+        {
+            ManagerLogReceived?.Invoke(this, $"[WARN] Ignored exception in {source} callback to avoid crashing the process: {ex.Message}");
+        }
+        catch
+        {
+            // Logging must never crash the process from a thread-pool callback.
+        }
     }
 
     [Conditional("DEBUG")]
