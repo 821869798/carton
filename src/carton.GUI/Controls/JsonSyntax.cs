@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 
 namespace carton.GUI.Controls;
@@ -130,13 +129,18 @@ public static class JsonSyntax
     }
 
     public static bool IsLikelyPropertyName(string text, int index)
+        => IsLikelyPropertyName(text, index, text.Length);
+
+    // 在 [index, end) 内判断后随的首个非空白字符是否为 ':'，不越过 end。
+    // 按行着色时传 end=行尾，避免未闭合字符串把后续行的 ':' 误判成属性名。
+    public static bool IsLikelyPropertyName(string text, int index, int end)
     {
-        while (index < text.Length && char.IsWhiteSpace(text[index]))
+        while (index < end && char.IsWhiteSpace(text[index]))
         {
             index++;
         }
 
-        return index < text.Length && text[index] == ':';
+        return index < end && text[index] == ':';
     }
 
     /// <summary>按行切分文本（兼容 \n 与 \r\n），并返回最长行的显示列宽（至少 1）。</summary>
@@ -248,7 +252,7 @@ public static class JsonSyntax
             {
                 var start = index;
                 index = ReadJsonStringWithin(text, index + 1, end);
-                tokens.Add(new JsonToken(start, index - start, IsLikelyPropertyName(text, index) ? JsonTokenKind.Property : JsonTokenKind.String));
+                tokens.Add(new JsonToken(start, index - start, IsLikelyPropertyName(text, index, end) ? JsonTokenKind.Property : JsonTokenKind.String));
                 continue;
             }
 
@@ -307,7 +311,7 @@ public static class JsonSyntax
 
         return index;
     }
-    /// </summary>
+
     public static void BuildLineTokenIndex(
         IReadOnlyList<JsonLine> lines,
         IReadOnlyList<JsonToken> tokens,

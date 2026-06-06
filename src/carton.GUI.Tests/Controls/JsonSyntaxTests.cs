@@ -379,4 +379,28 @@ public class JsonSyntaxTests
             Assert.Equal(whole[i], perLine[i]);
         }
     }
+
+    [Fact]
+    public void TokenizeLine_UnterminatedString_NotMisclassifiedByNextLineColon()
+    {
+        // 第 0 行是未闭合字符串，下一行以 ':' 开头。按行着色不得越过行尾去看那个 ':'，
+        // 否则会把字符串误判成属性名（Property）。应保持 String。
+        var text = "\"abc\n: 1";
+        var lines = Lines(text);
+        var buffer = new List<JsonToken>();
+        JsonSyntax.TokenizeLine(text, lines[0], buffer);
+        var str = buffer.Find(t => t.Kind is JsonTokenKind.String or JsonTokenKind.Property);
+        Assert.Equal(JsonTokenKind.String, str.Kind);
+    }
+
+    [Fact]
+    public void TokenizeLine_PropertyWithinLine_StillDetected()
+    {
+        // 同一行内闭合字符串后随 ':'，仍应判为 Property（确认行内判定不受上界限制误伤）。
+        var text = "\"port\": 1";
+        var lines = Lines(text);
+        var buffer = new List<JsonToken>();
+        JsonSyntax.TokenizeLine(text, lines[0], buffer);
+        Assert.Contains(buffer, t => t.Kind == JsonTokenKind.Property);
+    }
 }

@@ -1,9 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -319,17 +316,25 @@ public sealed partial class JsonConfigEditor
 
         // 返回字符偏移所在的行号。列定位一律走显示列（OffsetToDisplayColumn），
         // 不再暴露字符列，避免与渲染口径混用导致 CJK 行的光标偏移。
+        // _lines 的 EndOffset 升序，用二分找首个 EndOffset >= index 的行（大文件下 O(log n)）。
         private int GetLineIndexForOffset(int index)
         {
-            for (var i = 0; i < _lines.Count; i++)
+            var lo = 0;
+            var hi = _lines.Count - 1;
+            while (lo < hi)
             {
-                if (index <= _lines[i].EndOffset)
+                var mid = (lo + hi) >> 1;
+                if (_lines[mid].EndOffset < index)
                 {
-                    return i;
+                    lo = mid + 1;
+                }
+                else
+                {
+                    hi = mid;
                 }
             }
 
-            return _lines.Count - 1;
+            return lo;
         }
 
         // 将字符偏移换算成显示列（CJK/全角记 2 列），与渲染、extent 的列宽口径一致。

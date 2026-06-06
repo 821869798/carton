@@ -733,8 +733,14 @@ public sealed partial class JsonConfigEditor : Grid
         {
             var current = Text;
             var removed = removeLength > 0 ? current.Substring(offset, removeLength) : string.Empty;
-            if (removed.Length == 0 && insertText.Length == 0)
+            // 文本无实际变化（含「删除内容与插入内容相同」的替换）时不记历史、不清重做栈，
+            // 仅折叠选区并把光标移到插入末尾，与旧 SetTextInternal 的 string.Equals 守卫一致。
+            if (string.Equals(removed, insertText, StringComparison.Ordinal))
             {
+                _caretIndex = Math.Clamp(offset + insertText.Length, 0, current.Length);
+                _selectionAnchor = _caretIndex;
+                EnsureCaretVisible();
+                InvalidateVisual();
                 return;
             }
 
