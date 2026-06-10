@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using System.Text;
 
 namespace carton.Core.Utilities;
 
@@ -16,6 +17,21 @@ public static class SystemProxyHelper
     private const int INTERNET_OPTION_SETTINGS_CHANGED = 39;
     private const int INTERNET_OPTION_REFRESH = 37;
     private const string ProxySessionMarkerFileName = "system-proxy-session.marker";
+    private const string WindowsProxyBypass =
+        "localhost;127.*;192.168.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.20.*;172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;172.28.*;172.29.*;172.30.*;172.31.*;<local>";
+    private const string LinuxKdeProxyBypass =
+        "localhost,.local,127.0.0.1/8,192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,::1";
+
+    private static readonly string[] LinuxGnomeProxyBypass =
+    [
+        "localhost",
+        ".local",
+        "127.0.0.1/8",
+        "192.168.0.0/16",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "::1"
+    ];
 
     private const string InternetSettingsKey =
         @"Software\Microsoft\Windows\CurrentVersion\Internet Settings";
@@ -108,6 +124,7 @@ public static class SystemProxyHelper
             {
                 key.SetValue("ProxyEnable", 1, RegistryValueKind.DWord);
                 key.SetValue("ProxyServer", $"{host}:{port}", RegistryValueKind.String);
+                key.SetValue("ProxyOverride", WindowsProxyBypass, RegistryValueKind.String);
             }
         }
         catch
@@ -170,6 +187,9 @@ public static class SystemProxyHelper
             RunCommand("gsettings", $"set org.gnome.system.proxy.http port {port}");
             RunCommand("gsettings", $"set org.gnome.system.proxy.https host '{host}'");
             RunCommand("gsettings", $"set org.gnome.system.proxy.https port {port}");
+            RunCommand("gsettings", $"set org.gnome.system.proxy.socks host '{host}'");
+            RunCommand("gsettings", $"set org.gnome.system.proxy.socks port {port}");
+            RunCommand("gsettings", $"set org.gnome.system.proxy ignore-hosts \"{FormatGSettingsStringList(LinuxGnomeProxyBypass)}\"");
         }
         catch
         {
@@ -198,15 +218,29 @@ public static class SystemProxyHelper
         try
         {
             var proxyValue = $"http://{host} {port}";
-            RunCommand(tool, "--file kioslaverc --group \"Proxy Settings\" --key ProxyType 1");
-            RunCommand(tool, $"--file kioslaverc --group \"Proxy Settings\" --key httpProxy \"{proxyValue}\"");
-            RunCommand(tool, $"--file kioslaverc --group \"Proxy Settings\" --key httpsProxy \"{proxyValue}\"");
+            var socksProxyValue = $"socks://{host}:{port}";
+            SetKdeProxyGroup(tool, "Proxy Settings", proxyValue, socksProxyValue);
+            SetKdeProxyGroup(tool, "Proxy", proxyValue, socksProxyValue);
             RunCommandIgnoreResult("kbuildsycoca6");
             RunCommandIgnoreResult("kbuildsycoca5");
         }
         catch
         {
         }
+    }
+
+    private static void SetKdeProxyGroup(
+        string tool,
+        string group,
+        string proxyValue,
+        string socksProxyValue)
+    {
+        RunCommand(tool, $"--file kioslaverc --group \"{group}\" --key ProxyType 1");
+        RunCommand(tool, $"--file kioslaverc --group \"{group}\" --key httpProxy \"{proxyValue}\"");
+        RunCommand(tool, $"--file kioslaverc --group \"{group}\" --key httpsProxy \"{proxyValue}\"");
+        RunCommand(tool, $"--file kioslaverc --group \"{group}\" --key socksProxy \"{socksProxyValue}\"");
+        RunCommand(tool, $"--file kioslaverc --group \"{group}\" --key NoProxyFor \"{LinuxKdeProxyBypass}\"");
+        RunCommand(tool, $"--file kioslaverc --group \"{group}\" --key UseSameProxy true");
     }
 
     private static void TryClearKdeProxy()
@@ -220,11 +254,48 @@ public static class SystemProxyHelper
         try
         {
             RunCommand(tool, "--file kioslaverc --group \"Proxy Settings\" --key ProxyType 0");
+            RunCommand(tool, "--file kioslaverc --group \"Proxy\" --key ProxyType 0");
             RunCommandIgnoreResult("kbuildsycoca6");
             RunCommandIgnoreResult("kbuildsycoca5");
         }
         catch
         {
+        }
+    }
+
+    private static string FormatGSettingsStringList(string[] values)
+    {
+        var builder = new StringBuilder(128);
+        builder.Append('[');
+
+        var first = true;
+        foreach (var value in values)
+        {
+            if (!first)
+            {
+                builder.Append(", ");
+            }
+
+            first = false;
+            builder.Append('\'');
+            AppendEscapedGSettingsStringValue(builder, value);
+            builder.Append('\'');
+        }
+
+        builder.Append(']');
+        return builder.ToString();
+    }
+
+    private static void AppendEscapedGSettingsStringValue(StringBuilder builder, string value)
+    {
+        foreach (var character in value)
+        {
+            if (character == '\'')
+            {
+                builder.Append('\\');
+            }
+
+            builder.Append(character);
         }
     }
 
