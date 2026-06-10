@@ -150,7 +150,15 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
         }
 
         var selectedSet = SelectedLogs.ToHashSet();
-        return Logs.Where(selectedSet.Contains).ToArray();
+        var result = new List<LogEntryViewModel>(selectedSet.Count);
+        for (int i = 0; i < Logs.Count; i++)
+        {
+            if (selectedSet.Contains(Logs[i]))
+            {
+                result.Add(Logs[i]);
+            }
+        }
+        return result.ToArray();
     }
 
     [RelayCommand]

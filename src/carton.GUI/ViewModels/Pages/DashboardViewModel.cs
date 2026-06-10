@@ -1821,10 +1821,17 @@ public partial class DashboardViewModel : PageViewModelBase
 
     private void ApplyClashModeOptions(IReadOnlyList<string>? modeList, string? currentMode)
     {
-        var modes = (modeList ?? Array.Empty<string>())
-            .Where(mode => !string.IsNullOrWhiteSpace(mode))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var modes = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var source = modeList ?? Array.Empty<string>();
+        for (int i = 0; i < source.Count; i++)
+        {
+            var mode = source[i];
+            if (!string.IsNullOrWhiteSpace(mode) && seen.Add(mode))
+            {
+                modes.Add(mode);
+            }
+        }
 
         if (modes.Count == 0 && !string.IsNullOrWhiteSpace(currentMode))
         {
@@ -2038,7 +2045,11 @@ public partial class DashboardViewModel : PageViewModelBase
                 return;
             }
 
-            var tasks = ConnectivityItems.Select(item => RefreshConnectivityItemAsync(client, item)).ToArray();
+            var tasks = new Task[ConnectivityItems.Count];
+            for (int i = 0; i < ConnectivityItems.Count; i++)
+            {
+                tasks[i] = RefreshConnectivityItemAsync(client, ConnectivityItems[i]);
+            }
             await Task.WhenAll(tasks);
         }
         finally

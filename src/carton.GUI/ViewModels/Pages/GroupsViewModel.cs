@@ -533,19 +533,32 @@ public partial class GroupsViewModel : PageViewModelBase
         }
 
         var connections = await _singBoxManager.GetConnectionsAsync();
-        var affectedConnections = connections
-            .Where(connection =>
-                connection.Chains.Any(chain => string.Equals(chain, groupTag, StringComparison.OrdinalIgnoreCase)) ||
-                string.Equals(connection.Outbound, groupTag, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var affectedConnections = new List<ConnectionInfo>();
+        for (int i = 0; i < connections.Count; i++)
+        {
+            var connection = connections[i];
+            bool hasMatchingChain = false;
+            for (int j = 0; j < connection.Chains.Count; j++)
+            {
+                if (string.Equals(connection.Chains[j], groupTag, StringComparison.OrdinalIgnoreCase))
+                {
+                    hasMatchingChain = true;
+                    break;
+                }
+            }
+            if (hasMatchingChain || string.Equals(connection.Outbound, groupTag, StringComparison.OrdinalIgnoreCase))
+            {
+                affectedConnections.Add(connection);
+            }
+        }
 
-        if (affectedConnections.Length == 0)
+        if (affectedConnections.Count == 0)
         {
             return;
         }
 
-        var disconnectTasks = new Task[affectedConnections.Length];
-        for (var i = 0; i < affectedConnections.Length; i++)
+        var disconnectTasks = new Task[affectedConnections.Count];
+        for (var i = 0; i < affectedConnections.Count; i++)
         {
             disconnectTasks[i] = _singBoxManager.CloseConnectionAsync(affectedConnections[i].Id);
         }

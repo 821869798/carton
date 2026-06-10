@@ -43,10 +43,8 @@
 	<ItemGroup>
 		<RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="3" />
 		<Folder Include="Models\" />
-		<AvaloniaResource Include="Assets\**"
-						  Exclude="Assets\carton_icon_full.png" />
-		<AvaloniaResource Include="Resources\**"
-						  Exclude="Resources\Localization\Strings.en.axaml;Resources\Localization\Strings.zh-Hans.axaml" />
+		<AvaloniaResource Include="Assets\**" Exclude="Assets\carton_icon_full.png" />
+		<AvaloniaResource Include="Resources\**" Exclude="Resources\Localization\Strings.en.axaml;Resources\Localization\Strings.zh-Hans.axaml" />
 		<AvaloniaXaml Remove="Resources\Localization\Strings.en.axaml" />
 		<AvaloniaXaml Remove="Resources\Localization\Strings.zh-Hans.axaml" />
 		<AvaloniaXaml Include="Resources\Localization\Strings.en.axaml" />
@@ -58,9 +56,9 @@
 		<PackageReference Include="Avalonia.Desktop" Version="11.3.14" />
 		<PackageReference Include="FluentAvaloniaUI" Version="2.5.1" />
 		<PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.14" />
-		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-		<PackageReference Include="NuGet.Versioning" Version="7.0.3" />
-		<PackageReference Include="Velopack" Version="0.0.1589-ga2c5a97" />
+		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+		<PackageReference Include="NuGet.Versioning" Version="7.3.1" />
+		<PackageReference Include="Velopack" Version="1.2.0" />
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(Configuration)' == 'Debug' and '$(EnableAvaloniaDiagnostics)' == 'true'">
@@ -71,19 +69,11 @@
 		<ProjectReference Include="..\carton.Core\carton.Core.csproj" />
 	</ItemGroup>
 
-	<Target Name="CopyEnableLoopbackToolToOutput"
-	        AfterTargets="Build"
-	        Condition="Exists('$(EnableLoopbackToolPath)') and '$([MSBuild]::IsOSPlatform(Windows))' == 'true'">
-		<Copy SourceFiles="$(EnableLoopbackToolPath)"
-		      DestinationFolder="$(OutDir)"
-		      SkipUnchangedFiles="true" />
+	<Target Name="CopyEnableLoopbackToolToOutput" AfterTargets="Build" Condition="Exists('$(EnableLoopbackToolPath)') and '$([MSBuild]::IsOSPlatform(Windows))' == 'true'">
+		<Copy SourceFiles="$(EnableLoopbackToolPath)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
 	</Target>
 
-	<Target Name="CopyEnableLoopbackToolToPublish"
-	        AfterTargets="Publish"
-	        Condition="Exists('$(EnableLoopbackToolPath)') and '$(RuntimeIdentifier)' != '' and $([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-'))">
-		<Copy SourceFiles="$(EnableLoopbackToolPath)"
-		      DestinationFolder="$(PublishDir)"
-		      SkipUnchangedFiles="true" />
+	<Target Name="CopyEnableLoopbackToolToPublish" AfterTargets="Publish" Condition="Exists('$(EnableLoopbackToolPath)') and '$(RuntimeIdentifier)' != '' and $([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-'))">
+		<Copy SourceFiles="$(EnableLoopbackToolPath)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
 	</Target>
 </Project>
