@@ -406,7 +406,7 @@ jobs:
       - name: Create or update GitHub release
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.metadata.outputs.tag }}
           REPO: ${{ github.repository }}
           RELEASE_NAME: ${{ needs.metadata.outputs.release_name }}
@@ -429,7 +429,7 @@ jobs:
       - name: Clear existing release assets
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.metadata.outputs.tag }}
           REPO: ${{ github.repository }}
         run: |
@@ -443,7 +443,7 @@ jobs:
       - name: Upload release assets
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.metadata.outputs.tag }}
           REPO: ${{ github.repository }}
         run: |
@@ -469,7 +469,7 @@ jobs:
         id: changelog
         uses: mikepenz/release-changelog-builder-action@v6.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           mode: COMMIT
           toTag: ${{ needs.metadata.outputs.tag }}
@@ -478,7 +478,7 @@ jobs:
       - name: Update release notes
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.metadata.outputs.tag }}
           REPO: ${{ github.repository }}
           VERSION: ${{ needs.metadata.outputs.version }}
