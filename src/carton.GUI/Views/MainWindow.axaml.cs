@@ -213,6 +213,12 @@ public partial class MainWindow : Window
         _windowStateService.SaveMainWindowState(state, NextWindowPlacementSequence());
     }
 
+    private void DeleteWindowPlacement()
+    {
+        _deferredWindowPlacementSaveVersion++;
+        _windowStateService.DeleteMainWindowState(NextWindowPlacementSequence());
+    }
+
     // Monotonic, UI-thread-only counter that orders saves; never returns 0 (which means
     // "unordered" to the service). Both the deferred background save and the synchronous
     // close save stamp their writes with it so a slower older write is dropped.
@@ -299,15 +305,20 @@ public partial class MainWindow : Window
             // Snapshot the placement on the UI thread (touches Position/ClientSize/Screens),
             // then hand the disk write off to a background thread so a slow/contended disk
             // never stalls rendering.
+            var sequence = NextWindowPlacementSequence();
             var state = await Dispatcher.UIThread.InvokeAsync(() =>
                 version == _deferredWindowPlacementSaveVersion ? CreatePlacementForDeferredSave() : null);
 
             if (state != null)
             {
+                if (version != _deferredWindowPlacementSaveVersion)
+                {
+                    return;
+                }
+
                 // Write off the UI thread; the sequence makes the service drop this save if a
                 // newer one (background or the synchronous close save) has already landed, so a
                 // slow older write can never overwrite a newer one regardless of finish order.
-                var sequence = NextWindowPlacementSequence();
                 await Task.Run(() => _windowStateService.SaveMainWindowState(state, sequence));
             }
         }
@@ -479,7 +490,14 @@ public partial class MainWindow : Window
 
         if (e.PropertyName == nameof(MainViewModel.SaveWindowPlacementEnabled))
         {
-            SaveWindowPlacement();
+            if (_viewModel?.SaveWindowPlacementEnabled == true)
+            {
+                SaveWindowPlacement();
+            }
+            else
+            {
+                DeleteWindowPlacement();
+            }
         }
     }
 

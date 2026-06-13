@@ -10,6 +10,7 @@ public interface IWindowStateService
 {
     MainWindowState? LoadMainWindowState();
     void SaveMainWindowState(MainWindowState state, long sequence = 0);
+    void DeleteMainWindowState(long sequence = 0);
 }
 
 public sealed class WindowStateService : IWindowStateService
@@ -78,6 +79,34 @@ public sealed class WindowStateService : IWindowStateService
             catch (Exception)
             {
                 // Window placement is a best-effort local cache and should not block shutdown.
+            }
+        }
+    }
+
+    public void DeleteMainWindowState(long sequence = 0)
+    {
+        lock (_saveLock)
+        {
+            if (sequence != 0 && sequence < _lastWrittenSequence)
+            {
+                return;
+            }
+
+            try
+            {
+                if (File.Exists(_statePath))
+                {
+                    File.Delete(_statePath);
+                }
+            }
+            catch (Exception)
+            {
+                // Window placement is a best-effort local cache and should not block settings changes.
+            }
+
+            if (sequence != 0)
+            {
+                _lastWrittenSequence = sequence;
             }
         }
     }

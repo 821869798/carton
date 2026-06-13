@@ -163,7 +163,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     {
         var wasSuppressed = _suppressPreferenceUpdates;
         UpdatePreference(p => p.SaveWindowPlacement = value);
-        if (value && !wasSuppressed)
+        if (!wasSuppressed)
         {
             OnPropertyChanged(nameof(SaveWindowPlacementEnabled));
         }
@@ -1437,6 +1437,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         _localizationService?.SetLanguage(_currentPreferences.Language);
         _themeService?.ApplyAccent(UseSystemThemeAccent, SelectedThemeAccent);
         PersistPreferences();
+        OnPropertyChanged(nameof(SaveWindowPlacementEnabled));
         DataOperationStatus = GetString("Settings.Data.Reset.Success", "Settings reset");
     }
 
