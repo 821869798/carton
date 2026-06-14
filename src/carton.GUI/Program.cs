@@ -15,6 +15,11 @@ sealed class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        if (WindowsElevatedHelperHost.TryRunFromArgs(args))
+        {
+            return;
+        }
+
         GlobalExceptionHandler.Register();
 
         LaunchOptions = AppLaunchOptions.Parse(args);
@@ -23,11 +28,6 @@ sealed class Program
             .SetArgs(args);
 
         velopackApp.Run();
-
-        if (WindowsElevatedHelperHost.TryRunFromArgs(args))
-        {
-            return;
-        }
 
         const string instanceKey = "carton-app";
         if (!SingleInstanceService.TryClaim(instanceKey))
