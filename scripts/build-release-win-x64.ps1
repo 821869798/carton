@@ -18,7 +18,8 @@ if ($Version -match "-beta" -or $Version -match "-rc" -or $Version -match "-prev
 
 $publishDirPortable = "$repoRoot\artifacts\publish\$rid-portable"
 $publishDirInstaller = "$repoRoot\artifacts\publish\$rid-installer"
-$publishDirUpdater = "$repoRoot\artifacts\publish\$rid-updater"
+$publishDirHelper = "$repoRoot\artifacts\publish\$rid-helper"
+$helperProject = "$repoRoot\src\carton.Helper"
 $packDir = "$repoRoot\artifacts\pack\$Channel"
 $includeKernelScript = "$repoRoot\scripts\include-singbox-kernel.ps1"
 $nsisBuilderScript = "$repoRoot\scripts\build-nsis-installer.ps1"
@@ -36,16 +37,28 @@ Set-Location $repoRoot
 
 $env:DOTNET_ROLL_FORWARD = "Major"
 
+if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+    throw "cargo not found. Install Rust toolchain before building carton-helper."
+}
+
+function Get-CargoTargetForRid([string]$Rid) {
+    switch ($Rid) {
+        "win-x64" { return "x86_64-pc-windows-msvc" }
+        "win-arm64" { return "aarch64-pc-windows-msvc" }
+        default { throw "Unsupported helper RID: $Rid" }
+    }
+}
+
 Write-Host "Cleaning up old artifacts..."
 if (Test-Path $publishDirPortable) { Remove-Item -Recurse -Force $publishDirPortable }
 if (Test-Path $publishDirInstaller) { Remove-Item -Recurse -Force $publishDirInstaller }
-if (Test-Path $publishDirUpdater) { Remove-Item -Recurse -Force $publishDirUpdater }
+if (Test-Path $publishDirHelper) { Remove-Item -Recurse -Force $publishDirHelper }
 if (Test-Path $packDir) { Remove-Item -Recurse -Force $packDir }
 if (Test-Path $kernelStageDir) { Remove-Item -Recurse -Force $kernelStageDir }
 
 New-Item -ItemType Directory -Path $publishDirPortable -Force | Out-Null
 New-Item -ItemType Directory -Path $publishDirInstaller -Force | Out-Null
-New-Item -ItemType Directory -Path $publishDirUpdater -Force | Out-Null
+New-Item -ItemType Directory -Path $publishDirHelper -Force | Out-Null
 New-Item -ItemType Directory -Path $packDir -Force | Out-Null
 New-Item -ItemType Directory -Path $kernelStageDir -Force | Out-Null
 
@@ -73,26 +86,23 @@ Write-Host "Preparing built-in sing-box runtime (single download)..."
 & $includeKernelScript -Rid $rid -Destination $kernelStageDir
 Copy-Item -Path "$kernelStageDir\*" -Destination $publishDirPortable -Recurse -Force
 
-Write-Host "Publishing Carton_Updater ($rid) for portable package..."
-dotnet publish src\carton.Updater\carton.Updater.csproj `
-    -c Release `
-    -r $rid `
-    -o $publishDirUpdater `
-    /p:PublishAot=true `
-    /p:SelfContained=true `
-    /p:StripSymbols=true `
-    /p:DebugSymbols=false `
-    /p:DebugType=None `
-    /p:InvariantGlobalization=true `
-    /p:IncludeNativeLibrariesForSelfExtract=true `
-    /p:EnableCompressionInSingleFile=true
-
+Write-Host "Publishing carton-helper ($rid) for Windows packages..."
+$cargoTarget = Get-CargoTargetForRid $rid
+if (Get-Command rustup -ErrorAction SilentlyContinue) {
+    rustup target add $cargoTarget
+}
+Push-Location $helperProject
+cargo build --release --target $cargoTarget
 if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
-    Write-Error "Updater publish failed."
+    Pop-Location
+    Write-Error "carton-helper publish failed."
     exit 1
 }
+Pop-Location
 
-Copy-Item -LiteralPath "$publishDirUpdater\Carton_Updater.exe" -Destination $publishDirPortable -Force
+Copy-Item -LiteralPath "$helperProject\target\$cargoTarget\release\carton-helper.exe" -Destination $publishDirHelper -Force
+
+Copy-Item -LiteralPath "$publishDirHelper\carton-helper.exe" -Destination $publishDirPortable -Force
 
 Write-Host "`n==== 2. Creating Portable Archive ===="
 # Remove .pdb files if any
@@ -136,6 +146,7 @@ if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
 }
 
 Copy-Item -Path "$kernelStageDir\*" -Destination $publishDirInstaller -Recurse -Force
+Copy-Item -LiteralPath "$publishDirHelper\carton-helper.exe" -Destination $publishDirInstaller -Force
 
 if (Test-Path "$publishDirInstaller\*.pdb") {
     Get-ChildItem -Path $publishDirInstaller -Filter '*.pdb' -Recurse | Remove-Item -Force

@@ -1,0 +1,30 @@
+[package]
+name = "carton-helper"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "carton-helper"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+serde_json = { version = "1.0", default-features = false, features = ["std"] }
+
+[target.'cfg(windows)'.dependencies]
+minreq = { version = "2.14", default-features = false }
+tiny_http = "0.12"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
+
+[target.'cfg(unix)'.dependencies]
+flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
+tar = { version = "0.4", default-features = false }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+panic = "abort"
+strip = true

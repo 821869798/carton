@@ -13,9 +13,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 APP_NAME="carton"
 GUI_PROJECT="${REPO_ROOT}/src/carton.GUI/carton.GUI.csproj"
-UPDATER_PROJECT="${REPO_ROOT}/src/carton.Updater/carton.Updater.csproj"
+HELPER_PROJECT="${REPO_ROOT}/src/carton.Helper"
 PUBLISH_DIR="${REPO_ROOT}/artifacts/publish/${RID}-portable"
-UPDATER_DIR="${REPO_ROOT}/artifacts/publish/${RID}-updater"
+HELPER_DIR="${REPO_ROOT}/artifacts/publish/${RID}-helper"
 PACK_DIR="${REPO_ROOT}/artifacts/pack/${RID}-portable"
 INCLUDE_KERNEL_SCRIPT="${SCRIPT_DIR}/include-singbox-kernel.sh"
 
@@ -112,7 +112,7 @@ parse_args() {
   esac
 
   PUBLISH_DIR="${REPO_ROOT}/artifacts/publish/${RID}-portable"
-  UPDATER_DIR="${REPO_ROOT}/artifacts/publish/${RID}-updater"
+  HELPER_DIR="${REPO_ROOT}/artifacts/publish/${RID}-helper"
   PACK_DIR="${REPO_ROOT}/artifacts/pack/${RID}-portable"
 }
 
@@ -164,9 +164,50 @@ publish_project() {
   dotnet publish "$project" "${props[@]}"
 }
 
+cargo_target_for_rid() {
+  case "$RID" in
+    linux-x64) printf '%s' "x86_64-unknown-linux-gnu" ;;
+    linux-arm64) printf '%s' "aarch64-unknown-linux-gnu" ;;
+    *)
+      echo "Unsupported helper RID: $RID" >&2
+      exit 1
+      ;;
+  esac
+}
+
+prepare_cargo_target() {
+  local target="$1"
+  if command -v rustup >/dev/null 2>&1; then
+    rustup target add "$target"
+  fi
+
+  if [[ "$target" == "aarch64-unknown-linux-gnu" ]]; then
+    export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="${CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER:-aarch64-linux-gnu-gcc}"
+  fi
+}
+
+publish_helper() {
+  local output="$1"
+  local target
+  target="$(cargo_target_for_rid)"
+  prepare_cargo_target "$target"
+
+  echo "Building carton-helper (${RID}, ${CONFIG})..."
+  cargo build --manifest-path "${HELPER_PROJECT}/Cargo.toml" --release --target "$target"
+
+  local helper_bin="${HELPER_PROJECT}/target/${target}/release/carton-helper"
+  if [[ ! -f "$helper_bin" ]]; then
+    echo "Built helper not found: $helper_bin" >&2
+    exit 1
+  fi
+
+  cp -f "$helper_bin" "$output/"
+}
+
 main() {
   parse_args "$@"
   require_command dotnet
+  require_command cargo
   require_command sed
   require_command tar
   require_command mktemp
@@ -176,8 +217,8 @@ main() {
     exit 1
   fi
 
-  if [[ ! -f "$UPDATER_PROJECT" ]]; then
-    echo "Updater project not found: $UPDATER_PROJECT" >&2
+  if [[ ! -f "${HELPER_PROJECT}/Cargo.toml" ]]; then
+    echo "Helper project not found: $HELPER_PROJECT" >&2
     exit 1
   fi
 
@@ -194,8 +235,8 @@ main() {
   echo "Repo Root:     $REPO_ROOT"
   echo "====================================="
 
-  rm -rf "$PUBLISH_DIR" "$UPDATER_DIR" "$PACK_DIR"
-  mkdir -p "$PUBLISH_DIR" "$UPDATER_DIR" "$PACK_DIR"
+  rm -rf "$PUBLISH_DIR" "$HELPER_DIR" "$PACK_DIR"
+  mkdir -p "$PUBLISH_DIR" "$HELPER_DIR" "$PACK_DIR"
 
   publish_project "$GUI_PROJECT" "$PUBLISH_DIR" "$APP_NAME portable app"
 
@@ -211,19 +252,18 @@ main() {
     bash "$INCLUDE_KERNEL_SCRIPT" "$RID" "$PUBLISH_DIR"
   fi
 
-  publish_project "$UPDATER_PROJECT" "$UPDATER_DIR" "Carton_Updater"
-
-  if [[ ! -f "${UPDATER_DIR}/Carton_Updater" ]]; then
-    echo "Published updater not found: ${UPDATER_DIR}/Carton_Updater" >&2
+  publish_helper "$HELPER_DIR"
+  if [[ ! -f "${HELPER_DIR}/carton-helper" ]]; then
+    echo "Published helper not found: ${HELPER_DIR}/carton-helper" >&2
     exit 1
   fi
 
-  cp -f "${UPDATER_DIR}/Carton_Updater" "$PUBLISH_DIR/"
-  chmod +x "${PUBLISH_DIR}/Carton_Updater"
+  cp -f "${HELPER_DIR}/carton-helper" "$PUBLISH_DIR/"
+  chmod +x "${PUBLISH_DIR}/carton-helper"
   [[ -f "${PUBLISH_DIR}/${APP_NAME}" ]] && chmod +x "${PUBLISH_DIR}/${APP_NAME}"
   [[ -f "${PUBLISH_DIR}/sing-box" ]] && chmod +x "${PUBLISH_DIR}/sing-box"
 
-  find "$PUBLISH_DIR" "$UPDATER_DIR" -type f -name '*.pdb' -delete
+  find "$PUBLISH_DIR" "$HELPER_DIR" -type f -name '*.pdb' -delete
 
   local stage_dir
   stage_dir="$(mktemp -d "${TMPDIR:-/tmp}/carton-portable-stage.XXXXXX")"

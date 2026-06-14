@@ -51,6 +51,10 @@ if (-not (Test-Path (Join-Path $publishDirResolved $MainExe))) {
     throw "Main executable not found in publish directory: $publishDirResolved\$MainExe"
 }
 
+if (-not (Test-Path (Join-Path $publishDirResolved "carton-helper.exe"))) {
+    throw "carton-helper.exe not found in publish directory: $publishDirResolved\carton-helper.exe"
+}
+
 $outputDirResolved = (Resolve-Path $OutputDir -ErrorAction SilentlyContinue)
 if (-not $outputDirResolved) {
     New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null

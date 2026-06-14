@@ -196,7 +196,7 @@ public partial class SingBoxManager
             return true;
         }
 
-        var executablePath = Environment.ProcessPath;
+        var executablePath = WindowsElevatedHelperTaskUtility.ResolveHelperExecutablePath(Environment.ProcessPath);
         if (string.IsNullOrWhiteSpace(executablePath))
         {
             LogManager("[ERROR] Unable to resolve current executable path for elevated helper");
@@ -541,7 +541,7 @@ public partial class SingBoxManager
             return false;
         }
 
-        var executablePath = Environment.ProcessPath;
+        var executablePath = WindowsElevatedHelperTaskUtility.ResolveHelperExecutablePath(Environment.ProcessPath);
         if (string.IsNullOrWhiteSpace(executablePath))
         {
             return false;

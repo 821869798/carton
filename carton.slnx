@@ -4,6 +4,5 @@
     <Project Path="src/carton.GUI/carton.GUI.csproj" />
     <Project Path="src/carton.GUI.Tests/carton.GUI.Tests.csproj" />
     <Project Path="src/carton.GUI.Benchmarks/carton.GUI.Benchmarks.csproj" />
-    <Project Path="src/carton.Updater/carton.Updater.csproj" />
   </Folder>
 </Solution>

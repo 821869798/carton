@@ -2,7 +2,6 @@ using System;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Fonts;
-using carton.Core.Services;
 using carton.GUI.Services;
 using Velopack;
 
@@ -15,11 +14,6 @@ sealed class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        if (WindowsElevatedHelperHost.TryRunFromArgs(args))
-        {
-            return;
-        }
-
         GlobalExceptionHandler.Register();
 
         LaunchOptions = AppLaunchOptions.Parse(args);

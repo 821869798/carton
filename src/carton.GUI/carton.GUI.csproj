@@ -15,6 +15,12 @@
 		<RootNamespace>carton</RootNamespace>
 		<ApplicationIcon>Assets\carton_icon.ico</ApplicationIcon>
 		<EnableLoopbackToolPath>Tools\Windows\EnableLoopback.exe</EnableLoopbackToolPath>
+		<BuildCartonHelperForDebug Condition="'$(BuildCartonHelperForDebug)' == ''">true</BuildCartonHelperForDebug>
+		<CartonHelperManifestPath>$(MSBuildProjectDirectory)\..\carton.Helper\Cargo.toml</CartonHelperManifestPath>
+		<CartonHelperCargoTarget Condition="'$(CartonHelperCargoTarget)' == '' and '$(RuntimeIdentifier)' == 'win-arm64'">aarch64-pc-windows-msvc</CartonHelperCargoTarget>
+		<CartonHelperCargoTarget Condition="'$(CartonHelperCargoTarget)' == '' and '$(PROCESSOR_ARCHITECTURE)' == 'ARM64'">aarch64-pc-windows-msvc</CartonHelperCargoTarget>
+		<CartonHelperCargoTarget Condition="'$(CartonHelperCargoTarget)' == ''">x86_64-pc-windows-msvc</CartonHelperCargoTarget>
+		<CartonHelperDebugExePath>$(MSBuildProjectDirectory)\..\carton.Helper\target\$(CartonHelperCargoTarget)\debug\carton-helper.exe</CartonHelperDebugExePath>
 		<CartonBuildMacro Condition="'$(CartonBuildMacro)' == ''"></CartonBuildMacro>
 		<DefineConstants>$(DefineConstants);$(CartonBuildMacro)</DefineConstants>
 	</PropertyGroup>
@@ -71,6 +77,12 @@
 
 	<Target Name="CopyEnableLoopbackToolToOutput" AfterTargets="Build" Condition="Exists('$(EnableLoopbackToolPath)') and '$([MSBuild]::IsOSPlatform(Windows))' == 'true'">
 		<Copy SourceFiles="$(EnableLoopbackToolPath)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+	</Target>
+
+	<Target Name="BuildAndCopyCartonHelperToDebugOutput" AfterTargets="Build" Condition="'$(BuildCartonHelperForDebug)' == 'true' and '$(Configuration)' == 'Debug' and '$(PublishAot)' != 'true' and '$([MSBuild]::IsOSPlatform(Windows))' == 'true' and Exists('$(CartonHelperManifestPath)')">
+		<Exec Command="cargo build --manifest-path &quot;$(CartonHelperManifestPath)&quot; --target $(CartonHelperCargoTarget)" ContinueOnError="WarnAndContinue" />
+		<Copy SourceFiles="$(CartonHelperDebugExePath)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('$(CartonHelperDebugExePath)')" />
+		<Warning Text="carton-helper.exe was not copied; Windows TUN elevated helper will be unavailable for this debug run. Install Rust/cargo or run: cargo build --manifest-path src\carton.Helper\Cargo.toml --target $(CartonHelperCargoTarget)" Condition="!Exists('$(CartonHelperDebugExePath)')" />
 	</Target>
 
 	<Target Name="CopyEnableLoopbackToolToPublish" AfterTargets="Publish" Condition="Exists('$(EnableLoopbackToolPath)') and '$(RuntimeIdentifier)' != '' and $([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-'))">

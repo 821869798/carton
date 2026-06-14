@@ -33,6 +33,7 @@ packages/
 project.lock.json
 project.fragment.lock.json
 artifacts/
+target/
 
 User-specific files
 *.rsuser

@@ -15,6 +15,7 @@ public readonly record struct WindowsElevatedHelperTaskRegistrationResult(
 public static class WindowsElevatedHelperTaskUtility
 {
     public const string HelperArg = "--carton-elevated-helper";
+    public const string HelperExecutableFileName = "carton-helper.exe";
     public const string RequestFileArg = "--request-file";
 
     private const string TaskNamePrefix = "Carton-ElevatedHelper";
@@ -26,6 +27,26 @@ public static class WindowsElevatedHelperTaskUtility
     public static string GetRequestFilePath(string workingDirectory)
     {
         return Path.Combine(workingDirectory, "cache", TaskRequestFileName);
+    }
+
+    public static string? ResolveHelperExecutablePath(string? appExecutablePath = null)
+    {
+        var executableDirectory = string.IsNullOrWhiteSpace(appExecutablePath)
+            ? null
+            : Path.GetDirectoryName(appExecutablePath);
+        var helperPath = TryResolveHelperExecutablePath(executableDirectory);
+        if (!string.IsNullOrWhiteSpace(helperPath))
+        {
+            return helperPath;
+        }
+
+        helperPath = TryResolveHelperExecutablePath(AppContext.BaseDirectory);
+        if (!string.IsNullOrWhiteSpace(helperPath))
+        {
+            return helperPath;
+        }
+
+        return null;
     }
 
     [SupportedOSPlatform("windows")]
@@ -57,11 +78,7 @@ public static class WindowsElevatedHelperTaskUtility
             return new WindowsElevatedHelperTaskRegistrationResult(false, false, "Windows only");
         }
 
-        executablePath ??= Environment.ProcessPath;
-        if (string.IsNullOrWhiteSpace(executablePath))
-        {
-            executablePath = Process.GetCurrentProcess().MainModule?.FileName;
-        }
+        executablePath = ResolveHelperExecutablePath(executablePath);
 
         if (string.IsNullOrWhiteSpace(executablePath))
         {
@@ -228,6 +245,24 @@ public static class WindowsElevatedHelperTaskUtility
     private static string GetTaskDefinitionPath(string workingDirectory)
     {
         return Path.Combine(workingDirectory, "cache", TaskDefinitionFileName);
+    }
+
+    private static string? TryResolveHelperExecutablePath(string? directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            return null;
+        }
+
+        try
+        {
+            var path = Path.Combine(directory, HelperExecutableFileName);
+            return File.Exists(path) ? path : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string BuildTaskDefinitionXml(string executablePath, string requestFilePath)

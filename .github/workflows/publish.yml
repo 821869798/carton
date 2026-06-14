@@ -148,6 +148,22 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust target
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.rid }}" in
+            win-x64) rust_target="x86_64-pc-windows-msvc" ;;
+            win-arm64) rust_target="aarch64-pc-windows-msvc" ;;
+            linux-x64) rust_target="x86_64-unknown-linux-gnu" ;;
+            linux-arm64) rust_target="aarch64-unknown-linux-gnu" ;;
+            *) echo "Unsupported RID: ${{ matrix.rid }}" >&2; exit 1 ;;
+          esac
+          rustup target add "$rust_target"
+
       - name: Install native dependencies (Linux)
         if: runner.os == 'Linux'
         shell: bash
@@ -174,29 +190,9 @@ jobs:
         run: |
           publish_dir_portable="$GITHUB_WORKSPACE/artifacts/publish/${{ matrix.rid }}-portable"
           publish_dir_appimage="$GITHUB_WORKSPACE/artifacts/publish/${{ matrix.rid }}-appimage"
-          publish_dir_updater="$GITHUB_WORKSPACE/artifacts/publish/${{ matrix.rid }}-updater"
-          mkdir -p "$publish_dir_portable" "$publish_dir_appimage" "$publish_dir_updater"
+          mkdir -p "$publish_dir_portable" "$publish_dir_appimage"
           bash scripts/test-publish-linux-aot.sh "${{ matrix.rid }}" Release "$publish_dir_portable"
           bash scripts/test-publish-linux-aot.sh "${{ matrix.rid }}" Release "$publish_dir_appimage" INSTALLER_BUILD
-          updater_publish_props=(
-            -c Release
-            -r ${{ matrix.rid }}
-            -o "$publish_dir_updater"
-            /p:PublishAot=true
-            /p:SelfContained=true
-            /p:StripSymbols=true
-            /p:DebugSymbols=false
-            /p:DebugType=None
-            /p:IncludeNativeLibrariesForSelfExtract=true
-            /p:EnableCompressionInSingleFile=true
-            /p:InvariantGlobalization=true
-          )
-          if [[ "${{ matrix.rid }}" == "linux-arm64" ]]; then
-            updater_publish_props+=(/p:ObjCopyName=aarch64-linux-gnu-objcopy)
-          fi
-          dotnet publish src/carton.Updater/carton.Updater.csproj "${updater_publish_props[@]}"
-          cp -f "$publish_dir_updater/Carton_Updater" "$publish_dir_portable/Carton_Updater"
-          chmod +x "$publish_dir_portable/Carton_Updater"
 
           echo "PUBLISH_DIR_PORTABLE=$publish_dir_portable" >> "$GITHUB_ENV"
           echo "PUBLISH_DIR_APPIMAGE=$publish_dir_appimage" >> "$GITHUB_ENV"
@@ -207,11 +203,11 @@ jobs:
         run: |
           $publishDirPortable = "$env:GITHUB_WORKSPACE\artifacts\publish\${{ matrix.rid }}-portable"
           $publishDirInstaller = "$env:GITHUB_WORKSPACE\artifacts\publish\${{ matrix.rid }}-installer"
-          $publishDirUpdater = "$env:GITHUB_WORKSPACE\artifacts\publish\${{ matrix.rid }}-updater"
+          $publishDirHelper = "$env:GITHUB_WORKSPACE\artifacts\publish\${{ matrix.rid }}-helper"
           $kernelStageDir = Join-Path $env:RUNNER_TEMP "singbox-runtime-${{ matrix.rid }}"
           New-Item -ItemType Directory -Path $publishDirPortable -Force | Out-Null
           New-Item -ItemType Directory -Path $publishDirInstaller -Force | Out-Null
-          New-Item -ItemType Directory -Path $publishDirUpdater -Force | Out-Null
+          New-Item -ItemType Directory -Path $publishDirHelper -Force | Out-Null
           if (Test-Path $kernelStageDir) {
             Remove-Item -Recurse -Force $kernelStageDir
           }
@@ -230,19 +226,14 @@ jobs:
             /p:EnableCompressionInSingleFile=true
           & "$env:GITHUB_WORKSPACE\scripts\include-singbox-kernel.ps1" -Rid '${{ matrix.rid }}' -Destination $kernelStageDir
           Copy-Item -Path (Join-Path $kernelStageDir '*') -Destination $publishDirPortable -Recurse -Force
-          dotnet publish src\carton.Updater\carton.Updater.csproj `
-            -c Release `
-            -r ${{ matrix.rid }} `
-            -o $publishDirUpdater `
-            /p:PublishAot=true `
-            /p:SelfContained=true `
-            /p:StripSymbols=true `
-            /p:DebugSymbols=false `
-            /p:DebugType=None `
-            /p:InvariantGlobalization=true `
-            /p:IncludeNativeLibrariesForSelfExtract=true `
-            /p:EnableCompressionInSingleFile=true
-          Copy-Item -LiteralPath (Join-Path $publishDirUpdater 'Carton_Updater.exe') -Destination $publishDirPortable -Force
+          switch ('${{ matrix.rid }}') {
+            'win-x64' { $cargoTarget = 'x86_64-pc-windows-msvc' }
+            'win-arm64' { $cargoTarget = 'aarch64-pc-windows-msvc' }
+            default { throw "Unsupported helper RID: ${{ matrix.rid }}" }
+          }
+          cargo build --manifest-path src\carton.Helper\Cargo.toml --release --target $cargoTarget
+          Copy-Item -LiteralPath "src\carton.Helper\target\$cargoTarget\release\carton-helper.exe" -Destination $publishDirHelper -Force
+          Copy-Item -LiteralPath (Join-Path $publishDirHelper 'carton-helper.exe') -Destination $publishDirPortable -Force
           dotnet publish src\carton.GUI\carton.GUI.csproj `
             -c Release `
             -r ${{ matrix.rid }} `
@@ -257,6 +248,7 @@ jobs:
             /p:IncludeNativeLibrariesForSelfExtract=true `
             /p:EnableCompressionInSingleFile=true
           Copy-Item -Path (Join-Path $kernelStageDir '*') -Destination $publishDirInstaller -Recurse -Force
+          Copy-Item -LiteralPath (Join-Path $publishDirHelper 'carton-helper.exe') -Destination $publishDirInstaller -Force
           "PUBLISH_DIR_PORTABLE=$publishDirPortable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "PUBLISH_DIR_INSTALLER=$publishDirInstaller" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 

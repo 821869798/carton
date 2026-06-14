@@ -180,6 +180,7 @@ main() {
   fi
 
   require_command dotnet
+  require_command cargo
 
   if [[ ! -x "$PUBLISH_SCRIPT" ]]; then
     chmod +x "$PUBLISH_SCRIPT"
@@ -202,6 +203,11 @@ main() {
 
   if [[ ! -f "${PUBLISH_OUTPUT}/${APP_BINARY_NAME}" ]]; then
     echo "Published binary not found: ${PUBLISH_OUTPUT}/${APP_BINARY_NAME}" >&2
+    exit 1
+  fi
+
+  if [[ ! -f "${PUBLISH_OUTPUT}/carton-helper" ]]; then
+    echo "Published helper not found: ${PUBLISH_OUTPUT}/carton-helper" >&2
     exit 1
   fi
 

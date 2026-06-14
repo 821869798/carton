@@ -94,6 +94,7 @@
 ### 环境要求
 
 - `.NET 10 SDK`
+- Windows 本地调试 TUN 提权或发布包需要 `Rust toolchain`（`cargo`）
 - Windows NativeAOT 发布需要安装 `Desktop development with C++` 或等效的 MSVC / Windows SDK 构建工具链
 - 如需生成 Windows 安装包，还需要 `NSIS`，并确保 `makensis` 可用；GitHub Actions 会自动安装 NSIS
 
@@ -108,6 +109,8 @@ dotnet build carton.slnx
 ```powershell
 dotnet run --project src\carton.GUI\carton.GUI.csproj
 ```
+
+Windows Debug 构建会在检测到 `cargo` 时自动构建并复制 `carton-helper.exe` 到 GUI 输出目录；如果未安装 Rust，应用仍可启动，但本地调试时的 Windows TUN 提权启动不可用。
 
 ### Windows NativeAOT 发布
 

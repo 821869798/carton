@@ -94,6 +94,7 @@ This is intentional because many users strongly dislike third-party GUIs overwri
 ### Requirements
 
 - `.NET 10 SDK`
+- `Rust toolchain` (`cargo`) for Windows local TUN helper debugging and release packaging
 - Windows NativeAOT publishing requires `Desktop development with C++` or an equivalent MSVC / Windows SDK toolchain
 - If you want to generate the Windows installer, `NSIS` is also required and `makensis` must be available; GitHub Actions installs NSIS automatically
 
@@ -108,6 +109,8 @@ dotnet build carton.slnx
 ```powershell
 dotnet run --project src\carton.GUI\carton.GUI.csproj
 ```
+
+Windows Debug builds automatically build and copy `carton-helper.exe` to the GUI output directory when `cargo` is available. Without Rust installed, the app can still start, but Windows TUN elevated startup is unavailable in local debugging.
 
 ### Windows NativeAOT publish
 

@@ -84,8 +84,8 @@ public sealed class AppUpdateService : IAppUpdateService
 {
     private static readonly TimeSpan GitHubApiPreferredWait = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan GitHubLookupTimeout = TimeSpan.FromSeconds(6);
-    private const string WindowsPortableUpdaterExecutableName = "Carton_Updater.exe";
-    private const string UnixPortableUpdaterExecutableName = "Carton_Updater";
+    private const string WindowsPortableHelperExecutableName = "carton-helper.exe";
+    private const string UnixPortableHelperExecutableName = "carton-helper";
     private const string DefaultWindowsMainExecutableName = "carton.exe";
     private const string DefaultUnixMainExecutableName = "carton";
     private const string PendingDirectUpdateStateFileName = ".carton_pending_update";
@@ -547,7 +547,7 @@ public sealed class AppUpdateService : IAppUpdateService
         }
 
         var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
-        var updaterPath = Path.Combine(appDirectory, GetPortableUpdaterExecutableName());
+        var updaterPath = Path.Combine(appDirectory, GetPortableHelperExecutableName());
         return File.Exists(updaterPath);
 #endif
     }
@@ -555,10 +555,10 @@ public sealed class AppUpdateService : IAppUpdateService
     private static bool SupportsPortableUpdaterPlatform()
         => OperatingSystem.IsWindows() || OperatingSystem.IsLinux();
 
-    private static string GetPortableUpdaterExecutableName()
+    private static string GetPortableHelperExecutableName()
         => OperatingSystem.IsWindows()
-            ? WindowsPortableUpdaterExecutableName
-            : UnixPortableUpdaterExecutableName;
+            ? WindowsPortableHelperExecutableName
+            : UnixPortableHelperExecutableName;
 
     private static string GetDefaultMainExecutableName()
         => OperatingSystem.IsWindows()
@@ -950,7 +950,7 @@ public sealed class AppUpdateService : IAppUpdateService
     private static void StartPortableUpdater(string archivePath)
     {
         var appDirectory = AppDomain.CurrentDomain.BaseDirectory;
-        var updaterName = GetPortableUpdaterExecutableName();
+        var updaterName = GetPortableHelperExecutableName();
         var updaterPath = Path.Combine(appDirectory, updaterName);
         if (!File.Exists(updaterPath))
         {
@@ -959,7 +959,7 @@ public sealed class AppUpdateService : IAppUpdateService
 
         var tempUpdaterDirectory = Path.Combine(
             Path.GetTempPath(),
-            "carton-updater-" + Guid.NewGuid().ToString("N"));
+            "carton-helper-update-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempUpdaterDirectory);
 
         var tempUpdaterPath = Path.Combine(tempUpdaterDirectory, updaterName);
@@ -978,6 +978,7 @@ public sealed class AppUpdateService : IAppUpdateService
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        startInfo.ArgumentList.Add("--carton-update");
         startInfo.ArgumentList.Add("--pid");
         startInfo.ArgumentList.Add(Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
         startInfo.ArgumentList.Add("--archive");
