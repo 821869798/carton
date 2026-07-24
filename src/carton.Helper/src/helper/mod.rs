@@ -417,7 +417,11 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_datetime_offset_unix_seconds;
+    use super::{
+        parse_datetime_offset_unix_seconds, request_expires_in_future, LaunchOptions,
+        REQUEST_FILE_ARG,
+    };
+    use std::fs;
 
     #[test]
     fn parses_dotnet_datetime_offset_with_fractional_seconds() {
@@ -446,5 +450,102 @@ mod tests {
             parse_datetime_offset_unix_seconds("2026-01-01T00:00:00"),
             None
         );
+    }
+
+    #[test]
+    fn launch_options_parse_cli_happy_path() {
+        let args = vec![
+            "--carton-elevated-helper".into(),
+            "--port".into(),
+            "18080".into(),
+            "--token".into(),
+            "secret".into(),
+            "--parent-pid".into(),
+            "42".into(),
+        ];
+
+        let options = LaunchOptions::parse(&args).unwrap().expect("options");
+        assert_eq!(options.port, 18080);
+        assert_eq!(options.token, "secret");
+        assert_eq!(options.parent_pid, 42);
+    }
+
+    #[test]
+    fn launch_options_parse_rejects_missing_port_or_token() {
+        let missing_port = vec![
+            "--carton-elevated-helper".into(),
+            "--token".into(),
+            "secret".into(),
+        ];
+        assert!(LaunchOptions::parse(&missing_port).unwrap().is_none());
+
+        let missing_token = vec![
+            "--carton-elevated-helper".into(),
+            "--port".into(),
+            "18080".into(),
+        ];
+        assert!(LaunchOptions::parse(&missing_token).unwrap().is_none());
+
+        let zero_port = vec![
+            "--carton-elevated-helper".into(),
+            "--port".into(),
+            "0".into(),
+            "--token".into(),
+            "secret".into(),
+        ];
+        assert!(LaunchOptions::parse(&zero_port).unwrap().is_none());
+    }
+
+    #[test]
+    fn launch_options_parse_request_file_and_deletes_it() {
+        let path = std::env::temp_dir().join(format!(
+            "carton-helper-launch-request-{}.json",
+            std::process::id()
+        ));
+        let payload = r#"{"port":19090,"token":"file-token","parentPid":7,"expiresAtUtc":"2099-01-01T00:00:00+00:00"}"#;
+        fs::write(&path, payload).unwrap();
+
+        let args = vec![
+            "--carton-elevated-helper".into(),
+            REQUEST_FILE_ARG.into(),
+            path.to_string_lossy().into_owned(),
+        ];
+
+        let options = LaunchOptions::parse(&args).unwrap().expect("options");
+        assert_eq!(options.port, 19090);
+        assert_eq!(options.token, "file-token");
+        assert_eq!(options.parent_pid, 7);
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn launch_options_parse_expired_request_file_returns_none() {
+        let path = std::env::temp_dir().join(format!(
+            "carton-helper-launch-request-expired-{}.json",
+            std::process::id()
+        ));
+        let payload =
+            r#"{"port":19091,"token":"file-token","parentPid":7,"expiresAtUtc":"1970-01-01T00:00:00+00:00"}"#;
+        fs::write(&path, payload).unwrap();
+
+        let args = vec![
+            "--carton-elevated-helper".into(),
+            REQUEST_FILE_ARG.into(),
+            path.to_string_lossy().into_owned(),
+        ];
+
+        assert!(LaunchOptions::parse(&args).unwrap().is_none());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn request_expires_in_future_handles_missing_and_past() {
+        assert!(!request_expires_in_future(None));
+        assert!(!request_expires_in_future(Some(
+            "1970-01-01T00:00:00+00:00"
+        )));
+        assert!(request_expires_in_future(Some(
+            "2099-01-01T00:00:00+00:00"
+        )));
     }
 }

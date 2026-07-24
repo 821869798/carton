@@ -191,7 +191,10 @@ fn is_csi_parameter_char(ch: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{read_lossy_line, trim_line_ending_bytes};
+    use super::{
+        read_lossy_line, strip_terminal_decorations, trim_line_ending_bytes, HelperRuntime,
+    };
+    use super::super::{LaunchOptions, WindowsHelperStartupLogLine};
     use std::io::BufReader;
 
     #[test]
@@ -213,5 +216,67 @@ mod tests {
         assert_eq!(String::from_utf8_lossy(&buffer), "next");
 
         assert!(!read_lossy_line(&mut reader, &mut buffer));
+    }
+
+    #[test]
+    fn strip_terminal_decorations_removes_csi_and_keeps_tabs() {
+        assert_eq!(
+            strip_terminal_decorations("\u{1b}[31merror\u{1b}[0m\tok"),
+            "error\tok"
+        );
+        assert_eq!(strip_terminal_decorations("[31morphan"), "orphan");
+        assert_eq!(strip_terminal_decorations("plain"), "plain");
+    }
+
+    #[test]
+    fn startup_logs_after_reports_gap_and_filters_sequences() {
+        let runtime = HelperRuntime::new(LaunchOptions {
+            port: 1,
+            token: "token".into(),
+            parent_pid: 0,
+        });
+
+        {
+            let mut state = runtime.state.lock().unwrap();
+            state.startup_logs.push_back(WindowsHelperStartupLogLine {
+                sequence: 5,
+                message: "a".into(),
+            });
+            state.startup_logs.push_back(WindowsHelperStartupLogLine {
+                sequence: 6,
+                message: "b".into(),
+            });
+            state.next_startup_log_sequence = 7;
+        }
+
+        let (logs, gap) = runtime.startup_logs_after(0);
+        assert!(gap);
+        let logs = logs.expect("logs");
+        assert_eq!(logs.len(), 2);
+        assert_eq!(logs[0].sequence, 5);
+        assert_eq!(logs[1].message, "b");
+
+        let (filtered, gap) = runtime.startup_logs_after(5);
+        assert!(!gap);
+        let filtered = filtered.expect("filtered");
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].sequence, 6);
+
+        let (none, gap) = runtime.startup_logs_after(6);
+        assert!(none.is_none());
+        assert!(!gap);
+    }
+
+    #[test]
+    fn startup_logs_after_empty_returns_none_without_gap() {
+        let runtime = HelperRuntime::new(LaunchOptions {
+            port: 1,
+            token: "token".into(),
+            parent_pid: 0,
+        });
+
+        let (logs, gap) = runtime.startup_logs_after(0);
+        assert!(logs.is_none());
+        assert!(!gap);
     }
 }

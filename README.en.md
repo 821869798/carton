@@ -112,6 +112,15 @@ dotnet run --project src\carton.GUI\carton.GUI.csproj
 
 Windows Debug builds automatically build and copy `carton-helper.exe` to the GUI output directory when `cargo` is available. Without Rust installed, the app can still start, but Windows TUN elevated startup is unavailable in local debugging.
 
+### Unit tests
+
+```powershell
+dotnet test src\carton.GUI.Tests\carton.GUI.Tests.csproj
+cargo test --manifest-path src\carton.Helper\Cargo.toml
+```
+
+Pushes and pull requests to `main` run the build and tests above via `.github/workflows/ci.yml`.
+
 ### Windows NativeAOT publish
 
 ```powershell

@@ -386,3 +386,90 @@ fn copy_permissions(metadata: &fs::Metadata, target_path: &Path) {
 
 #[cfg(not(unix))]
 fn copy_permissions(_metadata: &fs::Metadata, _target_path: &Path) {}
+
+#[cfg(test)]
+mod tests {
+    use super::{resolve_archive_root, UpdaterOptions, DEFAULT_WAIT_SECONDS};
+    use std::fs;
+
+    #[test]
+    fn updater_options_parse_required_flags_and_defaults() {
+        let args = vec![
+            "--pid".into(),
+            "1234".into(),
+            "--archive".into(),
+            "app.zip".into(),
+            "--target".into(),
+            r"C:\apps\carton".into(),
+            "--restart".into(),
+            "carton".into(),
+        ];
+
+        let options = UpdaterOptions::parse(&args).unwrap();
+        assert_eq!(options.process_id, Some(1234));
+        assert_eq!(
+            options.archive_path.as_deref(),
+            Some(std::path::Path::new("app.zip"))
+        );
+        assert_eq!(
+            options.target_dir.as_deref(),
+            Some(std::path::Path::new(r"C:\apps\carton"))
+        );
+        assert_eq!(options.restart_executable.as_deref(), Some("carton"));
+        assert_eq!(options.wait_seconds, DEFAULT_WAIT_SECONDS);
+        assert!(!options.show_help);
+    }
+
+    #[test]
+    fn updater_options_parse_help_and_wait_seconds() {
+        let args = vec![
+            "--help".into(),
+            "--wait-seconds".into(),
+            "10".into(),
+        ];
+
+        let options = UpdaterOptions::parse(&args).unwrap();
+        assert!(options.show_help);
+        assert_eq!(options.wait_seconds, 10);
+    }
+
+    #[test]
+    fn updater_options_parse_missing_value_errors() {
+        let args = vec!["--pid".into()];
+        assert!(UpdaterOptions::parse(&args).is_err());
+    }
+
+    #[test]
+    fn resolve_archive_root_unwraps_single_nested_directory() {
+        let root = std::env::temp_dir().join(format!(
+            "carton-update-root-nested-{}",
+            std::process::id()
+        ));
+        let nested = root.join("carton-1.0.0");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(nested.join("carton"), b"bin").unwrap();
+
+        let resolved = resolve_archive_root(&root).unwrap();
+        assert_eq!(resolved, nested);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn resolve_archive_root_keeps_flat_layout() {
+        let root = std::env::temp_dir().join(format!(
+            "carton-update-root-flat-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("carton"), b"bin").unwrap();
+        fs::write(root.join("readme.txt"), b"hi").unwrap();
+
+        let resolved = resolve_archive_root(&root).unwrap();
+        assert_eq!(resolved, root);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+}

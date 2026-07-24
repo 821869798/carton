@@ -153,7 +153,7 @@ pub(super) fn is_api_ready(api_address: Option<String>, api_secret: Option<Strin
 
 #[cfg(test)]
 mod tests {
-    use super::percent_decode;
+    use super::{parse_target, percent_decode};
 
     #[test]
     fn decodes_percent_encoded_bytes() {
@@ -170,5 +170,14 @@ mod tests {
 
         let input = std::str::from_utf8(&[b'%', 0xe4, 0xbd, 0xa0]).unwrap();
         assert_eq!(percent_decode(input), input);
+    }
+
+    #[test]
+    fn parse_target_lowercases_path_and_decodes_query() {
+        let (path, query) = parse_target("/Status?force=1&name=a+b&q=c%3Dd");
+        assert_eq!(path, "status");
+        assert_eq!(query.get("force").map(String::as_str), Some("1"));
+        assert_eq!(query.get("name").map(String::as_str), Some("a b"));
+        assert_eq!(query.get("q").map(String::as_str), Some("c=d"));
     }
 }

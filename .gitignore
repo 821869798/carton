@@ -67,3 +67,5 @@ sing-box-for-apple
 sing-box
 scripts/appimagetool*.AppImage
 .codex*
+.commandcode
+sing-box-dashboard
