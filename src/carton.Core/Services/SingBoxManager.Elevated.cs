@@ -36,7 +36,7 @@ public partial class SingBoxManager
         }
         catch (Exception ex)
         {
-            LogManager($"[WARN] Failed to inspect config for TUN: {ex.Message}");
+            LogWarn($"Failed to inspect config for TUN: {ex.Message}");
         }
 
         return false;
@@ -78,7 +78,7 @@ public partial class SingBoxManager
                 // Carton "start failed" summary from State.ErrorMessage.
                 if (Interlocked.Read(ref _windowsStartupLogSequence) <= 0)
                 {
-                    LogManager($"[ERROR] {msg}");
+                    LogError($"{msg}");
                 }
                 StopStartupLogCapture(startupLogSession);
                 SetError(msg);
@@ -90,11 +90,11 @@ public partial class SingBoxManager
             {
                 _elevatedPid = pid.Value;
                 TryAttachProcessIdToWindowsJob(pid.Value);
-                LogManager($"[INFO] Elevated process PID: {pid.Value}");
+                LogDebug($"Elevated process PID: {pid.Value}");
             }
             else
             {
-                LogManager("[INFO] No PID from helper response, will discover via API port");
+                LogDebug("No PID from helper response, will discover via API port");
             }
 
             var readyTiming = Stopwatch.StartNew();
@@ -114,7 +114,7 @@ public partial class SingBoxManager
                 {
                     msg = $"{msg}: {recentLog}";
                 }
-                LogManager($"[ERROR] {msg}");
+                LogError($"{msg}");
                 StopStartupLogCapture(startupLogSession);
                 await CleanupFailedStartAttemptAsync();
                 SetError(msg);
@@ -124,7 +124,7 @@ public partial class SingBoxManager
             _errorOutput.Clear();
             _state.StartTime = DateTime.Now;
             UpdateStatus(ServiceStatus.Running);
-            LogManager($"[INFO] sing-box started successfully (elevated, pid={_elevatedPid})");
+            LogInfo($"sing-box started successfully (elevated, pid={_elevatedPid})");
             EnsureRuntimeMonitorsRunning();
             LogTiming("start_elevated.end_success", timing.Elapsed);
             return true;
@@ -137,7 +137,7 @@ public partial class SingBoxManager
             }
 
             var error = $"Failed to start sing-box with administrator privileges: {ex.Message}";
-            LogManager($"[ERROR] {error}");
+            LogError($"{error}");
             await CleanupFailedStartAttemptAsync();
             SetError(error);
             LogTiming("start_elevated.end_exception", timing.Elapsed);
@@ -200,7 +200,7 @@ public partial class SingBoxManager
                     return true;
                 }
 
-                LogManager($"[WARN] Elevated helper stop returned before sing-box process {pid} exited");
+                LogWarn($"Elevated helper stop returned before sing-box process {pid} exited");
             }
             else
             {
@@ -261,7 +261,7 @@ public partial class SingBoxManager
             }
         }
 
-        LogManager($"[WARN] sing-box process {pid} did not exit, trying force kill...");
+        LogWarn($"sing-box process {pid} did not exit, trying force kill...");
 
         // Last resort: try taskkill via UAC.
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -282,7 +282,7 @@ public partial class SingBoxManager
 
         if (IsProcessAlive(pid))
         {
-            LogManager($"[ERROR] sing-box process {pid} is still running after stop attempts");
+            LogError($"sing-box process {pid} is still running after stop attempts");
             LogTiming("stop_elevated.end_failed", timing.Elapsed);
             return false;
         }
@@ -310,7 +310,7 @@ public partial class SingBoxManager
             RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
             !string.IsNullOrWhiteSpace(_windowsElevatedHelperToken) &&
             (_process == null || elevatedPid.HasValue || _elevatedPid.HasValue);
-        LogManager($"[INFO] Waiting for sing-box API to become ready (timeout={timeout.TotalSeconds}s)...");
+        LogDebug($"Waiting for sing-box API to become ready (timeout={timeout.TotalSeconds}s)...");
         var attempt = 0;
         while (DateTime.UtcNow - start < timeout)
         {
@@ -327,7 +327,7 @@ public partial class SingBoxManager
                 {
                     elevatedPid = helperProcessStatus.Pid;
                     _elevatedPid = helperProcessStatus.Pid;
-                    LogManager($"[INFO] Learned elevated process PID from helper status endpoint: {helperProcessStatus.Pid}");
+                    LogDebug($"Learned elevated process PID from helper status endpoint: {helperProcessStatus.Pid}");
                 }
 
                 if (helperProcessStatus.HasProcess && !helperProcessStatus.IsRunning)
@@ -348,7 +348,7 @@ public partial class SingBoxManager
                     if (DateTime.UtcNow - start > TimeSpan.FromSeconds(3) && noProcessStatusCount >= 3)
                     {
                         _lastStartupWaitFailureReason = "Elevated helper has no active sing-box process after startup request";
-                        LogManager($"[WARN] {_lastStartupWaitFailureReason}");
+                        LogWarn($"{_lastStartupWaitFailureReason}");
                         return false;
                     }
                 }
@@ -360,7 +360,7 @@ public partial class SingBoxManager
 
             if (await IsApiReachableAsync())
             {
-                LogManager("[INFO] API probe succeeded");
+                LogDebug("API probe succeeded");
                 if (!_elevatedPid.HasValue || _elevatedPid.Value <= 0)
                 {
                     var discoveredPid = await TryFindProcessPidByApiPortAsync();
@@ -377,7 +377,7 @@ public partial class SingBoxManager
             // For non-elevated mode, check if process crashed
             if (_process != null && _process.HasExited)
             {
-                LogManager("[WARN] Process exited while waiting for API");
+                LogWarn("Process exited while waiting for API");
                 _lastStartupWaitFailureReason = "sing-box exited while waiting for API";
                 return false;
             }
@@ -421,8 +421,8 @@ public partial class SingBoxManager
 
                         if (latestHelperStatus.IsRunning)
                         {
-                            LogManager(
-                                $"[WARN] Direct process check for {elevatedPid.Value} failed, but elevated helper reports it is still running");
+                            LogWarn(
+                                $"Direct process check for {elevatedPid.Value} failed, but elevated helper reports it is still running");
                             await Task.Delay(500);
                             continue;
                         }
@@ -431,8 +431,8 @@ public partial class SingBoxManager
                     var detail = string.IsNullOrWhiteSpace(processCheckError)
                         ? string.Empty
                         : $": {processCheckError}";
-                    LogManager(
-                        $"[WARN] Elevated process {elevatedPid.Value} was unavailable while waiting for API{detail}");
+                    LogWarn(
+                        $"Elevated process {elevatedPid.Value} was unavailable while waiting for API{detail}");
                     _lastStartupWaitFailureReason =
                         $"sing-box process {elevatedPid.Value} exited before API became ready";
                     return false;
@@ -442,7 +442,7 @@ public partial class SingBoxManager
             await Task.Delay(500);
         }
 
-        LogManager($"[WARN] API did not become ready within {timeout.TotalSeconds}s");
+        LogWarn($"API did not become ready within {timeout.TotalSeconds}s");
         _lastStartupWaitFailureReason = "sing-box API did not become reachable in time";
         LogTiming("api_ready.timeout", timing.Elapsed);
         return false;

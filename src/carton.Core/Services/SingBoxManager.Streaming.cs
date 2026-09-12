@@ -153,11 +153,16 @@ public partial class SingBoxManager
             {
                 break;
             }
+            catch (RpcException e) when (cancellationToken.IsCancellationRequested)
+            {
+                // Deliberate stop/restart: cancelled streams are expected, not failures.
+                break;
+            }
             catch (RpcException e)
             {
                 if (IsTerminalRpcFailure(e.StatusCode))
                 {
-                    LogManager($"[WARN] Connections monitor terminal error, stopping: {e.StatusCode} {e.Message}");
+                    LogWarn($"Connections monitor terminal error, stopping: {e.StatusCode} {e.Message}");
                     break;
                 }
 
@@ -165,7 +170,7 @@ public partial class SingBoxManager
                 consecutiveFailures++;
                 if (consecutiveFailures == 1 || consecutiveFailures % 10 == 0)
                 {
-                    LogManager($"[WARN] Connections monitor RPC error: {e.StatusCode} {e.Message}");
+                    LogWarn($"Connections monitor RPC error: {e.StatusCode} {e.Message}");
                 }
 
                 await DelaySafelyAsync(TimeSpan.FromSeconds(Math.Min(5, consecutiveFailures)), cancellationToken);
@@ -175,7 +180,7 @@ public partial class SingBoxManager
                 consecutiveFailures++;
                 if (consecutiveFailures == 1 || consecutiveFailures % 10 == 0)
                 {
-                    LogManager($"[WARN] Connections monitor error: {e.Message}");
+                    LogWarn($"Connections monitor error: {e.Message}");
                 }
 
                 await DelaySafelyAsync(TimeSpan.FromSeconds(Math.Min(5, Math.Max(1, consecutiveFailures))), cancellationToken);
@@ -213,18 +218,23 @@ public partial class SingBoxManager
             {
                 break;
             }
+            catch (RpcException e) when (cancellationToken.IsCancellationRequested)
+            {
+                // Deliberate stop/restart: cancelled streams are expected, not failures.
+                break;
+            }
             catch (RpcException e)
             {
                 if (IsTerminalRpcFailure(e.StatusCode))
                 {
-                    LogManager($"[WARN] Groups monitor terminal error, stopping: {e.StatusCode} {e.Message}");
+                    LogWarn($"Groups monitor terminal error, stopping: {e.StatusCode} {e.Message}");
                     break;
                 }
 
                 consecutiveFailures++;
                 if (consecutiveFailures == 1 || consecutiveFailures % 10 == 0)
                 {
-                    LogManager($"[WARN] Groups monitor RPC error: {e.StatusCode} {e.Message}");
+                    LogWarn($"Groups monitor RPC error: {e.StatusCode} {e.Message}");
                 }
 
                 await DelaySafelyAsync(TimeSpan.FromSeconds(Math.Min(5, consecutiveFailures)), cancellationToken);
@@ -234,7 +244,7 @@ public partial class SingBoxManager
                 consecutiveFailures++;
                 if (consecutiveFailures == 1 || consecutiveFailures % 10 == 0)
                 {
-                    LogManager($"[WARN] Groups monitor error: {e.Message}");
+                    LogWarn($"Groups monitor error: {e.Message}");
                 }
 
                 await DelaySafelyAsync(TimeSpan.FromSeconds(Math.Min(5, Math.Max(1, consecutiveFailures))), cancellationToken);
@@ -282,11 +292,16 @@ public partial class SingBoxManager
             {
                 break;
             }
+            catch (RpcException e) when (cancellationToken.IsCancellationRequested)
+            {
+                // Deliberate stop/restart: cancelled streams are expected, not failures.
+                break;
+            }
             catch (RpcException e)
             {
                 if (IsTerminalRpcFailure(e.StatusCode))
                 {
-                    LogManager($"[WARN] Outbound mode monitor terminal error, stopping: {e.StatusCode} {e.Message}");
+                    LogWarn($"Outbound mode monitor terminal error, stopping: {e.StatusCode} {e.Message}");
                     break;
                 }
 
@@ -295,7 +310,7 @@ public partial class SingBoxManager
                 consecutiveFailures++;
                 if (consecutiveFailures == 1 || consecutiveFailures % 10 == 0)
                 {
-                    LogManager($"[WARN] Outbound mode monitor RPC error: {e.StatusCode} {e.Message}");
+                    LogWarn($"Outbound mode monitor RPC error: {e.StatusCode} {e.Message}");
                 }
 
                 await DelaySafelyAsync(TimeSpan.FromSeconds(Math.Min(5, consecutiveFailures)), cancellationToken);
@@ -305,7 +320,7 @@ public partial class SingBoxManager
                 consecutiveFailures++;
                 if (consecutiveFailures == 1 || consecutiveFailures % 10 == 0)
                 {
-                    LogManager($"[WARN] Outbound mode monitor error: {e.Message}");
+                    LogWarn($"Outbound mode monitor error: {e.Message}");
                 }
 
                 await DelaySafelyAsync(TimeSpan.FromSeconds(Math.Min(5, Math.Max(1, consecutiveFailures))), cancellationToken);
@@ -520,7 +535,7 @@ public partial class SingBoxManager
         }
         catch (Exception ex)
         {
-            LogManager($"[DEBUG] Groups final-state reconciliation failed: {ex.Message}");
+            LogDebug($"Groups final-state reconciliation failed: {ex.Message}");
         }
         finally
         {

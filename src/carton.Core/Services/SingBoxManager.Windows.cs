@@ -54,7 +54,7 @@ public partial class SingBoxManager
 
             var json = JsonSerializer.Serialize(request, CartonCoreJsonContext.Default.WindowsHelperStartRequest);
 
-            LogManager("[INFO] Sending start request to elevated helper...");
+            LogDebug("Sending start request to elevated helper...");
             using var sendClient = HttpClientFactory.CreateLoopbackClient(TimeSpan.FromSeconds(5));
             using var message = new HttpRequestMessage(HttpMethod.Post, GetWindowsHelperUri("start"))
             {
@@ -113,20 +113,20 @@ public partial class SingBoxManager
                         }
                         catch (Exception ex)
                         {
-                            LogManager($"[WARN] Failed to parse elevated helper response: {ex.Message}");
+                            LogWarn($"Failed to parse elevated helper response: {ex.Message}");
                         }
                     }
                 }
 
-                LogManager("[INFO] Elevated helper did not send an immediate start confirmation, proceeding with API readiness check");
+                LogDebug("Elevated helper did not send an immediate start confirmation, proceeding with API readiness check");
             }
             catch (TaskCanceledException)
             {
-                LogManager("[WARN] Timed out waiting for elevated helper start response, proceeding with API readiness check");
+                LogWarn("Timed out waiting for elevated helper start response, proceeding with API readiness check");
             }
             catch (Exception ex)
             {
-                LogManager($"[WARN] Failed to read immediate elevated helper start response: {ex.Message}");
+                LogWarn($"Failed to read immediate elevated helper start response: {ex.Message}");
             }
 
             return new ElevatedStartResult
@@ -203,7 +203,7 @@ public partial class SingBoxManager
         var executablePath = WindowsElevatedHelperTaskUtility.ResolveHelperExecutablePath(Environment.ProcessPath);
         if (string.IsNullOrWhiteSpace(executablePath))
         {
-            LogManager("[ERROR] Unable to resolve current executable path for elevated helper");
+            LogError("Unable to resolve current executable path for elevated helper");
             LogTiming("windows_helper.ensure.no_executable", timing.Elapsed);
             return false;
         }
@@ -223,7 +223,7 @@ public partial class SingBoxManager
         var result = await StartWindowsElevatedHelperViaRunAsAsync(executablePath, token, parentPid);
         if (!result.Success)
         {
-            LogManager($"[ERROR] {result.ErrorMessage ?? "Failed to start elevated helper"}");
+            LogError($"{result.ErrorMessage ?? "Failed to start elevated helper"}");
             LogTiming("windows_helper.ensure.runas_failed", runAsTiming.Elapsed);
             LogTiming("windows_helper.ensure.end_failed", timing.Elapsed);
             return false;
@@ -274,7 +274,7 @@ public partial class SingBoxManager
                 executablePath);
             if (!hasCurrentRegistration)
             {
-                LogManager("[INFO] Elevated helper scheduled task is missing or stale, repairing registration");
+                LogDebug("Elevated helper scheduled task is missing or stale, repairing registration");
                 var registrationResult = await WindowsElevatedHelperTaskUtility.EnsureRegisteredAsync(
                     _workingDirectory,
                     executablePath);
@@ -282,12 +282,12 @@ public partial class SingBoxManager
                 {
                     if (registrationResult.Cancelled)
                     {
-                        LogManager("[INFO] Elevated helper scheduled task registration was canceled");
+                        LogDebug("Elevated helper scheduled task registration was canceled");
                     }
                     else
                     {
-                        LogManager(
-                            $"[WARN] Failed to repair elevated helper scheduled task: {registrationResult.ErrorMessage}");
+                        LogWarn(
+                            $"Failed to repair elevated helper scheduled task: {registrationResult.ErrorMessage}");
                     }
                     TryDeleteFile(requestFilePath);
                     return false;
@@ -305,7 +305,7 @@ public partial class SingBoxManager
                 return true;
             }
 
-            LogManager("[WARN] Scheduled task launch did not start a ready helper, cleaning stale helper and retrying");
+            LogWarn("Scheduled task launch did not start a ready helper, cleaning stale helper and retrying");
             TryKillWindowsHelperProcess();
             token = Guid.NewGuid().ToString("N");
 
@@ -320,7 +320,7 @@ public partial class SingBoxManager
                 return true;
             }
 
-            LogManager("[WARN] Scheduled task launch did not start a ready helper after cleanup, re-registering task and retrying");
+            LogWarn("Scheduled task launch did not start a ready helper after cleanup, re-registering task and retrying");
             var retryRegistrationResult = await WindowsElevatedHelperTaskUtility.EnsureRegisteredAsync(
                 _workingDirectory,
                 executablePath);
@@ -328,12 +328,12 @@ public partial class SingBoxManager
             {
                 if (retryRegistrationResult.Cancelled)
                 {
-                    LogManager("[INFO] Elevated helper scheduled task re-registration was canceled");
+                    LogDebug("Elevated helper scheduled task re-registration was canceled");
                 }
                 else
                 {
-                    LogManager(
-                        $"[WARN] Failed to re-register elevated helper scheduled task: {retryRegistrationResult.ErrorMessage}");
+                    LogWarn(
+                        $"Failed to re-register elevated helper scheduled task: {retryRegistrationResult.ErrorMessage}");
                 }
                 TryDeleteFile(requestFilePath);
                 return false;
@@ -351,13 +351,13 @@ public partial class SingBoxManager
                 return true;
             }
 
-            LogManager("[WARN] Scheduled task launched but elevated helper did not become ready after re-registration");
+            LogWarn("Scheduled task launched but elevated helper did not become ready after re-registration");
             TryDeleteFile(requestFilePath);
             return false;
         }
         catch (Exception ex)
         {
-            LogManager($"[WARN] Failed to start elevated helper via scheduled task: {ex.Message}");
+            LogWarn($"Failed to start elevated helper via scheduled task: {ex.Message}");
             return false;
         }
     }
@@ -395,7 +395,7 @@ public partial class SingBoxManager
             }
             catch (Exception ex)
             {
-                LogManager($"[WARN] Failed to read elevated helper start result: {ex.Message}");
+                LogWarn($"Failed to read elevated helper start result: {ex.Message}");
                 break;
             }
 
@@ -428,7 +428,7 @@ public partial class SingBoxManager
         }
         catch (Exception ex)
         {
-            LogManager($"[WARN] Failed to write elevated helper request file: {ex.Message}");
+            LogWarn($"Failed to write elevated helper request file: {ex.Message}");
             return false;
         }
     }
@@ -440,14 +440,14 @@ public partial class SingBoxManager
             if (await PingWindowsElevatedHelperAsync(token))
             {
                 _windowsElevatedHelperToken = token;
-                LogManager("[INFO] Elevated helper ready");
+                LogDebug("Elevated helper ready");
                 return true;
             }
 
             await Task.Delay(200);
         }
 
-        LogManager("[ERROR] Elevated helper did not become ready in time");
+        LogError("Elevated helper did not become ready in time");
         return false;
     }
 
@@ -737,7 +737,7 @@ public partial class SingBoxManager
         if (status.StartupLogGap && !Volatile.Read(ref _reportedWindowsStartupLogGap))
         {
             Volatile.Write(ref _reportedWindowsStartupLogGap, true);
-            LogManager("[WARN] Some early sing-box startup logs were dropped because the startup log buffer overflowed");
+            LogWarn("Some early sing-box startup logs were dropped because the startup log buffer overflowed");
         }
 
         var lines = status.StartupLogs;
@@ -772,7 +772,7 @@ public partial class SingBoxManager
             if (_windowsJobHandle == IntPtr.Zero)
             {
                 var code = Marshal.GetLastWin32Error();
-                LogManager($"[WARN] Failed to create Windows job object: {code}");
+                LogWarn($"Failed to create Windows job object: {code}");
                 return;
             }
 
@@ -797,7 +797,7 @@ public partial class SingBoxManager
                 if (!success)
                 {
                     var code = Marshal.GetLastWin32Error();
-                    LogManager($"[WARN] Failed to configure Windows job object: {code}");
+                    LogWarn($"Failed to configure Windows job object: {code}");
                     CloseHandle(_windowsJobHandle);
                     _windowsJobHandle = IntPtr.Zero;
                 }
@@ -809,7 +809,7 @@ public partial class SingBoxManager
         }
         catch (Exception ex)
         {
-            LogManager($"[WARN] Failed to initialize Windows job object: {ex.Message}");
+            LogWarn($"Failed to initialize Windows job object: {ex.Message}");
             if (_windowsJobHandle != IntPtr.Zero)
             {
                 CloseHandle(_windowsJobHandle);
@@ -832,12 +832,12 @@ public partial class SingBoxManager
             if (!success)
             {
                 var code = Marshal.GetLastWin32Error();
-                LogManager($"[WARN] Failed to attach sing-box to Windows job object: {code}");
+                LogWarn($"Failed to attach sing-box to Windows job object: {code}");
             }
         }
         catch (Exception ex)
         {
-            LogManager($"[WARN] Failed to attach sing-box to Windows job object: {ex.Message}");
+            LogWarn($"Failed to attach sing-box to Windows job object: {ex.Message}");
         }
     }
 
@@ -866,7 +866,7 @@ public partial class SingBoxManager
                 {
                     return;
                 }
-                LogManager($"[WARN] Failed to open sing-box process {pid} for job object attach: {openCode}");
+                LogWarn($"Failed to open sing-box process {pid} for job object attach: {openCode}");
                 return;
             }
 
@@ -874,12 +874,12 @@ public partial class SingBoxManager
             if (!success)
             {
                 var code = Marshal.GetLastWin32Error();
-                LogManager($"[WARN] Failed to attach sing-box process {pid} to Windows job object: {code}");
+                LogWarn($"Failed to attach sing-box process {pid} to Windows job object: {code}");
             }
         }
         catch (Exception ex)
         {
-            LogManager($"[WARN] Failed to attach sing-box process {pid} to Windows job object: {ex.Message}");
+            LogWarn($"Failed to attach sing-box process {pid} to Windows job object: {ex.Message}");
         }
         finally
         {

@@ -13,7 +13,7 @@ public interface ISingBoxManager
     event EventHandler<ServiceStatus>? StatusChanged;
     event EventHandler<TrafficInfo>? TrafficUpdated;
     event EventHandler<long>? MemoryUpdated;
-    event EventHandler<string>? ManagerLogReceived;
+    event EventHandler<CartonLogEntry>? ManagerLogEntryReceived;
     event EventHandler<KernelLogEntry>? LogReceived;
 
     /// <summary>
@@ -134,7 +134,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
     public event EventHandler<ServiceStatus>? StatusChanged;
     public event EventHandler<TrafficInfo>? TrafficUpdated;
     public event EventHandler<long>? MemoryUpdated;
-    public event EventHandler<string>? ManagerLogReceived;
+    public event EventHandler<CartonLogEntry>? ManagerLogEntryReceived;
     public event EventHandler<KernelLogEntry>? LogReceived;
 
     /// <summary>
@@ -147,7 +147,36 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
     public bool IsRunning => _state.Status == ServiceStatus.Running;
 
     private ISingBoxApiClient CreateApiClient()
-        => SingBoxApiClientFactory.Create(LogManager);
+        => SingBoxApiClientFactory.Create(LogFromClient);
+
+    /// <summary>
+    /// Bridge for the gRPC client's internal diagnostics: those messages carry their
+    /// own "[DEBUG] "/"[WARN] " prefixes. Only a handful of messages per session use
+    /// this path, so the prefix check here is not a hot-path concern.
+    /// </summary>
+    private void LogFromClient(string message)
+    {
+        if (message.StartsWith("[DEBUG] ", StringComparison.OrdinalIgnoreCase))
+        {
+            LogDebug(message[8..]);
+        }
+        else if (message.StartsWith("[WARN] ", StringComparison.OrdinalIgnoreCase))
+        {
+            LogWarn(message[7..]);
+        }
+        else if (message.StartsWith("[ERROR] ", StringComparison.OrdinalIgnoreCase))
+        {
+            LogError(message[8..]);
+        }
+        else if (message.StartsWith("[INFO] ", StringComparison.OrdinalIgnoreCase))
+        {
+            LogInfo(message[7..]);
+        }
+        else
+        {
+            LogDebug(message);
+        }
+    }
 
     public SingBoxManager(string singBoxPath, string workingDirectory, int apiPort = 9090)
     {
@@ -186,7 +215,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
             {
                 _state.StartTime ??= DateTime.Now;
                 UpdateStatus(ServiceStatus.Running);
-                LogManager("[INFO] Detected existing sing-box instance, synchronized running state");
+                LogDebug("Detected existing sing-box instance, synchronized running state");
             }
 
             // Refresh the runtime kernel version + apiVersion from the daemon API:
@@ -235,14 +264,14 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
         if (await HasLeftoverSingBoxProcessAsync())
         {
             LogTiming("start.leftover_detected", leftoverTiming.Elapsed);
-            LogManager("[WARN] Cleaning up leftover sing-box process before starting a new session");
+            LogWarn("Cleaning up leftover sing-box process before starting a new session");
             await StopAsync();
             leftoverTiming.Restart();
             if (await HasLeftoverSingBoxProcessAsync())
             {
                 LogTiming("start.leftover_cleanup_failed", leftoverTiming.Elapsed);
                 const string error = "Failed to clean up previous sing-box process before start";
-                LogManager($"[ERROR] {error}");
+                LogError($"{error}");
                 SetError(error);
                 return false;
             }
@@ -258,7 +287,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
         if (!File.Exists(configPath))
         {
             var error = $"Configuration file not found: {configPath}";
-            LogManager($"[ERROR] {error}");
+            LogError($"{error}");
             SetError(error);
             return false;
         }
@@ -266,7 +295,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
         if (!File.Exists(_singBoxPath))
         {
             var error = $"sing-box binary not found at: {_singBoxPath}";
-            LogManager($"[ERROR] {error}");
+            LogError($"{error}");
             SetError(error);
             return false;
         }
@@ -279,7 +308,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
         {
             var rawVersion = await GetKernelVersionAsync();
             var error = KernelVersionGuard.BuildUnsupportedMessage(rawVersion);
-            LogManager($"[ERROR] {error}");
+            LogError($"{error}");
             KernelVersionRejected?.Invoke(this, error);
             SetError(error);
             return false;
@@ -293,8 +322,8 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
             _errorOutput.Clear();
             ResetSessionMetrics();
 
-            LogManager($"[INFO] Starting sing-box with config: {configPath}");
-            LogManager($"[INFO] Binary path: {_singBoxPath}");
+            LogDebug($"Starting sing-box with config: {configPath}");
+            LogDebug($"Binary path: {_singBoxPath}");
 
             // "Config has a TUN inbound" — a Linux setuid kernel still takes the plain
             // start path below, so this is not the same as "we are about to elevate".
@@ -303,11 +332,11 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
             {
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && await IsLinuxCoreAuthorizedAsync())
                 {
-                    LogManager("[INFO] TUN inbound detected, sing-box has setuid bit — using normal start path");
+                    LogDebug("TUN inbound detected, sing-box has setuid bit — using normal start path");
                 }
                 else
                 {
-                    LogManager("[INFO] TUN inbound detected, requesting elevated privileges...");
+                    LogInfo("TUN inbound detected, requesting elevated privileges...");
                     var elevatedResult = await StartElevatedAsync(configPath);
                     LogTiming(elevatedResult ? "start.end_success_elevated" : "start.end_failed_elevated", timing.Elapsed);
                     return elevatedResult;
@@ -385,7 +414,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
                         {
                             errorMsg += $": {summary}";
                         }
-                        LogManager($"[ERROR] {errorMsg}");
+                        LogError($"{errorMsg}");
                         SetError(errorMsg);
                     }
                 }
@@ -401,7 +430,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
 
             process.EnableRaisingEvents = true;
 
-            LogManager("[INFO] Starting process...");
+            LogDebug("Starting process...");
             var processStartTiming = Stopwatch.StartNew();
             process.Start();
             TryAttachProcessToWindowsJob(process);
@@ -424,7 +453,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
                     {
                         errorMsg += $"\n{exitSummary}";
                     }
-                    LogManager($"[ERROR] {errorMsg}");
+                    LogError($"{errorMsg}");
                     await CleanupFailedStartAttemptAsync();
                     SetError(errorMsg);
                     return false;
@@ -438,7 +467,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
                 {
                     msg += $":\n{summary}";
                 }
-                LogManager($"[ERROR] {msg}");
+                LogError($"{msg}");
                 await CleanupFailedStartAttemptAsync();
                 SetError(msg);
                 return false;
@@ -447,7 +476,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
             _errorOutput.Clear();
             _state.StartTime = DateTime.Now;
             UpdateStatus(ServiceStatus.Running);
-            LogManager("[INFO] sing-box started successfully");
+            LogInfo("sing-box started successfully");
 
             EnsureRuntimeMonitorsRunning();
 
@@ -462,7 +491,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
             }
 
             var error = $"Failed to start sing-box: {ex.Message}";
-            LogManager($"[ERROR] {error}");
+            LogError($"{error}");
             await CleanupFailedStartAttemptAsync();
             SetError(error);
             LogTiming("start.end_exception", timing.Elapsed);
@@ -603,7 +632,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
 
         try
         {
-            LogManager("[INFO] Stopping sing-box...");
+            LogInfo("Stopping sing-box...");
             UpdateStatus(ServiceStatus.Stopping);
             var stopped = true;
 
@@ -625,7 +654,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
             if (!stopped && hasTargetProcess)
             {
                 var error = "Failed to stop sing-box: elevated process is still running";
-                LogManager($"[ERROR] {error}");
+                LogError($"{error}");
                 SetError(error);
                 return;
             }
@@ -644,13 +673,13 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
 
             _state.StartTime = null;
             UpdateStatus(ServiceStatus.Stopped);
-            LogManager("[INFO] sing-box stopped");
+            LogInfo("sing-box stopped");
             LogTiming("stop.end_success", timing.Elapsed);
         }
         catch (Exception ex)
         {
             var error = $"Failed to stop sing-box: {ex.Message}";
-            LogManager($"[ERROR] {error}");
+            LogError($"{error}");
             SetError(error);
             LogTiming("stop.end_exception", timing.Elapsed);
         }
@@ -725,11 +754,6 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
         StatusChanged?.Invoke(this, status);
     }
 
-    private void LogManager(string message)
-    {
-        ManagerLogReceived?.Invoke(this, message);
-    }
-
     /// <summary>
     /// Reports an exception that was swallowed inside a thread-pool callback
     /// (process events) so it never escapes and fail-fasts the process.
@@ -739,7 +763,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
     {
         try
         {
-            ManagerLogReceived?.Invoke(this, $"[WARN] Ignored exception in {source} callback to avoid crashing the process: {ex.Message}");
+            LogWarn($"Ignored exception in {source} callback to avoid crashing the process: {ex.Message}");
         }
         catch
         {
@@ -751,14 +775,17 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
     private void LogTiming(string stage, TimeSpan? elapsed = null)
     {
         var elapsedText = elapsed.HasValue ? $" {elapsed.Value.TotalMilliseconds:F0}ms" : string.Empty;
+        // Debug level: performance instrumentation, never user-facing. Release builds
+        // strip this method entirely via the Conditional attribute; the timing.log file
+        // sink below stays as the diagnostic record.
         var message = $"[TIMING] {DateTimeOffset.Now:O} {stage}{elapsedText}";
-        LogManager(message);
+        LogDebug(message);
 
         try
         {
             var timingLogPath = Path.Combine(_workingDirectory, "logs", "timing.log");
             Directory.CreateDirectory(Path.GetDirectoryName(timingLogPath)!);
-            File.AppendAllText(timingLogPath, message + Environment.NewLine, Encoding.UTF8);
+            File.AppendAllText(timingLogPath, $"[DEBUG] {message}" + Environment.NewLine, Encoding.UTF8);
         }
         catch
         {
@@ -770,6 +797,22 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
     {
         LogReceived?.Invoke(this, new KernelLogEntry(string.Empty, message));
     }
+
+    /// <summary>
+    /// Structured manager logging: severity is an enum, not a parsed "[WARN] " prefix.
+    /// The legacy string event stays for the plain-text startup log capture path.
+    /// </summary>
+    public void Log(CartonLogLevel level, string message)
+    {
+        // Single structured event only. Firing the legacy string event too made
+        // every manager log appear twice in the logs page.
+        ManagerLogEntryReceived?.Invoke(this, new CartonLogEntry(level, message));
+    }
+
+    public void LogDebug(string message) => Log(CartonLogLevel.Debug, message);
+    public void LogInfo(string message) => Log(CartonLogLevel.Info, message);
+    public void LogWarn(string message) => Log(CartonLogLevel.Warn, message);
+    public void LogError(string message) => Log(CartonLogLevel.Error, message);
 
     private void LogKernel(KernelLogEntry entry)
     {
@@ -988,7 +1031,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
         }
         catch (Exception ex)
         {
-            LogManager($"[WARN] Failed to clean up sing-box after a start failure: {ex.Message}");
+            LogWarn($"Failed to clean up sing-box after a start failure: {ex.Message}");
         }
     }
 
@@ -1090,7 +1133,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
             }
             catch (Exception ex)
             {
-                LogManager($"[WARN] Failed to send SIGTERM to sing-box process {process.Id}: {ex.Message}");
+                LogWarn($"Failed to send SIGTERM to sing-box process {process.Id}: {ex.Message}");
             }
 
             for (var i = 0; i < 20; i++)
@@ -1103,7 +1146,7 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
                 await Task.Delay(250);
             }
 
-            LogManager($"[WARN] sing-box process {process.Id} did not exit after SIGTERM, forcing termination");
+            LogWarn($"sing-box process {process.Id} did not exit after SIGTERM, forcing termination");
         }
 
         if (!process.HasExited)

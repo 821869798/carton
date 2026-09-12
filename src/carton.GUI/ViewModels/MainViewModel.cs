@@ -197,7 +197,7 @@ public partial class MainViewModel : ViewModelBase
         _logStore = new LogStore();
 
         _singBoxManager.StatusChanged += OnStatusChanged;
-        _singBoxManager.ManagerLogReceived += OnManagerLogReceived;
+        _singBoxManager.ManagerLogEntryReceived += OnManagerLogEntryReceived;
         _singBoxManager.LogReceived += OnLogReceived;
         _singBoxManager.KernelLogsReset += OnKernelLogsReset;
         _singBoxManager.KernelVersionRejected += OnKernelVersionRejected;
@@ -228,7 +228,7 @@ public partial class MainViewModel : ViewModelBase
         _sessionDurationTimer.Tick += (_, _) => UpdateSessionStartTime();
 
         _currentPage = DashboardViewModel;
-        _logStore.AddLog("[INFO] Log pipeline initialized");
+        _logStore.AddLog("[DEBUG] Log pipeline initialized");
         ConnectionStatus = _localizationService["Status.Disconnected"];
 
         _ = InitializeAsync();
@@ -375,7 +375,7 @@ public partial class MainViewModel : ViewModelBase
 
             if (SystemProxyHelper.TryRecoverStaleSystemProxy(port))
             {
-                _logStore.AddLog($"[INFO] Cleared stale system proxy left by a previous carton session on port {port}");
+                _logStore.AddLog($"[DEBUG] Cleared stale system proxy left by a previous carton session on port {port}");
             }
         }
         catch (Exception ex)
@@ -528,9 +528,9 @@ public partial class MainViewModel : ViewModelBase
         await dialog.ShowDialog(owner);
     }
 
-    private void OnManagerLogReceived(object? sender, string log)
+    private void OnManagerLogEntryReceived(object? sender, CartonLogEntry entry)
     {
-        _logStore.AddLog(log, LogSource.Carton);
+        _logStore.AddLog(entry);
     }
 
     partial void OnSelectedPageChanged(NavigationPage value)

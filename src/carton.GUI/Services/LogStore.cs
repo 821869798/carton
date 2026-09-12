@@ -33,6 +33,31 @@ public sealed class LogStore
         AddEntry(entry);
     }
 
+    /// <summary>
+    /// Structured carton entry: severity comes as an enum - no "[WARN] " prefix
+    /// parsing, no per-entry regex/StartsWith work on the hot logging path.
+    /// </summary>
+    public void AddLog(CartonLogEntry entry)
+    {
+        var message = entry.Message;
+        if (message.Length > MaxMessageLength)
+        {
+            message = message[..MaxMessageLength] + "...";
+        }
+
+        // Enum.ToString() boxes and allocates per entry; the severity set is tiny and
+        // fixed, so map it through constants instead (hot logging path).
+        var levelText = entry.Level switch
+        {
+            CartonLogLevel.Debug => "Debug",
+            CartonLogLevel.Warn => "Warn",
+            CartonLogLevel.Error => "Error",
+            _ => "Info"
+        };
+
+        AddEntry(new LogEntryRecord(0, GetCurrentTimeText(), LogSource.Carton, levelText, message));
+    }
+
     public void AddSingBoxLog(KernelLogEntry log)
     {
         var entry = CreateSingBoxEntry(log);
@@ -78,7 +103,7 @@ public sealed class LogStore
     {
         lock (_syncRoot)
         {
-            _entries.RemoveAll(entry => entry.Source != source);
+            _entries.RemoveAll(entry => entry.Source == source);
             // Bump the reset epoch: sequence-based incremental consumers see a new
             // epoch and rebuild their view from the snapshot instead of blindly
             // appending the replayed history on top of stale rows.

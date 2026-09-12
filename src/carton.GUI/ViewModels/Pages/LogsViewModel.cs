@@ -78,6 +78,17 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
         _localizationService.LanguageChanged += OnLanguageChanged;
         _logStore.EntriesChanged += OnEntriesChanged;
         SelectedLogs.CollectionChanged += (_, _) => CopySelectedLogCommand.NotifyCanExecuteChanged();
+
+        // Release builds default the level filter to Info (carton events stay
+        // visible while the view stays quiet); Debug builds show everything so
+        // diagnosis keeps all detail.
+#if DEBUG
+        _selectedLevel = "All";
+        _appliedSelectedLevel = "All";
+#else
+        _selectedLevel = "Info";
+        _appliedSelectedLevel = "Info";
+#endif
     }
 
     public void OnNavigatedTo()

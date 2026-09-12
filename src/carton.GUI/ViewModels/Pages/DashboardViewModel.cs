@@ -1137,7 +1137,7 @@ public partial class DashboardViewModel : PageViewModelBase
 
     private void LogInfo(string message)
     {
-        _logWriter?.Invoke($"[INFO] {message}");
+        _logWriter?.Invoke($"[DEBUG] {message}");
     }
 
     private void LogError(string message)

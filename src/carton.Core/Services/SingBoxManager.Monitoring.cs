@@ -81,7 +81,7 @@ public partial class SingBoxManager
     {
         var consecutiveFailures = 0;
         var monitorLevel = _logMonitorLevel;
-        LogManager($"[INFO] Log monitor subscribed at level: {monitorLevel}");
+        LogDebug($"Log monitor subscribed at level: {monitorLevel}");
 
         while (_state.Status == ServiceStatus.Running && !cancellationToken.IsCancellationRequested)
         {
@@ -130,7 +130,7 @@ public partial class SingBoxManager
                 consecutiveFailures++;
                 if (consecutiveFailures == 1 || consecutiveFailures % 10 == 0)
                 {
-                    LogManager($"[WARN] Log monitor error: {e.Message}");
+                    LogWarn($"Log monitor error: {e.Message}");
                 }
 
                 await DelaySafelyAsync(TimeSpan.FromSeconds(Math.Min(5, Math.Max(1, consecutiveFailures))), cancellationToken);
@@ -208,22 +208,32 @@ public partial class SingBoxManager
             {
                 break;
             }
+            catch (RpcException e) when (cancellationToken.IsCancellationRequested)
+            {
+                // Deliberate stop/restart: the monitors are being torn down, the
+                // cancelled streams are expected and are not user-facing failures.
+                break;
+            }
             catch (RpcException e)
             {
                 consecutiveFailures++;
                 if (consecutiveFailures == 1 || consecutiveFailures % 10 == 0)
                 {
-                    LogManager($"[WARN] Status monitor RPC error: {e.StatusCode} {e.Message}");
+                    LogWarn($"Status monitor RPC error: {e.StatusCode} {e.Message}");
                 }
 
                 await DelaySafelyAsync(TimeSpan.FromSeconds(Math.Min(5, consecutiveFailures)), cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
             }
             catch (Exception e)
             {
                 consecutiveFailures++;
                 if (consecutiveFailures == 1 || consecutiveFailures % 10 == 0)
                 {
-                    LogManager($"[WARN] Status monitor error: {e.Message}");
+                    LogWarn($"Status monitor error: {e.Message}");
                 }
 
                 await DelaySafelyAsync(TimeSpan.FromSeconds(Math.Min(5, Math.Max(1, consecutiveFailures))), cancellationToken);
@@ -246,7 +256,7 @@ public partial class SingBoxManager
         }
         catch (Exception ex)
         {
-            LogManager($"[WARN] Failed to inspect config log level: {ex.Message}");
+            LogWarn($"Failed to inspect config log level: {ex.Message}");
         }
 
         return LogMonitorFallbackLevel;
