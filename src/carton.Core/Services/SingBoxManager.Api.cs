@@ -182,23 +182,14 @@ public partial class SingBoxManager
             result[tag] = delay;
         }
 
-        // URLTest is fire-and-forget on the kernel side and only accepts group tags.
-        // Leaf nodes are resolved to their parent groups; we still wait on the requested
-        // item tags via the groups stream. The trigger runs inside WaitForFreshDelaysAsync
-        // after the push handler is attached.
-        var triggerTags = SingBoxGrpcApiClient.ResolveUrlTestOutboundTags(
-            groupsSnapshot.Groups.Select(group => new KeyValuePair<string, IEnumerable<string>>(
-                group.Tag,
-                group.Items.Select(item => item.Tag))),
-            tags);
-        if (triggerTags.Count == 0)
-        {
-            // The requested tags matched no known group (unknown outbound or stale
-            // snapshot). Falling back to raw tags would only earn InvalidArgument
-            // ("outbound is not a group") from the daemon; report unavailable instead.
-            LogManager($"[WARN] RunOutboundDelayTests: no group contains {string.Join(", ", tags)}; skipping URLTest");
-            return result;
-        }
+        // URLTest is fire-and-forget on the kernel side. The daemon handles ALL tag
+        // kinds natively (verified against sing-box daemon/started_service.go URLTest):
+        // URLTest groups -> CheckOutbounds, other groups -> batch test of leaf members,
+        // leaf outbounds -> single async test of that node. So the requested tags are
+        // passed through UNCHANGED - matching the official dashboard, which calls
+        // urlTest(item.tag) directly for a single node. NO leaf->group mapping here:
+        // that would re-test the whole parent group for every single-node request.
+        var triggerTags = tags;
 
         var fresh = await WaitForFreshDelaysAsync(
             baseline,
@@ -285,17 +276,13 @@ public partial class SingBoxManager
         var gate = new object();
         EventHandler<GroupsSnapshot> handler = (_, snapshot) =>
         {
-            var snapshotItems = snapshot.Groups
-                .SelectMany(group => group.Items)
-                .Select(item => new KeyValuePair<string, (long, int)>(item.Tag, (item.UrlTestTime, item.UrlTestDelay)))
-                .ToList();
-
             lock (gate)
             {
                 var remaining = SingBoxGrpcApiClient.MergeFreshDelayResults(
                     baseline.UrlTestTimes,
                     baseline.Delays,
-                    snapshotItems);
+                    snapshot.Groups.SelectMany(group => group.Items)
+                        .Select(item => new KeyValuePair<string, (long, int)>(item.Tag, (item.UrlTestTime, item.UrlTestDelay))));
 
                 // Apply fresh values as they arrive; a tag only leaves "remaining" when
                 // its result is actually fresh (see MergeFreshDelayResults - unchanged

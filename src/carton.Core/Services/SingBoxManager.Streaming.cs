@@ -20,6 +20,15 @@ namespace carton.Core.Services;
 /// </summary>
 public partial class SingBoxManager
 {
+    /// <summary>
+    /// gRPC status codes that mean retrying the SAME subscription can never succeed
+    /// (mirrors the official dashboard's isTerminalCode). For these the monitor loop
+    /// stops instead of hammering the kernel with pointless reconnects; the user
+    /// restarted flows pick it up when the state changes.
+    /// </summary>
+    private static bool IsTerminalRpcFailure(StatusCode code)
+        => code is StatusCode.Unimplemented or StatusCode.NotFound
+            or StatusCode.Unauthenticated or StatusCode.PermissionDenied;
     private Task? _connectionsMonitorTask;
     private Task? _groupsMonitorTask;
     private Task? _modeMonitorTask;
@@ -27,6 +36,10 @@ public partial class SingBoxManager
     private GroupsSnapshot _groupsSnapshot = GroupsSnapshot.Empty;
     private Dictionary<string, ConnectionSnapshotRow> _connectionRows = new(StringComparer.Ordinal);
     private readonly object _snapshotSyncRoot = new();
+    private readonly object _groupsReconcileGate = new();
+    private int _groupsReconcileGeneration;
+    private bool _groupsReconcileScheduled;
+    private static readonly TimeSpan GroupsReconcileQuietPeriod = TimeSpan.FromMilliseconds(300);
 
     /// <summary>Last merged connection list (active connections only).</summary>
     public ConnectionsSnapshot CurrentConnections
@@ -142,6 +155,12 @@ public partial class SingBoxManager
             }
             catch (RpcException e)
             {
+                if (IsTerminalRpcFailure(e.StatusCode))
+                {
+                    LogManager($"[WARN] Connections monitor terminal error, stopping: {e.StatusCode} {e.Message}");
+                    break;
+                }
+
                 // Stream broke (e.g. kernel reload / restart): reconnect with backoff.
                 consecutiveFailures++;
                 if (consecutiveFailures == 1 || consecutiveFailures % 10 == 0)
@@ -182,6 +201,7 @@ public partial class SingBoxManager
 
                     consecutiveFailures = 0;
                     PublishGroupsSnapshot(snapshot);
+                    ScheduleGroupsFinalStateReconciliation(cancellationToken);
                 }
 
                 if (_state.Status == ServiceStatus.Running)
@@ -195,6 +215,12 @@ public partial class SingBoxManager
             }
             catch (RpcException e)
             {
+                if (IsTerminalRpcFailure(e.StatusCode))
+                {
+                    LogManager($"[WARN] Groups monitor terminal error, stopping: {e.StatusCode} {e.Message}");
+                    break;
+                }
+
                 consecutiveFailures++;
                 if (consecutiveFailures == 1 || consecutiveFailures % 10 == 0)
                 {
@@ -258,6 +284,12 @@ public partial class SingBoxManager
             }
             catch (RpcException e)
             {
+                if (IsTerminalRpcFailure(e.StatusCode))
+                {
+                    LogManager($"[WARN] Outbound mode monitor terminal error, stopping: {e.StatusCode} {e.Message}");
+                    break;
+                }
+
                 // Stream broke (kernel reload / restart, or no clash server configured):
                 // reconnect with backoff.
                 consecutiveFailures++;
@@ -397,6 +429,11 @@ public partial class SingBoxManager
             groups.Add(group);
         }
 
+        PublishGroupsSnapshot(groups);
+    }
+
+    private void PublishGroupsSnapshot(IReadOnlyList<OutboundGroup> groups)
+    {
         var groupsSnapshot = new GroupsSnapshot(groups);
         lock (_snapshotSyncRoot)
         {
@@ -405,6 +442,93 @@ public partial class SingBoxManager
 
         // Raised outside the lock, same discipline as ConnectionsUpdated.
         GroupsUpdated?.Invoke(this, groupsSnapshot);
+    }
+
+    /// <summary>
+    /// sing-box 1.14's URLTest update order is:
+    /// StoreURLTestHistory (emits SubscribeGroups) -> batch.Wait -> performUpdateCheck
+    /// (sets selectedOutboundTCP/UDP). The final selected tag therefore has no stream
+    /// notification of its own. After the history burst goes quiet, read one fresh
+    /// groups snapshot and publish it so automatic and manual URLTest selections reach
+    /// CurrentGroups/UI without requiring a page change. Each new stream event resets
+    /// this timer; no polling loop is introduced.
+    /// </summary>
+    private void ScheduleGroupsFinalStateReconciliation(CancellationToken monitorToken)
+    {
+        lock (_groupsReconcileGate)
+        {
+            _groupsReconcileGeneration++;
+            if (_groupsReconcileScheduled)
+            {
+                return;
+            }
+
+            _groupsReconcileScheduled = true;
+        }
+
+        // One worker per monitor lifetime, regardless of how many per-node history
+        // pushes arrive. New pushes only increment a generation integer: no per-event
+        // CTS/Task allocation and cancellation storm during large URLTest groups.
+        _ = ReconcileGroupsFinalStateAsync(monitorToken);
+    }
+
+    private async Task ReconcileGroupsFinalStateAsync(CancellationToken monitorToken)
+    {
+        try
+        {
+            while (!monitorToken.IsCancellationRequested)
+            {
+                int generation;
+                lock (_groupsReconcileGate)
+                {
+                    generation = _groupsReconcileGeneration;
+                }
+
+                await Task.Delay(GroupsReconcileQuietPeriod, monitorToken);
+
+                lock (_groupsReconcileGate)
+                {
+                    if (generation != _groupsReconcileGeneration)
+                    {
+                        continue;
+                    }
+                }
+
+                if (_state.Status != ServiceStatus.Running)
+                {
+                    return;
+                }
+
+                var groups = await CreateApiClient().GetOutboundGroupsAsync();
+                if (groups.Count > 0 && !monitorToken.IsCancellationRequested && _state.Status == ServiceStatus.Running)
+                {
+                    PublishGroupsSnapshot(groups);
+                }
+
+                lock (_groupsReconcileGate)
+                {
+                    if (generation == _groupsReconcileGeneration)
+                    {
+                        _groupsReconcileScheduled = false;
+                        return;
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            LogManager($"[DEBUG] Groups final-state reconciliation failed: {ex.Message}");
+        }
+        finally
+        {
+            lock (_groupsReconcileGate)
+            {
+                _groupsReconcileScheduled = false;
+            }
+        }
     }
 
     /// <summary>

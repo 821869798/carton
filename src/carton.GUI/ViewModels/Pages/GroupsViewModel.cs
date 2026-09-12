@@ -31,8 +31,29 @@ public partial class GroupsViewModel : PageViewModelBase
     private readonly Dictionary<string, GroupMenuSnapshot> _trayGroupLookupBuffer = new(StringComparer.OrdinalIgnoreCase);
 
     private IReadOnlyList<GroupCacheSnapshot> _cachedGroups = Array.Empty<GroupCacheSnapshot>();
+    // Reused by the hot incremental snapshot path. Rebuilding these dictionaries for
+    // every URLTest history push was avoidable allocation and CPU work.
+    private readonly Dictionary<string, string> _selectedOutboundByGroupCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _rawDelayByTagCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _resolvedDelayLookupBuffer = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _visitedTagsBuffer = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _chainTagsBuffer = new();
+    private readonly Dictionary<string, GroupItemViewModel> _groupViewModelLookupBuffer = new(StringComparer.OrdinalIgnoreCase);
     private DateTimeOffset? _lastCacheRefreshAt;
     private DateTimeOffset? _lastNavigationApiRefreshAt;
+
+    // --- Groups snapshot coalescing (mirrors the official dashboard's StreamStore) ---
+    // The kernel pushes one full snapshot per url-test history change: a 200-node
+    // group test yields up to 200 pushes in a few seconds. Coalescing them into
+    // ONE UI application per window keeps the UI thread free and stops the visible
+    // number-flicker (each item still renders its own value; it just no longer
+    // repaints the whole list once per remote node result).
+    private readonly object _snapshotCoalesceGate = new();
+    private GroupsSnapshot? _pendingSnapshot;
+    private CancellationTokenSource? _snapshotFlushCts;
+    private static readonly TimeSpan DefaultSnapshotCoalesceWindow = TimeSpan.FromMilliseconds(150);
+    /// <summary>Adaptive: widened for huge groups (see ApplyGroupsSnapshotAsync).</summary>
+    private TimeSpan _snapshotCoalesceWindow = DefaultSnapshotCoalesceWindow;
     private string? _expandedGroupName;
     private bool _isRefreshingGroupsOnNavigation;
     private bool _isPageActive;
@@ -125,6 +146,16 @@ public partial class GroupsViewModel : PageViewModelBase
     {
         _isPageActive = false;
         UpdateUrlTestRefreshState();
+
+        // Drop any coalescing timer that is still pending: the snapshot it would
+        // apply belongs to a page the user has just left.
+        lock (_snapshotCoalesceGate)
+        {
+            _pendingSnapshot = null;
+            _snapshotFlushCts?.Cancel();
+            _snapshotFlushCts?.Dispose();
+            _snapshotFlushCts = null;
+        }
     }
 
     public void TrimInactiveUi()
@@ -179,6 +210,7 @@ public partial class GroupsViewModel : PageViewModelBase
                     ReleaseViewGroups(clearStatusMessage: false);
                     _expandedGroupName = null;
                     _cachedGroups = Array.Empty<GroupCacheSnapshot>();
+                    RebuildDelayCaches();
                     _collapsedPreviewCache.Clear();
                     TrayGroups = Array.Empty<GroupMenuSnapshot>();
                     StatusMessage = LocalizationService.Instance[WaitingForSingBoxResourceKey];
@@ -201,6 +233,7 @@ public partial class GroupsViewModel : PageViewModelBase
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 _cachedGroups = BuildCachedGroupsFromOutboundGroups(filteredGroups);
+                RebuildDelayCaches();
                 _lastCacheRefreshAt = DateTimeOffset.UtcNow;
                 _lastNavigationApiRefreshAt = _lastCacheRefreshAt;
                 UpdateTrayGroupsFromCache();
@@ -259,6 +292,7 @@ public partial class GroupsViewModel : PageViewModelBase
                 ReleaseViewGroups(clearStatusMessage: false);
                 _expandedGroupName = null;
                 _cachedGroups = Array.Empty<GroupCacheSnapshot>();
+                RebuildDelayCaches();
                 _collapsedPreviewCache.Clear();
                 TrayGroups = Array.Empty<GroupMenuSnapshot>();
                 StatusMessage = status == ServiceStatus.Error
@@ -390,6 +424,24 @@ public partial class GroupsViewModel : PageViewModelBase
         }
     }
 
+    private void RebuildDelayCaches()
+    {
+        _selectedOutboundByGroupCache.Clear();
+        _rawDelayByTagCache.Clear();
+
+        foreach (var group in _cachedGroups)
+        {
+            _selectedOutboundByGroupCache[group.Name] = group.SelectedOutbound;
+            foreach (var item in group.Items)
+            {
+                if (item.RawDelay > 0)
+                {
+                    _rawDelayByTagCache.TryAdd(item.Tag, item.RawDelay);
+                }
+            }
+        }
+    }
+
     private void RecalculateEffectiveDelays()
     {
         if (_cachedGroups.Count == 0)
@@ -399,24 +451,16 @@ public partial class GroupsViewModel : PageViewModelBase
             return;
         }
 
-        var selectedOutboundByGroup = new Dictionary<string, string>(_cachedGroups.Count, StringComparer.OrdinalIgnoreCase);
-        var rawDelayByTag = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        RebuildDelayCaches();
+        var selectedOutboundByGroup = _selectedOutboundByGroupCache;
+        var rawDelayByTag = _rawDelayByTagCache;
 
-        foreach (var group in _cachedGroups)
-        {
-            selectedOutboundByGroup[group.Name] = group.SelectedOutbound;
-            foreach (var item in group.Items)
-            {
-                if (item.RawDelay > 0)
-                {
-                    rawDelayByTag.TryAdd(item.Tag, item.RawDelay);
-                }
-            }
-        }
-
-        var resolvedDelayLookup = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        var visitedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var chainTags = new List<string>();
+        var resolvedDelayLookup = _resolvedDelayLookupBuffer;
+        var visitedTags = _visitedTagsBuffer;
+        var chainTags = _chainTagsBuffer;
+        resolvedDelayLookup.Clear();
+        visitedTags.Clear();
+        chainTags.Clear();
         var hasChanges = false;
 
         for (var groupIndex = 0; groupIndex < _cachedGroups.Count; groupIndex++)
@@ -458,7 +502,15 @@ public partial class GroupsViewModel : PageViewModelBase
 
         SyncViewGroupsFromCache();
         SyncExpandedProxyItemsFromCache();
-        UpdateTrayGroupsFromCache();
+
+        // Tray menu rebuild is expensive (full snapshot per group). While any delay
+        // test is in flight the intermediate snapshots would rebuild it dozens of
+        // times for values that are about to be replaced anyway; the final refresh
+        // after the test completes catches it up.
+        if (_testingOutboundTags.Count == 0 && !IsTestingGroup)
+        {
+            UpdateTrayGroupsFromCache();
+        }
     }
 
     private static int ResolveEffectiveDelay(
@@ -685,70 +737,32 @@ public partial class GroupsViewModel : PageViewModelBase
         return _preferencesService?.Load().AutoDisconnectConnectionsOnNodeSwitch ?? false;
     }
 
-    private async Task RefreshGroupSelectionAsync(string groupTag)
-    {
-        if (_singBoxManager == null || string.IsNullOrWhiteSpace(groupTag) || !_singBoxManager.IsRunning)
-        {
-            return;
-        }
+    // Clash-API-era note: the old "post-test snapshot pull"
+    // (RefreshGroupSelectionAsync / RefreshGroupsSnapshotAsync) was removed - the
+    // gRPC groups stream pushes fresh values (including the kernel's own URLTest
+    // group reselection) automatically after every url test.
 
-        try
-        {
-            await RefreshGroupsSnapshotAsync(new[] { groupTag });
-        }
-        catch
-        {
-        }
-    }
-
-    private async Task RefreshGroupsSnapshotAsync(IEnumerable<string> groupTags)
-    {
-        if (_singBoxManager == null || !_singBoxManager.IsRunning)
-        {
-            return;
-        }
-
-        var tagSet = CreateTagSet(groupTags);
-        if (tagSet.Count == 0)
-        {
-            return;
-        }
-
-        var groups = await GetGroupsForReadAsync();
-        var groupLookup = new Dictionary<string, OutboundGroup>(groups.Count, StringComparer.OrdinalIgnoreCase);
-        for (var i = 0; i < groups.Count; i++)
-        {
-            var group = groups[i];
-            groupLookup[group.Tag] = group;
-        }
-
-        if (!HasMatchingGroup(groupLookup))
-        {
-            return;
-        }
-
-        await Dispatcher.UIThread.InvokeAsync(() =>
-        {
-            MergeUpdatedGroupsIntoCache(groupLookup, tagSet);
-            RecalculateEffectiveDelays();
-            _lastCacheRefreshAt = DateTimeOffset.UtcNow;
-        });
-    }
-
-    private void MergeUpdatedGroupsIntoCache(
-        IReadOnlyDictionary<string, OutboundGroup> groupLookup,
-        IReadOnlySet<string> updatedGroupTags)
+    /// <summary>
+    /// Merges pushed group updates into the cache.
+    /// Returns (StructuralChanged, AnyValueChanged): the caller uses this to pick
+    /// between the cheap incremental UI path (delay/selection numbers only) and the
+    /// full rebuild path (items added/removed/type changed).
+    /// </summary>
+    private (bool StructuralChanged, bool AnyValueChanged) MergeUpdatedGroupsIntoCache(
+        IReadOnlyDictionary<string, OutboundGroup> groupLookup)
     {
         if (_cachedGroups.Count == 0)
         {
-            return;
+            return (false, false);
         }
+
+        var structuralChanged = false;
+        var anyValueChanged = false;
 
         for (var groupIndex = 0; groupIndex < _cachedGroups.Count; groupIndex++)
         {
             var existingGroup = _cachedGroups[groupIndex];
-            if (!updatedGroupTags.Contains(existingGroup.Name) ||
-                !groupLookup.TryGetValue(existingGroup.Name, out var updatedGroup))
+            if (!groupLookup.TryGetValue(existingGroup.Name, out var updatedGroup))
             {
                 continue;
             }
@@ -756,19 +770,84 @@ public partial class GroupsViewModel : PageViewModelBase
             if (!string.Equals(existingGroup.Type, updatedGroup.Type, StringComparison.Ordinal))
             {
                 existingGroup.Type = updatedGroup.Type;
+                structuralChanged = true;
             }
 
             if (!string.Equals(existingGroup.SelectedOutbound, updatedGroup.Selected, StringComparison.OrdinalIgnoreCase))
             {
                 existingGroup.SelectedOutbound = updatedGroup.Selected;
+                _selectedOutboundByGroupCache[existingGroup.Name] = updatedGroup.Selected;
+                anyValueChanged = true;
             }
 
             var isSelectable = !string.Equals(updatedGroup.Type, "URLTest", StringComparison.OrdinalIgnoreCase);
             if (existingGroup.IsSelectable != isSelectable)
             {
                 existingGroup.IsSelectable = isSelectable;
+                structuralChanged = true;
             }
 
+            // Hot path for normal URLTest/history pushes: group structure and item
+            // order are stable, so update values in place with ZERO merge dictionary /
+            // list allocation. Only subscription reloads or real structure changes
+            // fall through to the slower structural merge below.
+            var sameShape = existingGroup.Items.Count == updatedGroup.Items.Count;
+            if (sameShape)
+            {
+                for (var i = 0; i < updatedGroup.Items.Count; i++)
+                {
+                    if (!string.Equals(existingGroup.Items[i].Tag, updatedGroup.Items[i].Tag, StringComparison.OrdinalIgnoreCase))
+                    {
+                        sameShape = false;
+                        break;
+                    }
+                }
+            }
+
+            if (sameShape)
+            {
+                for (var i = 0; i < updatedGroup.Items.Count; i++)
+                {
+                    var existingItem = existingGroup.Items[i];
+                    var updatedItem = updatedGroup.Items[i];
+                    if (!string.Equals(existingItem.Type, updatedItem.Type, StringComparison.Ordinal))
+                    {
+                        existingItem.Type = updatedItem.Type;
+                        structuralChanged = true;
+                    }
+
+                    if (existingItem.RawDelay != updatedItem.UrlTestDelay)
+                    {
+                        existingItem.RawDelay = updatedItem.UrlTestDelay;
+                        if (updatedItem.UrlTestDelay > 0)
+                        {
+                            _rawDelayByTagCache[updatedItem.Tag] = updatedItem.UrlTestDelay;
+                        }
+                        else
+                        {
+                            _rawDelayByTagCache.Remove(updatedItem.Tag);
+                        }
+                        anyValueChanged = true;
+                    }
+
+                    if (updatedItem.UrlTestDelay > 0 && existingItem.IsDelayTimeout)
+                    {
+                        existingItem.IsDelayTimeout = false;
+                        anyValueChanged = true;
+                    }
+
+                    var isSelected = string.Equals(updatedItem.Tag, updatedGroup.Selected, StringComparison.OrdinalIgnoreCase);
+                    if (existingItem.IsSelected != isSelected)
+                    {
+                        existingItem.IsSelected = isSelected;
+                        anyValueChanged = true;
+                    }
+                }
+
+                continue;
+            }
+
+            structuralChanged = true;
             var existingItemLookup = new Dictionary<string, OutboundCacheSnapshot>(existingGroup.Items.Count, StringComparer.OrdinalIgnoreCase);
             foreach (var existingItem in existingGroup.Items)
             {
@@ -776,7 +855,7 @@ public partial class GroupsViewModel : PageViewModelBase
             }
 
             var mergedItems = new List<OutboundCacheSnapshot>(updatedGroup.Items.Count);
-            var groupItemsChanged = existingGroup.Items.Count != updatedGroup.Items.Count;
+            var groupItemsChanged = true;
             foreach (var updatedItem in updatedGroup.Items)
             {
                 existingItemLookup.TryGetValue(updatedItem.Tag, out var existingItem);
@@ -797,12 +876,22 @@ public partial class GroupsViewModel : PageViewModelBase
                 {
                     existingItem.Type = updatedItem.Type;
                     groupItemsChanged = true;
+                    structuralChanged = true;
                 }
 
                 if (existingItem.RawDelay != updatedItem.UrlTestDelay)
                 {
                     existingItem.RawDelay = updatedItem.UrlTestDelay;
+                    if (updatedItem.UrlTestDelay > 0)
+                    {
+                        _rawDelayByTagCache[updatedItem.Tag] = updatedItem.UrlTestDelay;
+                    }
+                    else
+                    {
+                        _rawDelayByTagCache.Remove(updatedItem.Tag);
+                    }
                     groupItemsChanged = true;
+                    anyValueChanged = true;
                 }
 
                 if (updatedItem.UrlTestDelay > 0 && existingItem.IsDelayTimeout)
@@ -816,6 +905,7 @@ public partial class GroupsViewModel : PageViewModelBase
                 {
                     existingItem.IsSelected = isSelected;
                     groupItemsChanged = true;
+                    anyValueChanged = true;
                 }
 
                 mergedItems.Add(existingItem);
@@ -826,20 +916,76 @@ public partial class GroupsViewModel : PageViewModelBase
                 existingGroup.Items = mergedItems;
             }
         }
+
+        return (structuralChanged, anyValueChanged);
     }
 
     /// <summary>
     /// Kernel pushed a fresh groups snapshot (url test history / selection change).
-    /// Merge it into the view while the page is active.
+    /// Consecutive pushes are coalesced: only the newest snapshot within the window is
+    /// applied once. While the page is hidden Core keeps CurrentGroups fresh and this
+    /// ViewModel does no work; switching back rebuilds from that latest snapshot -
+    /// mirroring the official dashboard's stream-backed store.
     /// </summary>
     private void OnGroupsSnapshotUpdated(object? sender, GroupsSnapshot snapshot)
     {
-        if (!_isPageActive || !_isWindowVisible || _singBoxManager?.IsRunning != true)
+        if (_singBoxManager?.IsRunning != true)
         {
             return;
         }
 
-        _ = ApplyGroupsSnapshotAsync(snapshot);
+        // When the page is inactive, Core still keeps CurrentGroups fresh from the
+        // long-lived stream. Do ZERO ViewModel/UI work here; OnNavigatedTo reloads
+        // from that latest Core snapshot when the user returns.
+        if (!_isPageActive)
+        {
+            return;
+        }
+
+        CancellationTokenSource? flushCts = null;
+        lock (_snapshotCoalesceGate)
+        {
+            _pendingSnapshot = snapshot;
+            if (_snapshotFlushCts == null)
+            {
+                // First push in the window: schedule the single flush and remember
+                // the token so later pushes within the window reuse the same timer.
+                _snapshotFlushCts = new CancellationTokenSource();
+                flushCts = _snapshotFlushCts;
+            }
+        }
+
+        if (flushCts != null)
+        {
+            _ = FlushPendingSnapshotAsync(flushCts);
+        }
+    }
+
+    private async Task FlushPendingSnapshotAsync(CancellationTokenSource flushCts)
+    {
+        try
+        {
+            await Task.Delay(_snapshotCoalesceWindow, flushCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            flushCts.Dispose();
+            return;
+        }
+
+        GroupsSnapshot? snapshot;
+        lock (_snapshotCoalesceGate)
+        {
+            snapshot = _pendingSnapshot;
+            _pendingSnapshot = null;
+            _snapshotFlushCts = null;
+        }
+
+        flushCts.Dispose();
+        if (snapshot != null)
+        {
+            await ApplyGroupsSnapshotAsync(snapshot);
+        }
     }
 
     private async Task ApplyGroupsSnapshotAsync(GroupsSnapshot snapshot)
@@ -860,12 +1006,136 @@ public partial class GroupsViewModel : PageViewModelBase
             return;
         }
 
+        // Adaptive coalescing window: the flush already ran, but the NEXT window is
+        // widened for huge groups so a burst of per-node pushes (200+ node group
+        // under test) cannot queue up back-to-back full UI applications.
+        var largestGroupSize = 0;
+        {
+            var total = 0;
+            foreach (var g in snapshot.Groups)
+            {
+                if (groupLookup.ContainsKey(g.Tag))
+                {
+                    total += g.Items.Count;
+                }
+            }
+
+            largestGroupSize = total;
+        }
+
+        _snapshotCoalesceWindow = largestGroupSize > 1000
+            ? TimeSpan.FromMilliseconds(500)
+            : largestGroupSize > 500
+                ? TimeSpan.FromMilliseconds(300)
+                : DefaultSnapshotCoalesceWindow;
+
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            MergeUpdatedGroupsIntoCache(groupLookup, CreateTagSet(groupLookup.Keys));
-            RecalculateEffectiveDelays();
+            var (structuralChanged, anyValueChanged) = MergeUpdatedGroupsIntoCache(groupLookup);
             _lastCacheRefreshAt = DateTimeOffset.UtcNow;
+
+            if (!anyValueChanged && !structuralChanged)
+            {
+                return;
+            }
+
+            if (structuralChanged)
+            {
+                // Items/groups added/removed or type changed: the full rebuild path is
+                // the only correct one.
+                RecalculateEffectiveDelays();
+                return;
+            }
+
+            // Value-only update (a kernel url test finished for some nodes): update
+            // just the affected view models - O(changed items), no full-list sync.
+            ApplyIncrementalDelayUpdates();
         });
+    }
+
+
+    /// <summary>
+    /// Value-only push (delays/selection numbers changed, same items). Walks the
+    /// cached groups once and updates only the view models whose effective delay
+    /// actually changed - this is the hot path during a 200+ node group test,
+    /// so it must stay allocation-light and never touch the full-list syncs.
+    /// </summary>
+    private void ApplyIncrementalDelayUpdates()
+    {
+        if (_cachedGroups.Count == 0)
+        {
+            return;
+        }
+
+        var selectedOutboundByGroup = _selectedOutboundByGroupCache;
+        var rawDelayByTag = _rawDelayByTagCache;
+
+        var resolvedDelayLookup = _resolvedDelayLookupBuffer;
+        var visitedTags = _visitedTagsBuffer;
+        var chainTags = _chainTagsBuffer;
+        resolvedDelayLookup.Clear();
+        visitedTags.Clear();
+        chainTags.Clear();
+
+        // Raw delay per tag is maintained incrementally by the cache merge above.
+        var cachedRawByTag = rawDelayByTag;
+
+        // Keep the collapsed Group cards in sync as well. The first incremental
+        // implementation only touched _expandedProxyItems, which left URLTest's
+        // kernel-selected tag blank in the card header while its preview dots already
+        // showed fresh delays. Update the cached group rows and their existing VMs in
+        // the same O(total cached items) pass.
+        var groupVmLookup = _groupViewModelLookupBuffer;
+        groupVmLookup.Clear();
+        foreach (var groupVm in Groups)
+        {
+            groupVmLookup[groupVm.Name] = groupVm;
+        }
+
+        foreach (var cachedGroup in _cachedGroups)
+        {
+            if (!groupVmLookup.TryGetValue(cachedGroup.Name, out var groupVm))
+            {
+                continue;
+            }
+
+            if (!string.Equals(groupVm.SelectedOutbound, cachedGroup.SelectedOutbound, StringComparison.OrdinalIgnoreCase))
+            {
+                groupVm.SelectedOutbound = cachedGroup.SelectedOutbound;
+            }
+
+            groupVm.ItemCount = cachedGroup.Items.Count;
+            groupVm.UpdateItemSelection();
+        }
+
+        // Update the expanded-group VM items in place.
+        for (var i = 0; i < _expandedProxyItems.Count; i++)
+        {
+            var item = _expandedProxyItems[i];
+            var delay = ResolveEffectiveDelay(
+                item.Tag,
+                selectedOutboundByGroup,
+                cachedRawByTag,
+                resolvedDelayLookup,
+                visitedTags,
+                chainTags);
+            if (item.Delay != delay)
+            {
+                item.Delay = delay;
+            }
+
+            var raw = cachedRawByTag.GetValueOrDefault(item.Tag);
+            if (item.RawDelay != raw)
+            {
+                item.RawDelay = raw;
+            }
+        }
+
+        // Tray catch-up follows the same suppression rule as the full path.
+        if (_testingOutboundTags.Count == 0 && !IsTestingGroup)
+        {
+            UpdateTrayGroupsFromCache();
+        }
     }
 
     private void UpdateUrlTestRefreshState()
@@ -904,6 +1174,9 @@ public partial class GroupsViewModel : PageViewModelBase
         finally
         {
             SetOutboundTestingState(item.Tag, false);
+            // Delay-test suppression above skipped tray rebuilds while this node was
+            // testing; catch the tray up now that the final value is in cache.
+            UpdateTrayGroupsFromCache();
         }
     }
 
@@ -1032,17 +1305,10 @@ public partial class GroupsViewModel : PageViewModelBase
 
     private async Task TestGroupAsync(
         GroupItemViewModel group,
-        bool updateTestingState,
-        bool onlyTestMissingDelay)
+        bool updateTestingState)
     {
         if (_singBoxManager == null)
         {
-            return;
-        }
-
-        if (string.Equals(group.Type, "URLTest", StringComparison.OrdinalIgnoreCase))
-        {
-            await TestUrlTestGroupAsync(group, updateTestingState, onlyTestMissingDelay);
             return;
         }
 
@@ -1052,7 +1318,7 @@ public partial class GroupsViewModel : PageViewModelBase
             return;
         }
 
-        var targets = BuildUniqueOutboundTargets(cachedGroup.Items, onlyTestMissingDelay);
+        var targets = BuildUniqueOutboundTargets(cachedGroup.Items);
 
         if (targets.Count == 0)
         {
@@ -1079,34 +1345,18 @@ public partial class GroupsViewModel : PageViewModelBase
 
         try
         {
-            var completedCounter = new int[1];
-            var totalCount = targets.Count;
-            using var concurrencyLimiter = new SemaphoreSlim(10);
-            var testTasks = new Task[targets.Count];
-            for (var i = 0; i < targets.Count; i++)
-            {
-                var item = targets[i];
-                testTasks[i] = TestGroupTargetLimitedAsync(
-                    concurrencyLimiter,
-                    group,
-                    item,
-                    updateTestingState,
-                    totalCount,
-                    completedCounter);
-            }
-
-            await Task.WhenAll(testTasks);
-
-            await Dispatcher.UIThread.InvokeAsync(RecalculateEffectiveDelays);
-
-            if (string.Equals(group.Type, "URLTest", StringComparison.OrdinalIgnoreCase))
-            {
-                await RefreshGroupSelectionAsync(group.Name);
-            }
+            // Single URLTest RPC on the GROUP tag: the daemon fans the test out to
+            // every member concurrently (batch-10 for selectors, CheckOutbounds for
+            // URLTest groups) and every finished node lands in the history storage,
+            // which notifies the groups stream. The coalesced snapshot handler then
+            // applies the fresh values - no per-node client loop, no manual
+            // RefreshGroupSelectionAsync (the push carries the kernel's own
+            // selection update for URLTest groups). Mirrors the official dashboard's
+            // single urlTest(group.tag) call.
+            await _singBoxManager.RunGroupDelayTestAsync(group.Name);
 
             if (updateTestingState)
             {
-                UpdateTrayGroupsFromCache();
                 StatusMessage = $"Test completed: {group.Name}";
             }
         }
@@ -1132,117 +1382,12 @@ public partial class GroupsViewModel : PageViewModelBase
                 {
                     IsTestingGroup = false;
                 }
-            });
-        }
-    }
 
-    private async Task TestGroupTargetLimitedAsync(
-        SemaphoreSlim concurrencyLimiter,
-        GroupItemViewModel group,
-        OutboundItemViewModel item,
-        bool updateTestingState,
-        int totalCount,
-        int[] completedCounter)
-    {
-        await concurrencyLimiter.WaitAsync();
-        try
-        {
-            await TestGroupTargetAsync(group, item, updateTestingState, totalCount, completedCounter);
-        }
-        finally
-        {
-            concurrencyLimiter.Release();
-        }
-    }
-
-    private async Task TestUrlTestGroupAsync(
-        GroupItemViewModel group,
-        bool updateTestingState,
-        bool onlyTestMissingDelay)
-    {
-        if (_singBoxManager == null)
-        {
-            return;
-        }
-
-        var cachedGroup = FindCachedGroup(group.Name);
-        if (cachedGroup == null)
-        {
-            return;
-        }
-
-        var targets = BuildUniqueOutboundTargets(cachedGroup.Items, onlyTestMissingDelay: false);
-
-        if (targets.Count == 0)
-        {
-            return;
-        }
-
-        if (onlyTestMissingDelay && AllTargetsHaveSharedDelay(targets))
-        {
-            await RefreshGroupSelectionAsync(group.Name);
-            return;
-        }
-
-        if (updateTestingState)
-        {
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                IsTestingGroup = true;
-                StatusMessage = $"Testing {group.Name}...";
-            });
-        }
-
-        await Dispatcher.UIThread.InvokeAsync(() =>
-        {
-            foreach (var item in targets)
-            {
-                SetOutboundTestingState(item.Tag, true);
-            }
-        });
-
-        try
-        {
-            var delays = await _singBoxManager.RunGroupDelayTestAsync(group.Name);
-
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                foreach (var item in targets)
-                {
-                    var delay = delays.TryGetValue(item.Tag, out var value) && value > 0 ? value : 0;
-                    UpdateCachedRawDelay(item.Tag, delay, delay <= 0);
-                }
-
-                RecalculateEffectiveDelays();
-            });
-
-            await RefreshGroupSelectionAsync(group.Name);
-
-            if (updateTestingState)
-            {
-                UpdateTrayGroupsFromCache();
-                StatusMessage = $"Test completed: {group.Name}";
-            }
-        }
-        catch (Exception ex)
-        {
-            if (updateTestingState)
-            {
-                StatusMessage = $"Test failed: {ex.Message}";
-            }
-        }
-        finally
-        {
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                foreach (var item in targets)
-                {
-                    SetOutboundTestingState(item.Tag, false);
-                }
-
+                // Delay-test suppression above skipped tray rebuilds while the group
+                // was testing; catch the tray up now that the final values are in.
                 if (updateTestingState)
                 {
-                    IsTestingGroup = false;
+                    UpdateTrayGroupsFromCache();
                 }
             });
         }
@@ -1256,7 +1401,7 @@ public partial class GroupsViewModel : PageViewModelBase
             return;
         }
 
-        await TestGroupAsync(SelectedGroup, updateTestingState: true, onlyTestMissingDelay: false);
+        await TestGroupAsync(SelectedGroup, updateTestingState: true);
     }
 
     [RelayCommand(CanExecute = nameof(CanTestGroupCard))]
@@ -1268,7 +1413,7 @@ public partial class GroupsViewModel : PageViewModelBase
         }
 
         SelectedGroup = group;
-        await TestGroupAsync(group, updateTestingState: true, onlyTestMissingDelay: false);
+        await TestGroupAsync(group, updateTestingState: true);
     }
 
     public Task SelectOutboundFromTrayAsync(string groupTag, string outboundTag)
@@ -1322,19 +1467,6 @@ public partial class GroupsViewModel : PageViewModelBase
         }
 
         return tagSet;
-    }
-
-    private bool HasMatchingGroup(Dictionary<string, OutboundGroup> groupLookup)
-    {
-        for (var i = 0; i < Groups.Count; i++)
-        {
-            if (groupLookup.ContainsKey(Groups[i].Name))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static Dictionary<string, OutboundItem> CreateOutboundItemLookup(OutboundGroup group)
@@ -1764,22 +1896,15 @@ public partial class GroupsViewModel : PageViewModelBase
     }
 
     private List<OutboundItemViewModel> BuildUniqueOutboundTargets(
-        IReadOnlyList<OutboundCacheSnapshot> items,
-        bool onlyTestMissingDelay)
+        IReadOnlyList<OutboundCacheSnapshot> items)
     {
         var result = new List<OutboundItemViewModel>(items.Count);
         var seenTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var positiveRawDelayTags = onlyTestMissingDelay ? CreatePositiveRawDelayTagSet() : null;
 
         for (var i = 0; i < items.Count; i++)
         {
             var item = items[i];
             if (string.IsNullOrWhiteSpace(item.Tag) || !seenTags.Add(item.Tag))
-            {
-                continue;
-            }
-
-            if (positiveRawDelayTags?.Contains(item.Tag) == true)
             {
                 continue;
             }
@@ -1796,69 +1921,6 @@ public partial class GroupsViewModel : PageViewModelBase
         }
 
         return result;
-    }
-
-    private HashSet<string> CreatePositiveRawDelayTagSet()
-    {
-        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var group in _cachedGroups)
-        {
-            foreach (var item in group.Items)
-            {
-                if (item.RawDelay > 0)
-                {
-                    result.Add(item.Tag);
-                }
-            }
-        }
-
-        return result;
-    }
-
-    private bool AllTargetsHaveSharedDelay(List<OutboundItemViewModel> targets)
-    {
-        var positiveRawDelayTags = CreatePositiveRawDelayTagSet();
-        for (var i = 0; i < targets.Count; i++)
-        {
-            if (!positiveRawDelayTags.Contains(targets[i].Tag))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private async Task TestGroupTargetAsync(
-        GroupItemViewModel group,
-        OutboundItemViewModel item,
-        bool updateTestingState,
-        int totalCount,
-        int[] completedCounter)
-    {
-        if (_singBoxManager == null)
-        {
-            return;
-        }
-
-        var delays = await _singBoxManager.RunOutboundDelayTestsAsync(new[] { item.Tag });
-        var delay = delays.TryGetValue(item.Tag, out var value) && value > 0 ? value : 0;
-
-        await Dispatcher.UIThread.InvokeAsync(() =>
-        {
-            UpdateCachedRawDelay(item.Tag, delay, delay <= 0);
-            RecalculateEffectiveDelays();
-            SetOutboundTestingState(item.Tag, false);
-
-            completedCounter[0]++;
-            if (updateTestingState)
-            {
-                StatusMessage = delay > 0
-                    ? $"{group.Name}: {item.Tag} {delay}ms ({completedCounter[0]}/{totalCount})"
-                    : $"{group.Name}: {item.Tag} timeout ({completedCounter[0]}/{totalCount})";
-            }
-        });
     }
 
     private GroupCacheSnapshot? FindCachedGroup(string groupName)
@@ -1936,6 +1998,15 @@ public partial class GroupsViewModel : PageViewModelBase
             desiredItems.Add(viewModel);
         }
 
+        // Position lookup for the reorder pass: reference identity -> current index.
+        // Built once per sync; ObservableCollection.IndexOf is O(n) per call and the
+        // reorder loop is O(n^2) with it on large groups.
+        var positionLookup = new Dictionary<OutboundItemViewModel, int>(ReferenceEqualityComparer.Instance);
+        for (var i = 0; i < _expandedProxyItems.Count; i++)
+        {
+            positionLookup[_expandedProxyItems[i]] = i;
+        }
+
         for (var i = 0; i < desiredItems.Count; i++)
         {
             var desiredItem = desiredItems[i];
@@ -1950,14 +2021,35 @@ public partial class GroupsViewModel : PageViewModelBase
                 continue;
             }
 
-            var existingIndex = _expandedProxyItems.IndexOf(desiredItem);
-            if (existingIndex >= 0)
+            if (positionLookup.TryGetValue(desiredItem, out var existingIndex) &&
+                existingIndex < _expandedProxyItems.Count &&
+                ReferenceEquals(_expandedProxyItems[existingIndex], desiredItem))
             {
                 _expandedProxyItems.Move(existingIndex, i);
+                // Positions shifted by the move: rebuild affected indexes cheaply by
+                // walking the moved range (contiguous shift of 1 in either direction).
+                if (existingIndex > i)
+                {
+                    for (var j = i; j <= existingIndex; j++)
+                    {
+                        positionLookup[_expandedProxyItems[j]] = j;
+                    }
+                }
+                else
+                {
+                    for (var j = existingIndex; j <= i; j++)
+                    {
+                        positionLookup[_expandedProxyItems[j]] = j;
+                    }
+                }
                 continue;
             }
 
             _expandedProxyItems.Insert(i, desiredItem);
+            for (var j = i; j < _expandedProxyItems.Count; j++)
+            {
+                positionLookup[_expandedProxyItems[j]] = j;
+            }
         }
 
         while (_expandedProxyItems.Count > desiredItems.Count)

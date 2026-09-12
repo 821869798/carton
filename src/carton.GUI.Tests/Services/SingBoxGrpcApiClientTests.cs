@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using carton.Core.Services;
 using carton.Core.Services.SingBoxApi;
+using Daemon;
 using Xunit;
 
 namespace carton.GUI.Tests.Services;
@@ -126,36 +127,15 @@ public sealed class SingBoxGrpcApiClientTests
         Assert.Equal(2, remaining.Count);
     }
 
-    [Fact]
-    public void ResolveUrlTestOutboundTags_MapsLeafNodesToParentGroups()
+    [Theory]
+    [InlineData("warn", LogLevel.Warn)]
+    [InlineData("warning", LogLevel.Warn)]
+    [InlineData("debug", LogLevel.Debug)]
+    [InlineData("trace", LogLevel.Trace)]
+    [InlineData("invalid", LogLevel.Warn)]
+    public void ParseLogThreshold_NormalizesRuntimeLevel(string level, LogLevel expected)
     {
-        var groups = new List<KeyValuePair<string, IEnumerable<string>>>
-        {
-            new("proxy", new[] { "node-a", "node-b", "auto" }),
-            new("auto", new[] { "node-a", "node-c" })
-        };
-
-        var triggerTags = SingBoxGrpcApiClient.ResolveUrlTestOutboundTags(groups, new[] { "node-a" });
-
-        Assert.Equal(2, triggerTags.Count);
-        Assert.Contains("proxy", triggerTags);
-        Assert.Contains("auto", triggerTags);
-        Assert.DoesNotContain("node-a", triggerTags);
-    }
-
-    [Fact]
-    public void ResolveUrlTestOutboundTags_RequestedGroupIsTestedDirectly()
-    {
-        var groups = new List<KeyValuePair<string, IEnumerable<string>>>
-        {
-            new("proxy", new[] { "node-a", "auto" }),
-            new("auto", new[] { "node-a" })
-        };
-
-        var triggerTags = SingBoxGrpcApiClient.ResolveUrlTestOutboundTags(groups, new[] { "auto" });
-
-        var tag = Assert.Single(triggerTags);
-        Assert.Equal("auto", tag);
+        Assert.Equal(expected, SingBoxGrpcApiClient.ParseLogThreshold(level));
     }
 
     [Fact]

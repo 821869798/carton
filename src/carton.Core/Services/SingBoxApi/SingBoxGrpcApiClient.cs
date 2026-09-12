@@ -56,67 +56,6 @@ internal sealed class SingBoxGrpcApiClient : ISingBoxApiClient, IDisposable
         return remaining;
     }
 
-    /// <summary>
-    /// sing-box's <c>URLTest</c> RPC only accepts an outbound <b>group</b> tag
-    /// (selector / urltest / ...). Leaf nodes return <c>InvalidArgument: outbound is
-    /// not a group</c>. Map requested tags to the group tags that must be triggered:
-    /// a requested group is tested directly; a requested leaf tests every parent group
-    /// that contains it.
-    /// <para>
-    /// NOTE (kernel-inherent cost): the daemon has no per-leaf URLTest, so testing one
-    /// leaf triggers a test of EVERY node in its parent group(s) — a 200-node group
-    /// means 200 kernel-side probes. A leaf shared by multiple groups triggers all of
-    /// them. Callers that only need a display value should prefer the cached group
-    /// snapshot instead of forcing a test.
-    /// </para>
-    /// </summary>
-    internal static List<string> ResolveUrlTestOutboundTags(
-        IEnumerable<KeyValuePair<string, IEnumerable<string>>> groups,
-        IReadOnlyCollection<string> requestedTags)
-    {
-        var requested = new HashSet<string>(requestedTags, StringComparer.OrdinalIgnoreCase);
-        var materializedGroups = groups as IList<KeyValuePair<string, IEnumerable<string>>> ?? groups.ToList();
-        var groupTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var triggerTags = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var (groupTag, _) in materializedGroups)
-        {
-            if (!string.IsNullOrWhiteSpace(groupTag))
-            {
-                groupTags.Add(groupTag);
-            }
-        }
-
-        foreach (var (groupTag, itemTags) in materializedGroups)
-        {
-            if (string.IsNullOrWhiteSpace(groupTag) || !seen.Add(groupTag))
-            {
-                continue;
-            }
-
-            if (requested.Contains(groupTag))
-            {
-                triggerTags.Add(groupTag);
-                continue;
-            }
-
-            foreach (var itemTag in itemTags)
-            {
-                if (string.IsNullOrWhiteSpace(itemTag) ||
-                    !requested.Contains(itemTag) ||
-                    groupTags.Contains(itemTag))
-                {
-                    continue;
-                }
-
-                triggerTags.Add(groupTag);
-                break;
-            }
-        }
-
-        return triggerTags;
-    }
 
     private readonly Action<string>? _log;
     private readonly object _channelLock = new();
@@ -505,16 +444,11 @@ internal sealed class SingBoxGrpcApiClient : ISingBoxApiClient, IDisposable
             // Baseline: last url test time per requested tag (also collected from nested groups).
             var baseline = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
             var stale = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            List<string> triggerTags = tags;
             while (await call.ResponseStream.MoveNext(cts.Token))
             {
                 var snapshot = call.ResponseStream.Current;
-                var groupMembers = new List<KeyValuePair<string, IEnumerable<string>>>(snapshot.Group.Count);
                 foreach (var g in snapshot.Group)
                 {
-                    groupMembers.Add(new KeyValuePair<string, IEnumerable<string>>(
-                        g.Tag,
-                        g.Items.Select(item => item.Tag)));
                     foreach (var item in g.Items)
                     {
                         if (tags.Contains(item.Tag, StringComparer.OrdinalIgnoreCase))
@@ -525,20 +459,9 @@ internal sealed class SingBoxGrpcApiClient : ISingBoxApiClient, IDisposable
                     }
                 }
 
-                var resolved = ResolveUrlTestOutboundTags(groupMembers, tags);
-                if (resolved.Count > 0)
-                {
-                    triggerTags = resolved;
-                }
-                else
-                {
-                    // No group contains the requested tags (unknown outbound): firing
-                    // URLTest with raw leaf tags would only produce InvalidArgument
-                    // ("outbound is not a group"). Skip the trigger; return the
-                    // stale cached values collected above (possibly none).
-                    _log?.Invoke($"[WARN] RunOutboundDelayTests: no group contains {string.Join(", ", tags)}; skipping URLTest");
-                    return stale;
-                }
+                // Keep the requested tags as the trigger: the daemon URLTest RPC handles
+                // all tag kinds natively (group -> batch, leaf -> single async test),
+                // matching the official dashboard's urlTest(item.tag) usage.
 
                 // The first message is the kernel's FULL current state: whatever it
                 // does not contain does not exist (unknown tags would otherwise burn
@@ -550,9 +473,8 @@ internal sealed class SingBoxGrpcApiClient : ISingBoxApiClient, IDisposable
             // side (it spawns the test and returns), so awaiting them one-by-one would
             // just serialize N needless RPC round-trips. Failures fall through to the
             // stale cached values below.
-            // The RPC only accepts group tags; leaf tags are resolved to parent groups.
-            var triggerTasks = new List<Task>(triggerTags.Count);
-            foreach (var tag in triggerTags)
+            var triggerTasks = new List<Task>(tags.Count);
+            foreach (var tag in tags)
             {
                 triggerTasks.Add(client.URLTestAsync(new URLTestRequest { OutboundTag = tag }, headers).ResponseAsync);
             }
@@ -698,6 +620,7 @@ internal sealed class SingBoxGrpcApiClient : ISingBoxApiClient, IDisposable
     {
         var (client, headers) = GetClient();
         using var call = client.SubscribeLog(new Empty(), headers, cancellationToken: cancellationToken);
+        var threshold = ParseLogThreshold(level);
 
         while (!cancellationToken.IsCancellationRequested && await call.ResponseStream.MoveNext(cancellationToken))
         {
@@ -712,6 +635,15 @@ internal sealed class SingBoxGrpcApiClient : ISingBoxApiClient, IDisposable
 
             foreach (var msg in logMsg.Messages)
             {
+                // SubscribeLog has an Empty request and always streams every buffered
+                // level. Honor the runtime config client-side before constructing UI
+                // records: WARN must not display or allocate DEBUG/INFO entries.
+                // Protobuf enum order is severity ascending (PANIC=0 ... TRACE=6).
+                if (msg.Level > threshold)
+                {
+                    continue;
+                }
+
                 var levelStr = MapLogLevel(msg.Level);
                 // Strip ANSI at the source: sing-box colors every channel, and this
                 // entry's non-empty level means the UI store will pass the message
@@ -811,6 +743,19 @@ internal sealed class SingBoxGrpcApiClient : ISingBoxApiClient, IDisposable
             yield return call.ResponseStream.Current;
         }
     }
+
+    internal static LogLevel ParseLogThreshold(string? level)
+        => (level ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "panic" => LogLevel.Panic,
+            "fatal" => LogLevel.Fatal,
+            "error" => LogLevel.Error,
+            "warn" or "warning" => LogLevel.Warn,
+            "info" => LogLevel.Info,
+            "debug" => LogLevel.Debug,
+            "trace" => LogLevel.Trace,
+            _ => LogLevel.Warn
+        };
 
     private static string MapLogLevel(LogLevel level) => level switch
     {

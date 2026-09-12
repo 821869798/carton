@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="x-mac-turkish"?>
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>

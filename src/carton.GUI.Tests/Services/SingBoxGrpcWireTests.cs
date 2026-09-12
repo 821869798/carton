@@ -204,14 +204,15 @@ public sealed class SingBoxGrpcWireTests
         {
             harness.Server.AddGroup("proxy", "Selector", "auto", ("node-a", "VMess", 999));
 
-            // The stale cached delay is 999; the URL test sets fresh values.
+            // The daemon URLTest RPC handles leaf tags natively (single-node test);
+            // the request must pass the ORIGINAL tag through, matching the official
+            // dashboard's urlTest(item.tag).
             var delays = await harness.Client.RunOutboundDelayTestsAsync(new[] { "node-a" }, timeoutMs: 5000);
 
             Assert.True(delays.TryGetValue("node-a", out var delay));
             Assert.NotEqual(999, delay);
             Assert.True(delay > 0);
-            Assert.Contains("proxy", harness.Server.UrlTestCalls);
-            Assert.DoesNotContain("node-a", harness.Server.UrlTestCalls);
+            Assert.Contains("node-a", harness.Server.UrlTestCalls);
         });
     }
 
