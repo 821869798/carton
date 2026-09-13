@@ -1,0 +1,571 @@
+#nullable disable
+using Downloader.Extensions;
+using System;
+using System.Collections.Generic;
+using System.Collections.Concurrent;
+using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Security.Authentication;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Downloader;
+
+/// <summary>
+/// Represents a client for making HTTP requests.
+/// </summary>
+public partial class SocketClient : IDisposable
+{
+    private const string FilenameStartPointKey = "filename=";
+    private const string FallbackUserAgent = "Downloader/5.0";
+    private const string InvalidUserAgentWithZeroVersion3 = "Downloader/0.0.0";
+    private const string InvalidUserAgentWithZeroVersion4 = "Downloader/0.0.0.0";
+
+    [GeneratedRegex(@"bytes\s*((?<from>\d*)\s*-\s*(?<to>\d*)|\*)\s*\/\s*(?<size>\d+|\*)", RegexOptions.Compiled)]
+    private static partial Regex RangePatternRegex();
+
+    private readonly DownloadConfiguration configuration;
+    private readonly Regex _contentRangePattern = RangePatternRegex();
+    private bool _isDisposed;
+    private bool? _isSupportDownloadInRange;
+    private int _redirectAttempts;
+    private ConcurrentDictionary<string, string> ResponseHeaders { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    private HttpClient Client { get; }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SocketClient"/> class with the specified configuration.
+    /// </summary>
+    public SocketClient(DownloadConfiguration config)
+    {
+        configuration = config;
+        Client = GetHttpClientWithSocketHandler(config);
+    }
+
+    private SocketsHttpHandler GetSocketsHttpHandler(RequestConfiguration config)
+    {
+        SocketsHttpHandler handler = new() {
+            AllowAutoRedirect = config.AllowAutoRedirect,
+            MaxAutomaticRedirections = config.MaximumAutomaticRedirections,
+            AutomaticDecompression = config.AutomaticDecompression,
+            PreAuthenticate = config.PreAuthenticate,
+            UseCookies = config.CookieContainer != null,
+            UseProxy = config.Proxy != null,
+            MaxConnectionsPerServer = 1000,
+            PooledConnectionIdleTimeout = config.KeepAliveTimeout,
+            PooledConnectionLifetime = Timeout.InfiniteTimeSpan,
+            EnableMultipleHttp2Connections = true,
+            ConnectTimeout = TimeSpan.FromMilliseconds(config.ConnectTimeout)
+        };
+
+        // Set up the SslClientAuthenticationOptions for custom certificate validation
+        if (config.ClientCertificates?.Count > 0)
+        {
+            handler.SslOptions.ClientCertificates = config.ClientCertificates;
+        }
+
+        handler.SslOptions.EnabledSslProtocols = SslProtocols.Tls13 | SslProtocols.Tls12;
+        handler.SslOptions.RemoteCertificateValidationCallback = ExceptionHelper.CertificateValidationCallBack;
+
+        // Configure keep-alive
+        if (config.KeepAlive)
+        {
+            handler.KeepAlivePingTimeout = config.KeepAliveTimeout;
+            handler.KeepAlivePingPolicy = HttpKeepAlivePingPolicy.WithActiveRequests;
+        }
+
+        // Configure credentials
+        if (config.Credentials != null)
+        {
+            handler.Credentials = config.Credentials;
+            handler.PreAuthenticate = config.PreAuthenticate;
+        }
+
+        // Configure cookies
+        if (handler.UseCookies && config.CookieContainer != null)
+        {
+            handler.CookieContainer = config.CookieContainer;
+        }
+
+        // Configure proxy
+        if (handler.UseProxy && config.Proxy != null)
+        {
+            handler.Proxy = config.Proxy;
+        }
+
+        // Add expect header
+        if (!string.IsNullOrWhiteSpace(config.Expect))
+        {
+            handler.Expect100ContinueTimeout = TimeSpan.FromSeconds(1);
+        }
+
+        return handler;
+    }
+
+    private HttpClient GetHttpClientWithSocketHandler(DownloadConfiguration downloadConfig)
+    {
+        // If a custom HttpClient factory is provided, use it directly
+        HttpClient client = downloadConfig.CustomHttpClientFactory?.Invoke();
+        if (client is not null)
+            return client;
+
+        // The factory was set but returned null; this client will be internally owned.
+        // Clear the factory reference so disposal logic based on this configuration
+        // can correctly treat the HttpClient as internally owned.
+        downloadConfig.CustomHttpClientFactory = null;
+        RequestConfiguration requestConfig = downloadConfig.RequestConfiguration;
+
+        // Use custom handler factory if provided, otherwise create the default SocketsHttpHandler
+        HttpMessageHandler handler = downloadConfig.CustomHttpMessageHandlerFactory?.Invoke();
+        bool handlerExternallyOwned = handler is not null;
+        if (!handlerExternallyOwned)
+            handler = GetSocketsHttpHandler(requestConfig);
+
+        client = new(handler, disposeHandler: !handlerExternallyOwned) {
+            Timeout = TimeSpan.FromMilliseconds(downloadConfig.HttpClientTimeout)
+        };
+
+        client.DefaultRequestHeaders.Clear();
+
+        // Add standard headers
+        AddHeaderIfNotEmpty(client.DefaultRequestHeaders, "Accept", ResolveAcceptHeader(requestConfig.Accept));
+        AddHeaderIfNotEmpty(client.DefaultRequestHeaders, "User-Agent", ResolveUserAgent(requestConfig.UserAgent));
+        client.DefaultRequestHeaders.Add("Connection", requestConfig.KeepAlive ? "keep-alive" : "close");
+        client.DefaultRequestHeaders.CacheControl ??= new CacheControlHeaderValue { NoCache = true };
+
+        // Add custom headers
+        if (requestConfig.Headers?.Count > 0)
+        {
+            foreach (string key in requestConfig.Headers.AllKeys.Where(k => !string.IsNullOrWhiteSpace(k)))
+            {
+                AddHeaderIfNotEmpty(client.DefaultRequestHeaders, key, requestConfig.Headers[key]);
+            }
+        }
+
+        // Add optional headers
+        if (!string.IsNullOrWhiteSpace(requestConfig.Referer))
+            // issue #223: normalize before new Uri(). Preserve this wrapper â€?            // removing it re-exposes the bracket/space URL-parse failure on
+            // Linux and also allows control-char injection via Referer.
+            client.DefaultRequestHeaders.Referrer = new Uri(UrlHelper.EnsurePathEncoded(requestConfig.Referer));
+
+        if (!string.IsNullOrWhiteSpace(requestConfig.ContentType))
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue(requestConfig.ContentType));
+
+        if (!string.IsNullOrWhiteSpace(requestConfig.TransferEncoding))
+        {
+            client.DefaultRequestHeaders.AcceptEncoding.Add(new StringWithQualityHeaderValue(requestConfig.TransferEncoding));
+            client.DefaultRequestHeaders.TransferEncoding.Add(new TransferCodingHeaderValue(requestConfig.TransferEncoding));
+        }
+
+        AddHeaderIfNotEmpty(client.DefaultRequestHeaders, "Expect", requestConfig.Expect);
+
+        return client;
+    }
+
+    private void AddHeaderIfNotEmpty(HttpRequestHeaders headers, string key, string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            headers.Add(key, value);
+    }
+
+    private static string ResolveAcceptHeader(string accept)
+    {
+        return string.IsNullOrWhiteSpace(accept) ? "*/*" : accept;
+    }
+
+    private static string ResolveUserAgent(string userAgent)
+    {
+        if (string.IsNullOrWhiteSpace(userAgent))
+            return FallbackUserAgent;
+
+        string resolvedUserAgent = userAgent.Trim();
+        if (resolvedUserAgent.EndsWith('/') ||
+            resolvedUserAgent.Equals(InvalidUserAgentWithZeroVersion3, StringComparison.OrdinalIgnoreCase) ||
+            resolvedUserAgent.Equals(InvalidUserAgentWithZeroVersion4, StringComparison.OrdinalIgnoreCase))
+        {
+            return FallbackUserAgent;
+        }
+
+        return resolvedUserAgent;
+    }
+
+    /// <summary>
+    /// Fetches the response headers asynchronously.
+    /// </summary>
+    /// <param name="addRange">Indicates whether to add a range header to the request.</param>
+    /// <param name="request">The request of client</param>
+    /// <param name="cancelToken">Cancel request token</param>
+    private async Task FetchResponseHeaders(Request request, bool addRange, CancellationToken cancelToken)
+    {
+        try
+        {
+            if (!ResponseHeaders.IsEmpty)
+                return;
+
+            var requestMsg = request.GetRequest();
+            if (addRange)
+                requestMsg.Headers.Range = new RangeHeaderValue(0, 0);
+
+            using var response = await SendRequestAsync(requestMsg, cancelToken).ConfigureAwait(false);
+            if (!EnsureResponseAddressIsSameWithOrigin(request, response))
+            {
+                await FetchResponseHeaders(request, true, cancelToken).ConfigureAwait(false);
+            }
+        }
+        catch (HttpRequestException exp)
+        {
+            // issue #225: If the user cancelled, don't retry â€?surface the cancellation immediately.
+            cancelToken.ThrowIfCancellationRequested();
+
+            // issue #220: Some servers don't like the Range header and respond with errors like
+            // 403 (Forbidden), 404 (Not Found), or 503 (Service Unavailable)
+            // even though the file is perfectly downloadable with a normal request (no Range header).
+            if (addRange && (exp.IsRequestedRangeNotSatisfiable() || !exp.IsRedirectError()))
+            {
+                await FetchResponseHeaders(request, false, cancelToken).ConfigureAwait(false);
+            }
+            else if (request.Configuration.AllowAutoRedirect &&
+                     exp.IsRedirectError() &&
+                     ResponseHeaders.TryGetValue(HttpHeaderNames.Location, out string redirectedUrl) &&
+                     !string.IsNullOrWhiteSpace(redirectedUrl) &&
+                     _redirectAttempts++ < request.Configuration.MaximumAutomaticRedirections)
+            {
+                // issue #223: normalize server-supplied redirect targets
+                // before new Uri(). Preserve this wrapper â€?the Location
+                // header is attacker-influenceable and may contain illegal
+                // path characters that would otherwise break Uri parsing on
+                // Linux or enable control-char injection.
+                request.Address = new Uri(UrlHelper.EnsurePathEncoded(redirectedUrl));
+
+                // Drop the 3xx response's stale headers so the recursive call actually
+                // re-probes the redirect target instead of early-returning on the
+                // "ResponseHeaders already populated" guard at the top of this method.
+                // This also lets us follow "challenge" redirects whose Location points
+                // back to the same URL â€?e.g. ArvanCloud/Cloudflare cookie challenges
+                // that answer with a 307 to self and expect the retry to carry the
+                // Set-Cookie they just issued (captured by the default CookieContainer).
+                // The MaximumAutomaticRedirections bound prevents an infinite loop when
+                // a challenge never resolves (e.g. a JS-only or expired link).
+                ResponseHeaders.Clear();
+                await FetchResponseHeaders(request, addRange, cancelToken).ConfigureAwait(false);
+            }
+            else
+            {
+                // await Console.Error.WriteLineAsync(exp.Message);
+                throw;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ensures that the response address is the same as the original address.
+    /// </summary>
+    /// <param name="request">The request of client</param>
+    /// <param name="response">The web response to check.</param>
+    /// <returns>True if the response address is the same as the original address; otherwise, false.</returns>
+    private bool EnsureResponseAddressIsSameWithOrigin(Request request, HttpResponseMessage response)
+    {
+        Uri redirectUri = GetRedirectUrl(response);
+        if (redirectUri != null && request.Address != redirectUri)
+        {
+            request.Address = redirectUri;
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Gets the redirect URL from the web response.
+    /// </summary>
+    /// <param name="response">The web response to get the redirect URL from.</param>
+    /// <returns>The redirect URL.</returns>
+    internal Uri GetRedirectUrl(HttpResponseMessage response)
+    {
+        // https://github.com/dotnet/runtime/issues/23264
+        Uri redirectLocation = response?.Headers.Location;
+        if (redirectLocation != null)
+        {
+            return redirectLocation;
+        }
+
+        return response?.RequestMessage?.RequestUri;
+    }
+
+    /// <summary>
+    /// Gets the file size asynchronously.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation. The task result contains the file size.</returns>
+    public async ValueTask<long> GetFileSizeAsync(Request request, CancellationToken token)
+    {
+        bool supportsRange = await IsSupportDownloadInRange(request, token).ConfigureAwait(false);
+
+        // issue #236: a Content-Encoding on the probe response (e.g. gzip) means Content-Length/
+        // Content-Range describe the size of the compressed wire representation, not necessarily
+        // the decompressed byte count that will actually be written to disk. Many HttpClient/
+        // HttpMessageHandler configurations (including ones supplied via CustomHttpClientFactory)
+        // decompress transparently without adjusting these headers. Trusting either here would
+        // size chunks/ranges off the wrong total and silently truncate the file once the chunk's
+        // (too-small) declared length is reached. Treat the size as unknown instead â€?the existing
+        // unknown-Content-Length path (issue #230) already downloads such files correctly as a
+        // single connection read to EOF.
+        if (HasContentEncoding())
+        {
+            return -1L;
+        }
+
+        if (supportsRange)
+        {
+            return GetTotalSizeFromContentRange(ResponseHeaders.ToDictionary());
+        }
+
+        return GetTotalSizeFromContentLength(ResponseHeaders.ToDictionary());
+    }
+
+    /// <summary>
+    /// Determines whether the probed response carries a <c>Content-Encoding</c> other than
+    /// <c>identity</c> (e.g. <c>gzip</c>, <c>br</c>, <c>deflate</c>), indicating the response body
+    /// is a compressed representation of the resource (issue #236).
+    /// </summary>
+    private bool HasContentEncoding()
+    {
+        return ResponseHeaders.TryGetValue(HttpHeaderNames.ContentEncoding, out string encoding) &&
+               !string.IsNullOrWhiteSpace(encoding) &&
+               !encoding.Trim().Equals("identity", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Resolves the file name, total size, range-download support and final (post-redirect) address
+    /// for the given <paramref name="request"/> in a single (cached) header probe. This is the
+    /// canonical "what is this remote file?" lookup, used both by the download pipeline before it
+    /// starts transferring and by <see cref="RemoteFileResolver"/> for callers that only want the
+    /// metadata without starting a download.
+    /// </summary>
+    /// <remarks>
+    /// The file name is always resolved (<c>Content-Disposition</c> â†?URL path â†?GUID). Size and
+    /// range support are read from the same probe; any network/server error while determining them
+    /// propagates to the caller, so the download pipeline can fail or stop appropriately. Callers
+    /// that only want a best-effort preview should use <see cref="RemoteFileResolver"/>, which
+    /// softens those errors.
+    /// </remarks>
+    /// <param name="request">The request describing the file to probe.</param>
+    /// <param name="cancelToken">A token to cancel the probe.</param>
+    /// <returns>A <see cref="RemoteFileInfo"/> describing the remote file.</returns>
+    public async Task<RemoteFileInfo> GetFileInfoAsync(Request request, CancellationToken cancelToken)
+    {
+        string fileName = await SetRequestFileNameAsync(request, cancelToken).ConfigureAwait(false);
+        bool supportsRange = await IsSupportDownloadInRange(request, cancelToken).ConfigureAwait(false);
+        long fileSize = await GetFileSizeAsync(request, cancelToken).ConfigureAwait(false);
+
+        return new RemoteFileInfo {
+            Address = request.Address,
+            FileName = fileName,
+            FileSize = fileSize,
+            SupportsRange = supportsRange,
+        };
+    }
+
+    internal long GetTotalSizeFromContentLength(Dictionary<string, string> headers)
+    {
+        // gets the total size from the content length headers.
+        if (headers.TryGetValue(HttpHeaderNames.ContentLength, out string contentLengthText) &&
+            long.TryParse(contentLengthText, out long contentLength))
+        {
+            return contentLength;
+        }
+
+        return -1L;
+    }
+
+    /// <summary>
+    /// Throws an exception if the download in range is not supported.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async ValueTask ThrowIfIsNotSupportDownloadInRange(Request request, CancellationToken cancelToken)
+    {
+        bool isSupport = await IsSupportDownloadInRange(request, cancelToken).ConfigureAwait(false);
+        if (isSupport == false)
+        {
+            throw new NotSupportedException(
+                "The downloader cannot continue downloading because the network or server failed to download in range.");
+        }
+    }
+
+    /// <summary>
+    /// Checks if the download in range is supported.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation. The task result contains a boolean indicating whether the download in range is supported.</returns>
+    public async ValueTask<bool> IsSupportDownloadInRange(Request request, CancellationToken cancelToken)
+    {
+        if (_isSupportDownloadInRange.HasValue)
+        {
+            return _isSupportDownloadInRange.Value;
+        }
+
+        await FetchResponseHeaders(request, addRange: true, cancelToken).ConfigureAwait(false);
+
+        // issue #236: don't chunk/range-split a compressed representation â€?a Range request
+        // addresses byte offsets in the compressed stream, which don't correspond to offsets in
+        // the decompressed bytes an automatic-decompression HttpClient ultimately delivers.
+        // Falling back to a single, non-ranged request keeps decompression (if any) consistent.
+        if (HasContentEncoding())
+        {
+            _isSupportDownloadInRange = false;
+            return false;
+        }
+
+        // https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.5
+        if (ResponseHeaders.TryGetValue(HttpHeaderNames.AcceptRanges, out string acceptRanges) &&
+            acceptRanges.Equals("none", StringComparison.OrdinalIgnoreCase))
+        {
+            _isSupportDownloadInRange = false;
+            return false;
+        }
+
+        // https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.16
+        if (ResponseHeaders.TryGetValue(HttpHeaderNames.ContentRange, out string contentRange))
+        {
+            if (!string.IsNullOrWhiteSpace(contentRange))
+            {
+                _isSupportDownloadInRange = true;
+                return true;
+            }
+        }
+
+        _isSupportDownloadInRange = false;
+        return false;
+    }
+
+    /// <summary>
+    /// Gets the total size from the content range headers.
+    /// </summary>
+    /// <param name="headers">The headers to get the total size from.</param>
+    /// <returns>The total size of the content.</returns>
+    internal long GetTotalSizeFromContentRange(Dictionary<string, string> headers)
+    {
+        if (headers.TryGetValue(HttpHeaderNames.ContentRange, out string contentRange) &&
+            !string.IsNullOrWhiteSpace(contentRange) &&
+            _contentRangePattern.IsMatch(contentRange))
+        {
+            Match match = _contentRangePattern.Match(contentRange);
+            string size = match.Groups["size"].Value;
+            //var from = match.Groups["from"].Value;
+            //var to = match.Groups["to"].Value;
+
+            return long.TryParse(size, out long totalSize) ? totalSize : -1L;
+        }
+
+        return -1L;
+    }
+
+    /// <summary>
+    /// Gets the file name asynchronously.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation. The task result contains the file name.</returns>
+    public async Task<string> SetRequestFileNameAsync(Request request, CancellationToken cancelToken)
+    {
+        if (!string.IsNullOrWhiteSpace(request.FileName))
+        {
+            return request.FileName;
+        }
+
+        string filename = await GetUrlDispositionFilenameAsync(request, cancelToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(filename))
+        {
+            filename = request.GetFileNameFromUrl();
+            if (string.IsNullOrWhiteSpace(filename))
+            {
+                filename = Guid.NewGuid().ToString("N");
+            }
+        }
+
+        request.FileName = filename;
+        return filename;
+    }
+
+    /// <summary>
+    /// Gets the file name from the URL disposition header asynchronously.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation. The task result contains the file name.</returns>
+    internal async Task<string> GetUrlDispositionFilenameAsync(Request request, CancellationToken cancelToken)
+    {
+        try
+        {
+            // Validate URL format
+            if (request.Address?.IsAbsoluteUri != true ||
+                !(request.Address.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase) ||
+                  request.Address.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase)) ||
+                string.IsNullOrWhiteSpace(request.Address.Host) ||
+                string.IsNullOrWhiteSpace(request.Address.AbsolutePath) ||
+                request.Address.AbsolutePath == "/" ||
+                request.Address.Segments.Length <= 1)
+            {
+                return null;
+            }
+
+            // Fetch headers if validations pass
+            await FetchResponseHeaders(request, true, cancelToken).ConfigureAwait(false);
+
+            if (ResponseHeaders.TryGetValue(HttpHeaderNames.ContentDisposition, out string disposition))
+            {
+                string filename = request.ToUnicode(disposition)
+                    ?.Split(';')
+                    .FirstOrDefault(part => part.Trim().StartsWith(FilenameStartPointKey, StringComparison.OrdinalIgnoreCase))
+                    ?.Replace(FilenameStartPointKey, "")
+                    .Replace("\"", "")
+                    .Trim();
+
+                return string.IsNullOrWhiteSpace(filename) ? null : filename;
+            }
+        }
+        catch
+        {
+            // Ignore exceptions
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the response stream asynchronously.
+    /// </summary>
+    /// <param name="request"></param>
+    /// <param name="cancelToken"></param>
+    /// <exception cref="HttpRequestException"></exception>
+    public async Task<HttpResponseMessage> SendRequestAsync(HttpRequestMessage request,
+        CancellationToken cancelToken = default)
+    {
+        HttpResponseMessage response = await Client
+            .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancelToken)
+            .ConfigureAwait(false);
+
+        // Copy all response headers to our dictionary
+        ResponseHeaders.Clear();
+        foreach (KeyValuePair<string, IEnumerable<string>> header in response.Headers)
+        {
+            ResponseHeaders.TryAdd(header.Key, header.Value.FirstOrDefault());
+        }
+
+        foreach (KeyValuePair<string, IEnumerable<string>> header in response.Content.Headers)
+        {
+            ResponseHeaders.TryAdd(header.Key, header.Value.FirstOrDefault());
+        }
+
+        // throws an HttpRequestException error if the response status code isn't within the 200-299 range.
+        response.EnsureSuccessStatusCode();
+        return response;
+    }
+
+    /// <summary>
+    /// Disposes of the resources (if any) used by the <see cref="SocketClient"/>.
+    /// </summary>
+    public void Dispose()
+    {
+        if (!_isDisposed)
+        {
+            _isDisposed = true;
+            if (configuration.CustomHttpClientFactory is null)
+                Client?.Dispose();
+        }
+    }
+}

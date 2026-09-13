@@ -1,4 +1,5 @@
-using System.Security.Cryptography;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace carton.Core.Services;
@@ -28,16 +29,21 @@ public static class SecretProtector
             return secret;
         }
 
-        var bytes = ProtectedData.Protect(
-            Encoding.UTF8.GetBytes(secret),
-            optionalEntropy: null,
-            DataProtectionScope.CurrentUser);
-        return Prefix + Convert.ToBase64String(bytes);
+        try
+        {
+            var plainBytes = Encoding.UTF8.GetBytes(secret);
+            var cipherBytes = DpapiProtect(plainBytes);
+            return Prefix + Convert.ToBase64String(cipherBytes);
+        }
+        catch
+        {
+            return secret;
+        }
     }
 
     /// <summary>
     /// True when the stored value is already in protected (dpapi-prefixed) form.
- /// Callers gate re-encryption on this: DPAPI encryption is NON-DETERMINISTIC, so
+    /// Callers gate re-encryption on this: DPAPI encryption is NON-DETERMINISTIC, so
     /// comparing a freshly protected value against the stored one would always differ
     /// and trigger pointless (and non-atomic) file rewrites on every startup.
     /// </summary>
@@ -66,8 +72,9 @@ public static class SecretProtector
 
             try
             {
-                var bytes = Convert.FromBase64String(stored[Prefix.Length..]);
-                return Encoding.UTF8.GetString(ProtectedData.Unprotect(bytes, null, DataProtectionScope.CurrentUser));
+                var cipherBytes = Convert.FromBase64String(stored[Prefix.Length..]);
+                var plainBytes = DpapiUnprotect(cipherBytes);
+                return plainBytes != null ? Encoding.UTF8.GetString(plainBytes) : null;
             }
             catch
             {
@@ -80,5 +87,107 @@ public static class SecretProtector
 
         // No prefix: legacy plain value (pre-DPAPI or non-Windows writer) - use as-is.
         return stored;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DATA_BLOB
+    {
+        public int cbData;
+        public IntPtr pbData;
+    }
+
+    private const int CRYPTPROTECT_UI_FORBIDDEN = 0x1;
+
+    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CryptProtectData(
+        ref DATA_BLOB pDataIn,
+        string? szDataDescr,
+        IntPtr pOptionalEntropy,
+        IntPtr pvReserved,
+        IntPtr pPromptStruct,
+        int dwFlags,
+        ref DATA_BLOB pDataOut);
+
+    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CryptUnprotectData(
+        ref DATA_BLOB pDataIn,
+        IntPtr ppszDataDescr,
+        IntPtr pOptionalEntropy,
+        IntPtr pvReserved,
+        IntPtr pPromptStruct,
+        int dwFlags,
+        ref DATA_BLOB pDataOut);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr LocalFree(IntPtr hMem);
+
+    private static byte[] DpapiProtect(byte[] data)
+    {
+        unsafe
+        {
+            fixed (byte* pData = data)
+            {
+                var inBlob = new DATA_BLOB
+                {
+                    cbData = data.Length,
+                    pbData = (IntPtr)pData
+                };
+                var outBlob = default(DATA_BLOB);
+                try
+                {
+                    if (!CryptProtectData(ref inBlob, null, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, CRYPTPROTECT_UI_FORBIDDEN, ref outBlob))
+                    {
+                        throw new Win32Exception(Marshal.GetLastWin32Error());
+                    }
+
+                    var result = new byte[outBlob.cbData];
+                    Marshal.Copy(outBlob.pbData, result, 0, outBlob.cbData);
+                    return result;
+                }
+                finally
+                {
+                    if (outBlob.pbData != IntPtr.Zero)
+                    {
+                        LocalFree(outBlob.pbData);
+                    }
+                }
+            }
+        }
+    }
+
+    private static byte[]? DpapiUnprotect(byte[] data)
+    {
+        unsafe
+        {
+            fixed (byte* pData = data)
+            {
+                var inBlob = new DATA_BLOB
+                {
+                    cbData = data.Length,
+                    pbData = (IntPtr)pData
+                };
+                var outBlob = default(DATA_BLOB);
+                try
+                {
+                    if (!CryptUnprotectData(ref inBlob, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, CRYPTPROTECT_UI_FORBIDDEN, ref outBlob))
+                    {
+                        return null;
+                    }
+
+                    var result = new byte[outBlob.cbData];
+                    Marshal.Copy(outBlob.pbData, result, 0, outBlob.cbData);
+                    return result;
+                }
+                finally
+                {
+                    if (outBlob.pbData != IntPtr.Zero)
+                    {
+                        LocalFree(outBlob.pbData);
+                    }
+                }
+            }
+        }
     }
 }

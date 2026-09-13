@@ -58,6 +58,12 @@ public partial class App : Application
                 mainWindow.StartHiddenToTray();
             }
             desktop.Exit += OnDesktopExit;
+
+            Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+            {
+                await System.Threading.Tasks.Task.Delay(2500);
+                MemoryOptimizer.CompactAndTrim();
+            }, Avalonia.Threading.DispatcherPriority.Background);
         }
 
         base.OnFrameworkInitializationCompleted();

@@ -131,7 +131,7 @@ internal sealed class SingBoxGrpcApiClient : ISingBoxApiClient, IDisposable
     {
         UseProxy = false,
         EnableMultipleHttp2Connections = true,
-        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
+        PooledConnectionIdleTimeout = TimeSpan.FromSeconds(30),
         KeepAlivePingDelay = TimeSpan.FromSeconds(15),
         KeepAlivePingTimeout = TimeSpan.FromSeconds(5),
     };

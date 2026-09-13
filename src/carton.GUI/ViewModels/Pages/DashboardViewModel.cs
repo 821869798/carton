@@ -34,7 +34,7 @@ public partial class DashboardViewModel : PageViewModelBase
     private static readonly IReadOnlyList<DashboardSiteStatusDefinition> ConnectivityTargets =
     [
         new("Baidu", "https://apps.bdimg.com/favicon.ico"),
-        new("Google", "https://www.google.com/favicon.ico")
+        new("Google", "https://www.google.com/generate_204")
     ];
     private readonly ISingBoxManager? _singBoxManager;
     private readonly IKernelManager? _kernelManager;

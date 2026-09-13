@@ -739,6 +739,17 @@ public partial class GroupsViewModel : PageViewModelBase
         }
 
         var connections = _singBoxManager.CurrentConnections.ActiveConnections;
+        if (connections.Count == 0 && _singBoxManager.IsRunning)
+        {
+            try
+            {
+                connections = await _singBoxManager.GetConnectionsAsync();
+            }
+            catch
+            {
+            }
+        }
+
         var affectedConnections = new List<ConnectionInfo>();
         for (int i = 0; i < connections.Count; i++)
         {

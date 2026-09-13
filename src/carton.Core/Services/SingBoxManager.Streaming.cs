@@ -30,6 +30,8 @@ public partial class SingBoxManager
         => code is StatusCode.Unimplemented or StatusCode.NotFound
             or StatusCode.Unauthenticated or StatusCode.PermissionDenied;
     private Task? _connectionsMonitorTask;
+    private CancellationTokenSource? _connectionsMonitorCts;
+    private EventHandler<ConnectionsSnapshot>? _connectionsUpdated;
     private Task? _groupsMonitorTask;
     private Task? _modeMonitorTask;
     private ConnectionsSnapshot _connectionsSnapshot = ConnectionsSnapshot.Empty;
@@ -78,7 +80,25 @@ public partial class SingBoxManager
     }
 
     /// <summary>Raised after a new <see cref="ConnectionsSnapshot"/> was merged.</summary>
-    public event EventHandler<ConnectionsSnapshot>? ConnectionsUpdated;
+    public event EventHandler<ConnectionsSnapshot>? ConnectionsUpdated
+    {
+        add
+        {
+            lock (_snapshotSyncRoot)
+            {
+                _connectionsUpdated += value;
+                UpdateConnectionsMonitorStateLocked();
+            }
+        }
+        remove
+        {
+            lock (_snapshotSyncRoot)
+            {
+                _connectionsUpdated -= value;
+                UpdateConnectionsMonitorStateLocked();
+            }
+        }
+    }
 
     /// <summary>Raised after the kernel pushed a new groups snapshot.</summary>
     public event EventHandler<GroupsSnapshot>? GroupsUpdated;
@@ -117,13 +137,56 @@ public partial class SingBoxManager
     /// <inheritdoc />
     public event EventHandler<string>? KernelVersionRejected;
 
+    internal void StopConnectionsMonitor()
+    {
+        lock (_snapshotSyncRoot)
+        {
+            StopConnectionsMonitorLocked();
+        }
+    }
+
+    private void UpdateConnectionsMonitorStateLocked()
+    {
+        if (_state.Status == ServiceStatus.Running && _connectionsUpdated != null)
+        {
+            StartConnectionsMonitorLocked();
+        }
+        else
+        {
+            StopConnectionsMonitorLocked();
+        }
+    }
+
+    private void StartConnectionsMonitorLocked()
+    {
+        if (_connectionsMonitorTask is not { IsCompleted: false } && _state.Status == ServiceStatus.Running)
+        {
+            _connectionsMonitorCts?.Dispose();
+            _connectionsMonitorCts = new CancellationTokenSource();
+            var token = _connectionsMonitorCts.Token;
+            _connectionsMonitorTask = Task.Run(() => StartConnectionsMonitorAsync(token));
+        }
+    }
+
+    private void StopConnectionsMonitorLocked()
+    {
+        try
+        {
+            _connectionsMonitorCts?.Cancel();
+            _connectionsMonitorCts?.Dispose();
+        }
+        catch
+        {
+        }
+        _connectionsMonitorCts = null;
+        _connectionsMonitorTask = null;
+        _connectionRows.Clear();
+        _connectionsSnapshot = ConnectionsSnapshot.Empty;
+    }
+
     private void StartStreamingMonitors()
     {
         var cancellationToken = EnsureRuntimeMonitorCancellationToken();
-        if (_connectionsMonitorTask is not { IsCompleted: false })
-        {
-            _connectionsMonitorTask = Task.Run(() => StartConnectionsMonitorAsync(cancellationToken));
-        }
 
         if (_groupsMonitorTask is not { IsCompleted: false })
         {
@@ -133,6 +196,11 @@ public partial class SingBoxManager
         if (_modeMonitorTask is not { IsCompleted: false })
         {
             _modeMonitorTask = Task.Run(() => StartModeMonitorAsync(cancellationToken));
+        }
+
+        lock (_snapshotSyncRoot)
+        {
+            UpdateConnectionsMonitorStateLocked();
         }
     }
 
@@ -165,7 +233,7 @@ public partial class SingBoxManager
             {
                 break;
             }
-            catch (RpcException e) when (cancellationToken.IsCancellationRequested)
+            catch (RpcException) when (cancellationToken.IsCancellationRequested)
             {
                 // Deliberate stop/restart: cancelled streams are expected, not failures.
                 break;
@@ -230,7 +298,7 @@ public partial class SingBoxManager
             {
                 break;
             }
-            catch (RpcException e) when (cancellationToken.IsCancellationRequested)
+            catch (RpcException) when (cancellationToken.IsCancellationRequested)
             {
                 // Deliberate stop/restart: cancelled streams are expected, not failures.
                 break;
@@ -304,7 +372,7 @@ public partial class SingBoxManager
             {
                 break;
             }
-            catch (RpcException e) when (cancellationToken.IsCancellationRequested)
+            catch (RpcException) when (cancellationToken.IsCancellationRequested)
             {
                 // Deliberate stop/restart: cancelled streams are expected, not failures.
                 break;
@@ -366,7 +434,7 @@ public partial class SingBoxManager
 
         // Events are raised OUTSIDE the lock: handlers may read CurrentConnections or
         // re-enter manager methods that take the same lock.
-        ConnectionsUpdated?.Invoke(this, snapshot);
+        _connectionsUpdated?.Invoke(this, snapshot);
     }
 
     /// <summary>

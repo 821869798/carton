@@ -52,11 +52,6 @@ public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
     public ConnectionsViewModel(ISingBoxManager singBoxManager) : this()
     {
         _singBoxManager = singBoxManager;
-        // Event driven refresh: the sing-box manager maintains a long-lived
-        // SubscribeConnections stream and pushes merged snapshots (NEW/UPDATE/CLOSED
-        // deltas) - no polling timer needed.
-        _singBoxManager.ConnectionsUpdated += OnConnectionsUpdated;
-        _subscribedToStreams = true;
     }
 
     /// <summary>
@@ -65,14 +60,7 @@ public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
     public void OnNavigatedTo()
     {
         _isOnPage = true;
-
-        // Render the latest merged snapshot immediately (the streaming monitor keeps it
-        // fresh while the kernel runs), then let kernel pushes drive incremental updates.
-        if (_singBoxManager is { IsRunning: true })
-        {
-            ApplyConnections(_singBoxManager.CurrentConnections);
-        }
-
+        UpdateRefreshState();
         RequestApplyFilters();
     }
 
@@ -143,10 +131,22 @@ public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
     {
         if (_singBoxManager is { IsRunning: true } && _isOnPage && _isWindowVisible)
         {
+            if (!_subscribedToStreams)
+            {
+                _singBoxManager.ConnectionsUpdated += OnConnectionsUpdated;
+                _subscribedToStreams = true;
+            }
+
             // Snapshot refresh comes from the kernel's incremental stream now;
             // just render the latest merged state when (re)activated.
             ApplyConnections(_singBoxManager.CurrentConnections);
             return;
+        }
+
+        if (_subscribedToStreams && _singBoxManager != null)
+        {
+            _singBoxManager.ConnectionsUpdated -= OnConnectionsUpdated;
+            _subscribedToStreams = false;
         }
     }
 

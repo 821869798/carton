@@ -480,6 +480,11 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
 
             EnsureRuntimeMonitorsRunning();
 
+            _ = Task.Delay(1500).ContinueWith(_ =>
+            {
+                MemoryOptimizer.CompactAndTrim();
+            }, TaskScheduler.Default);
+
             LogTiming("start.end_success", timing.Elapsed);
             return true;
         }
@@ -675,6 +680,11 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
             UpdateStatus(ServiceStatus.Stopped);
             LogInfo("sing-box stopped");
             LogTiming("stop.end_success", timing.Elapsed);
+            SingBoxApiClientFactory.Reset();
+            _ = Task.Delay(500).ContinueWith(_ =>
+            {
+                MemoryOptimizer.CompactAndTrim();
+            }, TaskScheduler.Default);
         }
         catch (Exception ex)
         {

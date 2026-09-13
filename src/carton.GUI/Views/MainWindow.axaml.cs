@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform;
 using carton.Core.Models;
+using carton.Core.Utilities;
 using carton.GUI.Models;
 using carton.GUI.Services;
 using carton.ViewModels;
@@ -89,6 +90,7 @@ public partial class MainWindow : Window
         SaveWindowPlacement();
         e.Cancel = true;
         Hide();
+        MemoryOptimizer.CompactAndTrim();
     }
 
     private void OnOpened(object? sender, System.EventArgs e)
@@ -112,7 +114,12 @@ public partial class MainWindow : Window
     {
         if (e.Property == IsVisibleProperty || e.Property == WindowStateProperty)
         {
-            NotifyWindowVisible(IsVisible && WindowState != WindowState.Minimized);
+            var isWindowVisible = IsVisible && WindowState != WindowState.Minimized;
+            NotifyWindowVisible(isWindowVisible);
+            if (!isWindowVisible)
+            {
+                MemoryOptimizer.CompactAndTrim();
+            }
         }
 
         if (e.Property == WindowStateProperty)

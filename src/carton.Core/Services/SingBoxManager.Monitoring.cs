@@ -75,6 +75,8 @@ public partial class SingBoxManager
         catch
         {
         }
+
+        StopConnectionsMonitor();
     }
 
     private async Task StartLogMonitorAsync(CancellationToken cancellationToken)
@@ -230,7 +232,7 @@ public partial class SingBoxManager
             {
                 break;
             }
-            catch (RpcException e) when (cancellationToken.IsCancellationRequested)
+            catch (RpcException) when (cancellationToken.IsCancellationRequested)
             {
                 // Deliberate stop/restart: the monitors are being torn down, the
                 // cancelled streams are expected and are not user-facing failures.

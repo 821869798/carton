@@ -1,5 +1,7 @@
 using Daemon;
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using carton.Core.Models;
 using carton.Core.Services.SingBoxApi;
@@ -352,8 +354,37 @@ public partial class SingBoxManager
         await CreateApiClient().CloseAllConnectionsAsync();
     }
 
+    private static async Task<bool> IsLocalPortListeningAsync(int port)
+    {
+        if (port is <= 0 or > 65535)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+            await socket.ConnectAsync(IPAddress.Loopback, port, cts.Token);
+            return socket.Connected;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private async Task<bool> IsApiReachableAsync()
     {
+        var port = HttpClientFactory.LocalNativeApiPort > 0
+            ? HttpClientFactory.LocalNativeApiPort
+            : (HttpClientFactory.LocalApiPort > 0 ? HttpClientFactory.LocalApiPort : 9090);
+
+        if (!await IsLocalPortListeningAsync(port))
+        {
+            return false;
+        }
+
         return await CreateApiClient().IsReachableAsync();
     }
 

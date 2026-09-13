@@ -193,9 +193,18 @@ public class ProfileManager : IProfileManager
         {
             var data = await LoadOrCreateDataUnlockedAsync();
             var profile = FindProfileById(data.Profiles, profileId);
-            return profile?.RuntimeOptions != null
-                ? CloneRuntimeOptions(profile.RuntimeOptions)
-                : new ProfileRuntimeOptions();
+            if (profile == null)
+            {
+                return new ProfileRuntimeOptions();
+            }
+
+            if (profile.RuntimeOptions == null || !profile.RuntimeOptions.Initialized || !profile.RuntimeOptions.LogLevelInitialized)
+            {
+                profile.RuntimeOptions = await ResolveRuntimeOptionsAsync(profile.Id, profile.RuntimeOptions);
+                await SaveDataUnlockedAsync(data);
+            }
+
+            return CloneRuntimeOptions(profile.RuntimeOptions);
         }
         finally
         {
@@ -269,14 +278,10 @@ public class ProfileManager : IProfileManager
             var data = JsonSerializer.Deserialize(
                            json,
                            CartonCoreJsonContext.Default.SingBoxData) ?? new SingBoxData();
-            await EnsureConfigLayoutAsync(data.Profiles);
-            await EnsureRuntimeOptionsAsync(data.Profiles);
             return data;
         }
 
         var dataToCreate = new SingBoxData();
-        await EnsureConfigLayoutAsync(dataToCreate.Profiles);
-        await EnsureRuntimeOptionsAsync(dataToCreate.Profiles);
         await SaveDataUnlockedAsync(dataToCreate);
         return dataToCreate;
     }
@@ -349,22 +354,6 @@ public class ProfileManager : IProfileManager
         return true;
     }
 
-    private async Task EnsureRuntimeOptionsAsync(IEnumerable<Profile> profiles)
-    {
-        foreach (var profile in profiles)
-        {
-            profile.RuntimeOptions = await ResolveRuntimeOptionsAsync(profile.Id, profile.RuntimeOptions);
-        }
-    }
-
-    private async Task EnsureConfigLayoutAsync(IEnumerable<Profile> profiles)
-    {
-        foreach (var profile in profiles)
-        {
-            await _configManager.GetConfigPathAsync(profile.Id, profile.Type);
-        }
-    }
-
     private async Task<ProfileRuntimeOptions> ResolveRuntimeOptionsAsync(int profileId, ProfileRuntimeOptions? options)
     {
         if (options != null && options.Initialized)
@@ -394,13 +383,14 @@ public class ProfileManager : IProfileManager
     {
         try
         {
-            var configContent = await _configManager.LoadConfigAsync(profileId);
-            if (string.IsNullOrWhiteSpace(configContent))
+            var configPath = await _configManager.GetConfigPathAsync(profileId);
+            if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
             {
                 return null;
             }
 
-            using var document = JsonDocument.Parse(configContent);
+            using var stream = File.OpenRead(configPath);
+            using var document = await JsonDocument.ParseAsync(stream);
             if (!document.RootElement.TryGetProperty("inbounds", out var inboundsElement) ||
                 inboundsElement.ValueKind != JsonValueKind.Array ||
                 inboundsElement.GetArrayLength() == 0)
@@ -560,13 +550,14 @@ public class ProfileManager : IProfileManager
     {
         try
         {
-            var configContent = await _configManager.LoadConfigAsync(profileId);
-            if (string.IsNullOrWhiteSpace(configContent))
+            var configPath = await _configManager.GetConfigPathAsync(profileId);
+            if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
             {
                 return null;
             }
 
-            using var document = JsonDocument.Parse(configContent);
+            using var stream = File.OpenRead(configPath);
+            using var document = await JsonDocument.ParseAsync(stream);
             return ReadLogLevel(document.RootElement);
         }
         catch (JsonException)
