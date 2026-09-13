@@ -172,6 +172,31 @@ internal sealed class SingBoxGrpcApiClient : ISingBoxApiClient, IDisposable
         }
     }
 
+    /// <summary>
+    /// The kernel instance's CURRENT log level via the GetDefaultLogLevel RPC, or
+    /// null when unavailable. The daemon answers from the LIVE instance factory
+    /// (instance.instance.LogFactory().Level()), so this reflects reloads and any
+    /// level changes the manager did not observe - unlike a config-file snapshot.
+    /// </summary>
+    public async Task<LogLevel?> GetRuntimeLogLevelAsync()
+    {
+        try
+        {
+            var (client, headers) = GetClient();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            var result = await client.GetDefaultLogLevelAsync(
+                new Empty(),
+                headers,
+                deadline: DateTime.UtcNow.AddSeconds(2),
+                cancellationToken: cts.Token);
+            return result?.Level;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     /// <summary>Last known daemon apiVersion (0 when unknown); used for capability gating.</summary>
     public int ApiVersion => Volatile.Read(ref _apiVersion);
 

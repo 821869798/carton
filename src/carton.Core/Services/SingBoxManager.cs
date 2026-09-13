@@ -775,9 +775,10 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
     private void LogTiming(string stage, TimeSpan? elapsed = null)
     {
         var elapsedText = elapsed.HasValue ? $" {elapsed.Value.TotalMilliseconds:F0}ms" : string.Empty;
-        // Debug level: performance instrumentation, never user-facing. Release builds
-        // strip this method entirely via the Conditional attribute; the timing.log file
-        // sink below stays as the diagnostic record.
+        // Debug-only instrumentation: the Conditional attribute strips this method
+        // (CALL SITE included - no dead-call overhead) AND the timing.log file sink
+        // below entirely in Release builds; Release diagnostics rely on the manager
+        // log stream instead.
         var message = $"[TIMING] {DateTimeOffset.Now:O} {stage}{elapsedText}";
         LogDebug(message);
 
@@ -800,7 +801,9 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
 
     /// <summary>
     /// Structured manager logging: severity is an enum, not a parsed "[WARN] " prefix.
-    /// The legacy string event stays for the plain-text startup log capture path.
+    /// A single structured event per log call (ManagerLogEntryReceived). Kernel
+    /// stdout/stderr capture and the gRPC log stream reach the UI through the
+    /// separate KernelLogEntry-based LogReceived event instead.
     /// </summary>
     public void Log(CartonLogLevel level, string message)
     {

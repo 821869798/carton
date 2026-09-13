@@ -20,6 +20,14 @@ internal interface ISingBoxApiClient
     /// </summary>
     Task<(string Version, int ApiVersion)?> GetServerVersionAsync();
 
+    /// <summary>
+    /// The kernel instance's CURRENT log level (queried live via GetDefaultLogLevel),
+    /// or null when unavailable. Unlike a config-file snapshot this always matches
+    /// the running instance, so the log-stream threshold tracks the real level even
+    /// after reloads or level changes the manager did not observe.
+    /// </summary>
+    Task<LogLevel?> GetRuntimeLogLevelAsync();
+
     /// <summary>Last known daemon apiVersion (0 when unknown); refreshed by GetServerVersionAsync.</summary>
     int ApiVersion { get; }
 

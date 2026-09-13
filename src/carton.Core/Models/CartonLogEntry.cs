@@ -1,9 +1,10 @@
 namespace carton.Core.Models;
 
 /// <summary>
-/// Severity for carton's own manager logs. Numeric order matches increasing
-/// severity so filters can compare directly (the same convention as the sing-box
-/// LogLevel protobuf enum).
+/// Severity for carton's own manager logs: Debug = 0 and higher values mean
+/// MORE severe, so UI filters can compare ranks directly. Note this is the
+/// OPPOSITE of the sing-box LogLevel protobuf enum, where Panic = 0 and higher
+/// values mean more verbose; never compare the two numeric scales directly.
 /// </summary>
 public enum CartonLogLevel
 {

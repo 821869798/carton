@@ -80,19 +80,41 @@ public partial class SingBoxManager
     private async Task StartLogMonitorAsync(CancellationToken cancellationToken)
     {
         var consecutiveFailures = 0;
-        var monitorLevel = _logMonitorLevel;
-        LogDebug($"Log monitor subscribed at level: {monitorLevel}");
+        // Snapshot as the FALLBACK only: every (re)subscribe first asks the kernel
+        // for its CURRENT level via GetDefaultLogLevel, so the threshold tracks the
+        // live instance instead of the config file that launched it (the daemon
+        // answers from the running factory and honors reloads the manager never
+        // observed; the gRPC log channel itself is unfiltered, all levels).
+        var fallbackLevel = _logMonitorLevel;
+        LogDebug($"Log monitor starting (fallback level: {fallbackLevel})");
 
         while (_state.Status == ServiceStatus.Running && !cancellationToken.IsCancellationRequested)
         {
             try
             {
                 var apiClient = CreateApiClient();
+
+                // Ask the kernel for its live level on every (re)subscribe: the
+                // config snapshot only covers launch time, while this handles
+                // reloads and any out-of-band level changes. On failure keep the
+                // last known value (never block the log stream on the query).
+                var runtimeLevel = await apiClient.GetRuntimeLogLevelAsync().ConfigureAwait(false);
+                if (runtimeLevel is { } liveLevel)
+                {
+                    fallbackLevel = MapDaemonLevelToConfigName(liveLevel);
+                    _logMonitorLevel = fallbackLevel;
+                    LogDebug($"Log monitor threshold aligned to live kernel level: {fallbackLevel}");
+                }
+
+                var monitorLevel = fallbackLevel;
                 EventHandler? resetHandler = null;
                 resetHandler = (_, _) =>
                 {
-                    // Kernel reset its log buffer: drop buffered diagnostics so the
-                    // history replay below is not duplicated.
+                    // Kernel reset its log buffer (reload/restart replay): drop buffered
+                    // diagnostics so the history replay below is not duplicated. The
+                    // next loop iteration re-queries the live level after this stream
+                    // ends; the official dashboard refetches GetDefaultLogLevel on reset
+                    // the same way.
                     ClearKernelErrorOutput();
                     KernelLogsReset?.Invoke(this, EventArgs.Empty);
                 };
@@ -260,5 +282,26 @@ public partial class SingBoxManager
         }
 
         return LogMonitorFallbackLevel;
+    }
+
+    /// <summary>
+    /// Maps the daemon's protobuf LogLevel enum (PANIC=0 ... TRACE=6, ascending
+    /// verbosity) to the config-level name the log subscription understands.
+    /// The daemon's live level comes from GetDefaultLogLevel; unmapped values fall
+    /// back to the constant fallback level ("info"), matching the config reader.
+    /// </summary>
+    private static string MapDaemonLevelToConfigName(Daemon.LogLevel level)
+    {
+        return level switch
+        {
+            Daemon.LogLevel.Panic => "panic",
+            Daemon.LogLevel.Fatal => "fatal",
+            Daemon.LogLevel.Error => "error",
+            Daemon.LogLevel.Warn => "warn",
+            Daemon.LogLevel.Info => "info",
+            Daemon.LogLevel.Debug => "debug",
+            Daemon.LogLevel.Trace => "trace",
+            _ => LogMonitorFallbackLevel
+        };
     }
 }
