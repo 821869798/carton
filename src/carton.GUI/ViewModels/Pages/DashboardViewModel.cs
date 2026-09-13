@@ -843,7 +843,7 @@ public partial class DashboardViewModel : PageViewModelBase
                 var (authSuccess, authError) = await _singBoxManager.AuthorizeCoreOnLinuxAsync(password);
                 if (!authSuccess)
                 {
-                    StartupStatus = GetString("Dashboard.Auth.Failed", "Failed to authorize kernel");
+                    StartupStatus = BuildLinuxAuthFailureStatus(authError);
                     LogError($"Linux kernel authorization failed: {authError}");
                     return;
                 }
@@ -973,7 +973,7 @@ public partial class DashboardViewModel : PageViewModelBase
                     if (!authSuccess)
                     {
                         await RevertTunToggleAsync(previousValue);
-                        StartupStatus = GetString("Dashboard.Auth.Failed", "Failed to authorize kernel");
+                        StartupStatus = BuildLinuxAuthFailureStatus(authError);
                         LogError($"Linux kernel authorization failed during TUN toggle: {authError}");
                         return;
                     }
@@ -1233,6 +1233,18 @@ public partial class DashboardViewModel : PageViewModelBase
         // Only refreshes the version shown in the UI, so it is kept off the startup path.
         _ = _kernelManager.GetInstalledKernelInfoAsync();
         return true;
+    }
+
+    /// <summary>
+    /// Keeps the reason on screen instead of only in the log. "Failed to authorize kernel" on
+    /// its own gives no way to tell a rejected password from sudo being unavailable.
+    /// </summary>
+    private string BuildLinuxAuthFailureStatus(string? authError)
+    {
+        var status = GetString("Dashboard.Auth.Failed", "Failed to authorize kernel");
+        return string.IsNullOrWhiteSpace(authError)
+            ? status
+            : $"{status}: {authError.Trim().ReplaceLineEndings(" ")}";
     }
 
     private async Task<string?> ShowLinuxPasswordDialogAsync()
