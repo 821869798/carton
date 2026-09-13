@@ -39,6 +39,18 @@ public partial class SingBoxManager
     private readonly object _groupsReconcileGate = new();
     private int _groupsReconcileGeneration;
     private bool _groupsReconcileScheduled;
+
+    /// <summary>
+    /// Live reconciliation workers. The scheduled flag alone cannot distinguish
+    /// "worker alive" from "worker exited": a worker's finally block can run
+    /// after the next push has already scheduled a new worker, and unconditionally
+    /// clearing the flag there lets a third push start a second worker while the
+    /// second is still running. Counting registrations instead keeps the flag set
+    /// while any worker is alive and never wedges on the exception path. The
+    /// counter is maintained inside the same lock as the scheduler's flag so a
+    /// push can never interleave between a worker's exit and its flag clear.
+    /// </summary>
+    private int _groupsReconcileWorkers;
     private static readonly TimeSpan GroupsReconcileQuietPeriod = TimeSpan.FromMilliseconds(300);
 
     /// <summary>Last merged connection list (active connections only).</summary>
@@ -479,6 +491,7 @@ public partial class SingBoxManager
             }
 
             _groupsReconcileScheduled = true;
+            _groupsReconcileWorkers++;
         }
 
         // One worker per monitor lifetime, regardless of how many per-node history
@@ -539,9 +552,22 @@ public partial class SingBoxManager
         }
         finally
         {
+            // Unregister and clear inside the same lock the scheduler uses, so a
+            // push that schedules a new worker can never interleave between this
+            // worker's decrement and its flag clear (which would leave the new
+            // worker unsupervised and allow overlapping GetOutboundGroupsAsync).
             lock (_groupsReconcileGate)
             {
-                _groupsReconcileScheduled = false;
+                _groupsReconcileWorkers--;
+
+                // Only the last exiting worker clears the flag: an exception path
+                // still unregisters (the flag cannot wedge true), while a worker
+                // scheduled by a newer push keeps it set (no overlapping
+                // GetOutboundGroupsAsync calls).
+                if (_groupsReconcileWorkers == 0)
+                {
+                    _groupsReconcileScheduled = false;
+                }
             }
         }
     }

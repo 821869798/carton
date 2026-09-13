@@ -43,6 +43,12 @@ public partial class GroupsViewModel : PageViewModelBase
     private DateTimeOffset? _lastNavigationApiRefreshAt;
 
     // --- Groups snapshot coalescing (mirrors the official dashboard's StreamStore) ---
+    // Group tests whose wait RPC is still in flight. The soft cap clears the
+    // SPINNER state early (IsTestingGroup etc.) so the UI stops spinning at 90s,
+    // but the kernel is still testing and re-entering the same group would start
+    // a second full batch (double load). CanExecute checks this set, so the soft
+    // cap ends the spin, not the re-entry guard.
+    private readonly HashSet<string> _inFlightGroupTests = new(StringComparer.OrdinalIgnoreCase);
     // The kernel pushes one full snapshot per url-test history change: a 200-node
     // group test yields up to 200 pushes in a few seconds. Coalescing them into
     // ONE UI application per window keeps the UI thread free and stops the visible
@@ -114,7 +120,28 @@ public partial class GroupsViewModel : PageViewModelBase
 
         if (_singBoxManager.IsRunning)
         {
+            // A group test may have finished while the page was hidden: the newest
+            // stream snapshot waits in _pendingSnapshot. Apply it first so delays
+            // and selections are fresh immediately on return, instead of waiting
+            // for the next push or the cache expiry window.
+            GroupsSnapshot? pendingSnapshot;
+            lock (_snapshotCoalesceGate)
+            {
+                pendingSnapshot = _pendingSnapshot;
+                _pendingSnapshot = null;
+            }
+
             var now = DateTimeOffset.UtcNow;
+            if (pendingSnapshot != null)
+            {
+                _ = ApplyGroupsSnapshotAsync(pendingSnapshot);
+            }
+
+            // Not mutually exclusive with the pending snapshot: a page created but
+            // never entered can hold a pending snapshot while the cache is still
+            // empty (the incremental merge returns early on an empty cache), and
+            // TrimInactiveUi releases the view VMs while keeping the cache. Both
+            // states still need the load/restore paths below.
             var shouldLoadGroups = _proxyModeCache.IsDirty || _cachedGroups.Count == 0 || isCacheExpired;
             if (shouldLoadGroups)
             {
@@ -147,11 +174,12 @@ public partial class GroupsViewModel : PageViewModelBase
         _isPageActive = false;
         UpdateUrlTestRefreshState();
 
-        // Drop any coalescing timer that is still pending: the snapshot it would
-        // apply belongs to a page the user has just left.
+        // Cancel any coalescing timer still pending: nothing should flush while
+        // the page is hidden. The latest snapshot stays in _pendingSnapshot so a
+        // group test finishing while the user is away still reaches the UI on
+        // return (OnNavigatedTo consumes it).
         lock (_snapshotCoalesceGate)
         {
-            _pendingSnapshot = null;
             _snapshotFlushCts?.Cancel();
             _snapshotFlushCts?.Dispose();
             _snapshotFlushCts = null;
@@ -295,6 +323,13 @@ public partial class GroupsViewModel : PageViewModelBase
                 RebuildDelayCaches();
                 _collapsedPreviewCache.Clear();
                 TrayGroups = Array.Empty<GroupMenuSnapshot>();
+                // A pending snapshot captured before the stop is stale: applying it
+                // on the next navigation would repopulate the just-cleared cache
+                // with data from a dead kernel run.
+                lock (_snapshotCoalesceGate)
+                {
+                    _pendingSnapshot = null;
+                }
                 StatusMessage = status == ServiceStatus.Error
                     ? "sing-box failed to start"
                     : "sing-box is not running";
@@ -442,7 +477,7 @@ public partial class GroupsViewModel : PageViewModelBase
         }
     }
 
-    private void RecalculateEffectiveDelays()
+    private void RecalculateEffectiveDelays(bool forceUiSync = false)
     {
         if (_cachedGroups.Count == 0)
         {
@@ -495,7 +530,12 @@ public partial class GroupsViewModel : PageViewModelBase
             }
         }
 
-        if (!hasChanges)
+        // Structural changes (items/groups added or removed, type changed) can leave
+        // hasChanges false: added/removed nodes may all have zero delay and keep the
+        // selection, so the value-only hasChanges check would skip the UI syncs and
+        // the view would still list deleted nodes. Callers on the structural path
+        // force the syncs; value-only hot paths keep the early return.
+        if (!hasChanges && !forceUiSync)
         {
             return;
         }
@@ -816,6 +856,14 @@ public partial class GroupsViewModel : PageViewModelBase
                         structuralChanged = true;
                     }
 
+                    // Timeout flag BEFORE the RawDelay update (it reads the previous
+                    // delay) and independent of the delay delta: a 0 -> 0 node failing
+                    // inside a group test still gets marked, a positive result clears.
+                    if (ApplyUrlTestTimeoutState(existingItem, updatedItem.UrlTestDelay))
+                    {
+                        anyValueChanged = true;
+                    }
+
                     if (existingItem.RawDelay != updatedItem.UrlTestDelay)
                     {
                         existingItem.RawDelay = updatedItem.UrlTestDelay;
@@ -827,12 +875,7 @@ public partial class GroupsViewModel : PageViewModelBase
                         {
                             _rawDelayByTagCache.Remove(updatedItem.Tag);
                         }
-                        anyValueChanged = true;
-                    }
 
-                    if (updatedItem.UrlTestDelay > 0 && existingItem.IsDelayTimeout)
-                    {
-                        existingItem.IsDelayTimeout = false;
                         anyValueChanged = true;
                     }
 
@@ -879,6 +922,15 @@ public partial class GroupsViewModel : PageViewModelBase
                     structuralChanged = true;
                 }
 
+                // Timeout flag BEFORE the RawDelay update (it reads the previous
+                // delay) and independent of the delay delta: a 0 -> 0 node failing
+                // inside a group test still gets marked, a positive result clears.
+                if (ApplyUrlTestTimeoutState(existingItem, updatedItem.UrlTestDelay))
+                {
+                    groupItemsChanged = true;
+                    anyValueChanged = true;
+                }
+
                 if (existingItem.RawDelay != updatedItem.UrlTestDelay)
                 {
                     existingItem.RawDelay = updatedItem.UrlTestDelay;
@@ -890,14 +942,9 @@ public partial class GroupsViewModel : PageViewModelBase
                     {
                         _rawDelayByTagCache.Remove(updatedItem.Tag);
                     }
+
                     groupItemsChanged = true;
                     anyValueChanged = true;
-                }
-
-                if (updatedItem.UrlTestDelay > 0 && existingItem.IsDelayTimeout)
-                {
-                    existingItem.IsDelayTimeout = false;
-                    groupItemsChanged = true;
                 }
 
                 var isSelected = string.Equals(updatedItem.Tag, updatedGroup.Selected, StringComparison.OrdinalIgnoreCase);
@@ -935,10 +982,16 @@ public partial class GroupsViewModel : PageViewModelBase
         }
 
         // When the page is inactive, Core still keeps CurrentGroups fresh from the
-        // long-lived stream. Do ZERO ViewModel/UI work here; OnNavigatedTo reloads
-        // from that latest Core snapshot when the user returns.
+        // long-lived stream. Do ZERO ViewModel/UI work here: keep only the latest
+        // snapshot reference (no flush timer, no merge) so OnNavigatedTo can apply
+        // it when the user returns.
         if (!_isPageActive)
         {
+            lock (_snapshotCoalesceGate)
+            {
+                _pendingSnapshot = snapshot;
+            }
+
             return;
         }
 
@@ -978,7 +1031,14 @@ public partial class GroupsViewModel : PageViewModelBase
         {
             snapshot = _pendingSnapshot;
             _pendingSnapshot = null;
-            _snapshotFlushCts = null;
+            // Guard against a newer flush cycle: leaving the page and returning can
+            // schedule a NEW pending push (with its own CTS) while this older timer
+            // fires; nulling unconditionally would drop that reference (the newer
+            // flush still runs, just via a stale-field miss - harmless, but unclear).
+            if (ReferenceEquals(_snapshotFlushCts, flushCts))
+            {
+                _snapshotFlushCts = null;
+            }
         }
 
         flushCts.Dispose();
@@ -1007,25 +1067,20 @@ public partial class GroupsViewModel : PageViewModelBase
         }
 
         // Adaptive coalescing window: the flush already ran, but the NEXT window is
-        // widened for huge groups so a burst of per-node pushes (200+ node group
-        // under test) cannot queue up back-to-back full UI applications.
-        var largestGroupSize = 0;
+        // widened for large group sets so a burst of per-node pushes (200+ node
+        // group under test) cannot queue up back-to-back full UI applications.
+        var totalVisibleItems = 0;
+        foreach (var g in snapshot.Groups)
         {
-            var total = 0;
-            foreach (var g in snapshot.Groups)
+            if (groupLookup.ContainsKey(g.Tag))
             {
-                if (groupLookup.ContainsKey(g.Tag))
-                {
-                    total += g.Items.Count;
-                }
+                totalVisibleItems += g.Items.Count;
             }
-
-            largestGroupSize = total;
         }
 
-        _snapshotCoalesceWindow = largestGroupSize > 1000
+        _snapshotCoalesceWindow = totalVisibleItems > 1000
             ? TimeSpan.FromMilliseconds(500)
-            : largestGroupSize > 500
+            : totalVisibleItems > 500
                 ? TimeSpan.FromMilliseconds(300)
                 : DefaultSnapshotCoalesceWindow;
 
@@ -1042,8 +1097,10 @@ public partial class GroupsViewModel : PageViewModelBase
             if (structuralChanged)
             {
                 // Items/groups added/removed or type changed: the full rebuild path is
-                // the only correct one.
-                RecalculateEffectiveDelays();
+                // the only correct one. Force the UI syncs: a pure structural change
+                // (added/removed zero-delay nodes, unchanged selection) leaves the
+                // value-only hasChanges false and would otherwise skip them.
+                RecalculateEffectiveDelays(forceUiSync: true);
                 return;
             }
 
@@ -1106,6 +1163,34 @@ public partial class GroupsViewModel : PageViewModelBase
 
             groupVm.ItemCount = cachedGroup.Items.Count;
             groupVm.UpdateItemSelection();
+        }
+
+        // Write effective delays back to the cached rows. Collapsed preview dots
+        // and the tray menu both bind cachedGroup.Items[].Delay; without this
+        // write-back they kept showing pre-test values while the expanded list
+        // looked fresh. Shares the memo lookup above, so this stays O(items).
+        for (var groupIndex = 0; groupIndex < _cachedGroups.Count; groupIndex++)
+        {
+            var cachedItems = _cachedGroups[groupIndex].Items;
+            for (var i = 0; i < cachedItems.Count; i++)
+            {
+                var cachedItem = cachedItems[i];
+                if (!resolvedDelayLookup.TryGetValue(cachedItem.Tag, out var delay))
+                {
+                    delay = ResolveEffectiveDelay(
+                        cachedItem.Tag,
+                        selectedOutboundByGroup,
+                        cachedRawByTag,
+                        resolvedDelayLookup,
+                        visitedTags,
+                        chainTags);
+                }
+
+                if (cachedItem.Delay != delay)
+                {
+                    cachedItem.Delay = delay;
+                }
+            }
         }
 
         // Update the expanded-group VM items in place.
@@ -1194,12 +1279,14 @@ public partial class GroupsViewModel : PageViewModelBase
 
     private bool CanTestCurrentGroup()
     {
-        return _singBoxManager?.IsRunning == true && SelectedGroup != null && !IsTestingGroup;
+        return _singBoxManager?.IsRunning == true && SelectedGroup != null &&
+               !IsTestingGroup && !_inFlightGroupTests.Contains(SelectedGroup.Name);
     }
 
     private bool CanTestGroupCard(GroupItemViewModel? group)
     {
-        return _singBoxManager?.IsRunning == true && group != null && !IsTestingGroup;
+        return _singBoxManager?.IsRunning == true && group != null &&
+               !IsTestingGroup && !_inFlightGroupTests.Contains(group.Name);
     }
 
     [RelayCommand]
@@ -1325,6 +1412,34 @@ public partial class GroupsViewModel : PageViewModelBase
             return;
         }
 
+        // The kernel runs a selector's members in batches of 10 sequentially
+        // (daemon/started_service.go URLTest -> protocol/group/urltest.go
+        // urlTestBatch.test). That batch RECURSES into nested OutboundGroup members,
+        // and a nested URLTest group's own history only lands AFTER all of its
+        // nested nodes finish (b.Wait() precedes the group-history loop). The
+        // visible member list (GLOBAL = 8 direct members) can therefore hide
+        // hundreds of nested nodes (perf-urltest-200 = 200) - count the EXPANDED
+        // unique tags, not the direct members, or the budget times out while the
+        // kernel is still testing and "Test completed" shows early.
+        var expandedTargetCount = CountExpandedTestTargets(cachedGroup.Name);
+
+        // Fresh-result completion still ends the wait early; the budget is only
+        // the upper bound. Per-batch allowance is the kernel's worst-case single
+        // test time (15s TCP timeout, constant/timeout.go C.TCPTimeout) - failed
+        // nodes never produce a fresh result, so the budget is what ends the wait
+        // for them. Normal tests finish far below this bound.
+        var waitBudgetMs = Math.Max(5000, ((expandedTargetCount + 9) / 10) * 15000);
+
+        // SOFT CAP: a worst-case budget (200 nodes with failing nodes = 20 batches
+        // x 15s = 300s) would keep the group spinner up for 5 minutes. Past the cap
+        // the group-level state clears early with an honest status message; the
+        // kernel keeps testing and later results still land through the groups
+        // stream (the merge paths do not depend on the group testing state), so
+        // the data converges - only the "..." spinner ends early. The wait RPC
+        // itself uses the FULL budget so its result stays accurate for callers
+        // that want it (TestGroupAsync discards it).
+        var groupStateCapMs = 90_000;
+
         if (updateTestingState)
         {
             await Dispatcher.UIThread.InvokeAsync(() =>
@@ -1343,6 +1458,18 @@ public partial class GroupsViewModel : PageViewModelBase
             }
         });
 
+        // Register the in-flight wait BEFORE starting the RPC: the soft cap clears
+        // the spinner state early, but this registration stays until the RPC truly
+        // finishes - it is what keeps CanExecute re-entry guards honest. Notify the
+        // commands so the buttons disable immediately on this UI turn.
+        _inFlightGroupTests.Add(group.Name);
+        TestCurrentGroupCommand.NotifyCanExecuteChanged();
+        TestGroupCardCommand.NotifyCanExecuteChanged();
+
+        // ClearedEarly tracks the soft-cap path across the try/catch/finally below
+        // so the catch/finally skip state writes the cap handler already performed.
+        var clearedEarly = false;
+
         try
         {
             // Single URLTest RPC on the GROUP tag: the daemon fans the test out to
@@ -1353,24 +1480,76 @@ public partial class GroupsViewModel : PageViewModelBase
             // RefreshGroupSelectionAsync (the push carries the kernel's own
             // selection update for URLTest groups). Mirrors the official dashboard's
             // single urlTest(group.tag) call.
-            await _singBoxManager.RunGroupDelayTestAsync(group.Name);
+            //
+            // Two-phase wait: the RPC keeps the FULL budget (accurate result for
+            // callers that want it), but the group-level spinner only waits the soft
+            // cap. Past the cap the kernel is usually still testing failed nodes;
+            // keep the UI honest instead of spinning for minutes.
+            var waitTask = _singBoxManager.RunGroupDelayTestAsync(group.Name, timeoutMs: waitBudgetMs);
 
             if (updateTestingState)
+            {
+                // Cancel the cap timer as soon as WhenAny resolves so a normal
+                // fast completion does not leave a 90s Delay ticking in the void.
+                using var capCts = new CancellationTokenSource();
+                var completed = await Task.WhenAny(waitTask, Task.Delay(groupStateCapMs, capCts.Token));
+                capCts.Cancel();
+                if (!ReferenceEquals(completed, waitTask))
+                {
+                    // Soft cap reached before the kernel finished: clear the group
+                    // state now with an honest message; results continue arriving via
+                    // the stream and the merge paths apply them regardless.
+                    clearedEarly = true;
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        group.IsTesting = false;
+                        IsTestingGroup = false;
+                        foreach (var item in targets)
+                        {
+                            SetOutboundTestingState(item.Tag, false);
+                        }
+                        StatusMessage = $"Test still running in background: {group.Name}";
+                        // The suppression rule in the merge paths keys on the group
+                        // testing state: with it cleared, tray rebuilds resume and
+                        // the already-arrived results land in the tray immediately.
+                        UpdateTrayGroupsFromCache();
+                    });
+                }
+            }
+
+            await waitTask;
+
+            if (updateTestingState && !clearedEarly)
             {
                 StatusMessage = $"Test completed: {group.Name}";
             }
         }
         catch (Exception ex)
         {
-            if (updateTestingState)
+            if (updateTestingState && !clearedEarly)
             {
                 StatusMessage = $"Test failed: {ex.Message}";
             }
         }
         finally
         {
+            // The wait RPC truly finished. Release the re-entry guard and notify on
+            // the UI thread: CanExecute reads the same set there, keeping the
+            // non-thread-safe HashSet access single-threaded.
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
+                _inFlightGroupTests.Remove(group.Name);
+                TestCurrentGroupCommand.NotifyCanExecuteChanged();
+                TestGroupCardCommand.NotifyCanExecuteChanged();
+
+                if (clearedEarly)
+                {
+                    // The soft-cap handler already cleared every spinner state; a
+                    // second test may legitimately be running now - do NOT stomp on
+                    // its testing flags from this finished background wait.
+                    return;
+                }
+
                 foreach (var item in targets)
                 {
                     SetOutboundTestingState(item.Tag, false);
@@ -1895,6 +2074,72 @@ public partial class GroupsViewModel : PageViewModelBase
         return _lastCacheRefreshAt.HasValue && now - _lastCacheRefreshAt.Value > CacheExpirationInterval;
     }
 
+    /// <summary>
+    /// Counts the unique outbounds the kernel will actually test for a group tag,
+    /// expanding nested groups: urlTestBatch.test recurses into every
+    /// OutboundGroup member (protocol/group/urltest.go), so GLOBAL containing a
+    /// 200-node urltest subgroup must count ~200, not its ~8 direct members. Uses
+    /// the cached groups for the group->members lookup; a nested group MISSING
+    /// from the cache counts as 1 (UNDERCOUNTS, never overcounts) - the budget
+    /// then runs short and "Test completed" can still show early, so keep the
+    /// cache fresh rather than relaxing this.
+    /// </summary>
+    private int CountExpandedTestTargets(string groupTag)
+    {
+        if (_cachedGroups.Count == 0)
+        {
+            return 0;
+        }
+
+        var seenTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var countedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Group lookup by tag for the recursion; built once per call (cold path,
+        // group tests are user-triggered).
+        var groupsByName = new Dictionary<string, GroupCacheSnapshot>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < _cachedGroups.Count; i++)
+        {
+            groupsByName[_cachedGroups[i].Name] = _cachedGroups[i];
+        }
+
+        if (!groupsByName.TryGetValue(groupTag, out var root))
+        {
+            return 0;
+        }
+
+        CountExpanded(root, groupsByName, seenTags, countedTags);
+        return countedTags.Count;
+
+        static void CountExpanded(
+            GroupCacheSnapshot group,
+            Dictionary<string, GroupCacheSnapshot> groupsByName,
+            HashSet<string> seenTags,
+            HashSet<string> countedTags)
+        {
+            if (!seenTags.Add(group.Name))
+            {
+                // Cyclic group references (selector chains) must not loop forever.
+                return;
+            }
+
+            for (var i = 0; i < group.Items.Count; i++)
+            {
+                var item = group.Items[i];
+                if (groupsByName.TryGetValue(item.Tag, out var nested))
+                {
+                    // A member that is itself a group: recurse, mirroring the
+                    // kernel's urlTestBatch.test expansion.
+                    CountExpanded(nested, groupsByName, seenTags, countedTags);
+                }
+                else
+                {
+                    // Leaf outbound (proxy node, DIRECT, REJECT...): it gets a test.
+                    countedTags.Add(item.Tag);
+                }
+            }
+        }
+    }
+
     private List<OutboundItemViewModel> BuildUniqueOutboundTargets(
         IReadOnlyList<OutboundCacheSnapshot> items)
     {
@@ -2121,6 +2366,69 @@ public partial class GroupsViewModel : PageViewModelBase
         {
             asyncCommand.NotifyCanExecuteChanged();
         }
+    }
+
+    /// <summary>
+    /// Keeps the expanded-group VM rows in sync with a cached row's timeout flag
+    /// (collapsed preview dots bind the cached row directly; expanded rows are
+    /// separate view models). Runs on the UI thread inside the snapshot merge.
+    /// </summary>
+    private void SyncExpandedItemTimeout(string tag, bool isDelayTimeout)
+    {
+        var items = _expandedProxyItems;
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            if (string.Equals(item.Tag, tag, StringComparison.OrdinalIgnoreCase) &&
+                item.IsDelayTimeout != isDelayTimeout)
+            {
+                item.IsDelayTimeout = isDelayTimeout;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Applies the URLTest timeout flag independent of the RawDelay delta: a
+    /// node that never had a delay (0 -> 0 on a failed group test) must still be
+    /// marked, and a positive delay always clears it. Must run BEFORE the
+    /// RawDelay update so it can read the previous value. A zero-delay node that
+    /// never had a delay OUTSIDE a running group test stays "never measured"
+    /// (the single-node path marks timeouts via UpdateCachedRawDelay instead).
+    /// </summary>
+    private bool ApplyUrlTestTimeoutState(OutboundCacheSnapshot existingItem, int urlTestDelay)
+    {
+        if (urlTestDelay > 0)
+        {
+            if (existingItem.IsDelayTimeout)
+            {
+                existingItem.IsDelayTimeout = false;
+                SyncExpandedItemTimeout(existingItem.Tag, false);
+                return true;
+            }
+
+            return false;
+        }
+
+        if (existingItem.IsDelayTimeout)
+        {
+            return false;
+        }
+
+        // Zero delay: mark when the node previously had a delay (the kernel
+        // cleared its saved history) or THIS node is currently being tested. The
+        // per-tag set (not the global IsTestingGroup flag) matters here: the merge
+        // scans every cached group, so a proxy-group test must not mark never-measured
+        // nodes in auto/netflix as timed out just because some group is testing.
+        // A tag can appear in several groups; if it is being tested it is being
+        // tested everywhere it appears.
+        if (existingItem.RawDelay != 0 || _testingOutboundTags.Contains(existingItem.Tag))
+        {
+            existingItem.IsDelayTimeout = true;
+            SyncExpandedItemTimeout(existingItem.Tag, true);
+            return true;
+        }
+
+        return false;
     }
 
     private void UpdateCachedRawDelay(string tag, int delay, bool isTimeout = false)
