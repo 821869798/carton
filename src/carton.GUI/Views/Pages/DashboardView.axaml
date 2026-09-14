@@ -339,6 +339,7 @@
             <ListBox.ItemTemplate>
               <DataTemplate DataType="vm:DashboardProfileItemViewModel">
                 <TextBlock Text="{Binding Name}"
+                           FontSize="16"
                            TextTrimming="CharacterEllipsis"
                            VerticalAlignment="Center"/>
               </DataTemplate>
