@@ -19,7 +19,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Grpc.Net.Client" Version="2.83.0" />
-		<PackageReference Include="Google.Protobuf" Version="3.30.0" />
+		<PackageReference Include="Google.Protobuf" Version="3.36.1" />
 		<PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
 		<PackageReference Include="Grpc.Tools" Version="2.84.0">
 			<PrivateAssets>all</PrivateAssets>
