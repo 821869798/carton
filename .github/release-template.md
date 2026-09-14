@@ -44,7 +44,7 @@
 - You can update and replace the bundled kernel inside the app (`Settings -> Kernel`).
 - `.nupkg` and `releases*.json` are for auto-update and usually do not need to be downloaded manually.
 
-**Windows Installer Compatibility**
+**Kernel Compatibility**
 
 - 中文：从 `0.6.0` 开始，carton 最低仅支持 `1.14+` 版本的内核；如需使用低版本内核，请使用之前的 carton 版本。
 - English: Starting with `0.6.0`, carton requires a sing-box kernel version `1.14` or newer. To use older kernel versions, please stay on a previous carton release.
