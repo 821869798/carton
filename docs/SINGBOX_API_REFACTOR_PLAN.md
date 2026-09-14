@@ -115,4 +115,4 @@ carton 已把传输层从 clash REST/WS 换成 sing-box 1.14+ 的原生 gRPC（`
 - [x] 内核版本硬门槛：`KernelVersionGuard`（≥1.14.0）三层拦截（启动/在线下载/自定义安装）+ 弹框 + 单测
 - [ ] Phase 1 实机验证（需真实内核）：外部 dashboard 切节点后 carton UI <1s 同步；
       500+ 并发连接下差量合并内存平稳
-- [ ] 合入前跑一次 `scripts/test-publish-linux-aot.sh linux-x64 Release`（CI 发布管线形态）
+- [ ] 合入前跑一次 `scripts/build/test-publish-linux-aot.sh linux-x64 Release`（CI 发布管线形态）

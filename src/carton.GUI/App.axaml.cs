@@ -59,11 +59,13 @@ public partial class App : Application
             }
             desktop.Exit += OnDesktopExit;
 
-            Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
-            {
-                await System.Threading.Tasks.Task.Delay(2500);
-                MemoryOptimizer.CompactAndTrim();
-            }, Avalonia.Threading.DispatcherPriority.Background);
+            // Startup allocates heavily (XAML parse, styles, icon/font realization) and most
+            // of it dies immediately. Reclaim it once the UI has settled. Runs entirely on a
+            // thread-pool thread - never block the dispatcher on a gen2 compacting collection.
+            _ = System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(5))
+                .ContinueWith(
+                    static _ => MemoryOptimizer.CompactAndTrimNow(),
+                    System.Threading.Tasks.TaskScheduler.Default);
         }
 
         base.OnFrameworkInitializationCompleted();

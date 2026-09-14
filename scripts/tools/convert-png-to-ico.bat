@@ -2,8 +2,8 @@
 setlocal enabledelayedexpansion
 
 set SCRIPT_DIR=%~dp0
-set INPUT=..\src\carton.GUI\Assets\carton_icon_full.png
-set OUTPUT=..\src\carton.GUI\Assets\carton_icon.ico
+set INPUT=..\..\src\carton.GUI\Assets\carton_icon_full.png
+set OUTPUT=..\..\src\carton.GUI\Assets\carton_icon.ico
 
 pushd "%SCRIPT_DIR%"
 go run convert-png-to-ico.go -in "%INPUT%" -out "%OUTPUT%"

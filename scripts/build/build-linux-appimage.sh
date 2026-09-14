@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: scripts/build-linux-appimage.sh [rid] [configuration]
-# Example: scripts/build-linux-appimage.sh linux-x64 Release
+# Usage: scripts/build/build-linux-appimage.sh [rid] [configuration]
+# Example: scripts/build/build-linux-appimage.sh linux-x64 Release
 
 RID="${1:-linux-x64}"
 CONFIG="${2:-Release}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 PUBLISH_SCRIPT="${SCRIPT_DIR}/test-publish-linux-aot.sh"
 PROJECT="${REPO_ROOT}/src/carton.GUI/carton.GUI.csproj"
 PUBLISH_OUTPUT="${REPO_ROOT}/artifacts/publish/${RID}"

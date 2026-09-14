@@ -1,189 +1,339 @@
-# Carton 内存占用深度剖析与本地优化技术报告
+# carton 内存占用剖析与本地优化
 
-> **文档状态**：已完成本地优化落地、全量单测验证与 Git 提交  
-> **更新时间**：2026-09-14  
-> **分支与提交**：`dev` (`1d50094`)  
-> **测试环境**：Windows 11 / .NET 10.0 / Avalonia 11.3.14  
-> **验证结论**：单元测试 263/263 全部通过，0 警告，0 错误  
+> 合并自原先的 `MEMORY_OPTIMIZATION_REPORT.md` 与 `MEMORY_OPTIMIZATION_REPORT2.md`。
+> 面向结果的短文见 [`MEMORY_OPTIMIZATION_RESULTS.md`](./MEMORY_OPTIMIZATION_RESULTS.md)。
+>
+> **任务管理器默认「内存」列 = 专用工作集**（Working Set - Private），不是提交大小，也不是工作集。
+> 渲染后端保持 Avalonia 官方默认（Windows：`AngleEgl` 优先）。不要用强制软件渲染交差。
+>
+> **铁律：配置 JSON 正文平时不准进内存。** 只允许两处读盘，用完立刻丢掉：
+> ① 配置管理点进去看 / 改正文；② 点启动、生成运行时配置去覆写 mixed/tun/log。
+> 列表、托盘、仪表盘选配置、打开 carton，都只准用索引 / 元数据。
 
----
-
-## 一、 背景与现象复盘
-
-### 1. 核心现象与用户疑问
-Carton 客户端在从 **0.5.2** 升级至 **0.6.0** 后，内存表现引发了深入探讨。主要存在以下三大关键现象与疑问：
-
-1. **0.5 与 0.6 的版本内存基线差异**：
-   * **冷启动初始内存**：0.5 版本约 50MB，0.6 版本达到 ~80MB（增长约 30MB）；
-   * **日常代理运行内存**：0.5 版本约 100MB，0.6 版本达到 ~130MB。
-2. **“8 个配置比 0 个配置多占 20MB” 的现象**：
-   * 用户发现：一个配置也没有的时候约 50MB，导入 8 个配置后却达到 70MB+。
-   * 用户提出质疑：*“配置加载进内存应该只是一个索引和基础元数据，不应该把配置原文全常驻进内存，按需加载才对。”*
-   * 进一步实测发现：在优化了 `ProfileManager` 的惰性读取后，内存确实优化了 3~5MB，但没有直接减少 20MB。**那剩下的 ~15MB 到底由什么构成？**
-3. **网络测速、TLS/HTTPS 与第三方软件对比**：
-   * TLS/HTTPS 握手和会话的内存会算在 Carton 进程里吗？
-   * 其他代理软件（如 sing-box 官方、v2rayN）究竟是使用 HTTP 还是 HTTPS？检查更新能否避免 HTTPS？
-4. **底层库精简与源码化**：
-   * `Downloader` 能否内嵌源码并精简？
-   * 使用 Win32 原生 `crypt32.dll` P/Invoke 会不会比 NuGet 包更省内存？
+**更新**：2026-09-14  
+**相关提交**：`9f9ae41` 及后续修正  
+**环境**：Windows 11 / .NET 10 / Avalonia 11.3.18  
+**复现脚本**：`scripts/memory/mem-regions.ps1`、`scripts/memory/mem-repeat.ps1`  
+**分配跟踪**：`报告20260913-2337.diagsession`（约 1.9 小时 Object Allocation Tracking）
 
 ---
 
-## 二、 核心问题深度剖析与技术解密
+## 一、背景与现象
 
-### 1. 深度解析：“0 配置（50MB） vs 8 配置（70MB+）” 的 20MB 真实构成
+从 **0.5.2** 升到 **0.6.0** 后，内存争议主要有四条：
 
-为什么仅仅添加 8 个配置，内存就会多出 20MB？为什么即使重构了 `ProfileManager` 惰性加载，也只直接减少了 3~5MB？
+1. **版本基线**
+   - 冷启动：0.5 约 50MB，0.6 约 80MB（多约 30MB）
+   - 日常代理运行：0.5 约 100MB，0.6 约 130MB
+2. **「0 个配置约 50MB，8 个配置 70MB+」——是一打开 carton，不是启动内核**
+   - 测的是：进程起来、主窗口在，**sing-box 还没跑**。任务管理器「内存」列：空列表约 50MB，列表里 8 个配置约 70MB+。
+   - **不要**把这 20MB 理解成「启动内核时把 8 份 JSON 读进内存做覆写」。内核没启动，配置正文就不该在内存里。
+   - 合理预期：打开 carton 只加载配置**索引**（id / 名字 / 类型 / 更新时间）。点进某一条看正文、或点启动去做运行时覆写，才读那一份文件；编辑结束 / 覆写写出 runtime 文件之后，正文立刻释放。
+   - 列表侧改成流式只抽元数据后，大约能再省 3~5MB；**剩下约 15MB 主要是首页 / 配置卡片视觉树，仍不是 8 份配置原文。**
+3. **TLS / HTTPS 与对照软件**
+   - TLS 握手和会话算不算进 carton 进程？
+   - sing-box 官方、v2rayN 测速用 HTTP 还是 HTTPS？检查更新能不能避免 HTTPS？
+4. **库能不能再瘦**
+   - `Downloader` 能否内嵌源码并裁掉不用的面？
+   - Win32 `crypt32.dll` P/Invoke 会不会比 `ProtectedData` NuGet 更省？
 
-通过对托管堆与系统工作集的精细化追踪，这 20MB 的组成清单如下：
+---
+
+## 二、问题剖析
+
+### 1. 「0 配置 50MB vs 8 配置 70MB+」那 20MB（打开 carton，内核未启动）
+
+**测量点再强调一遍：** 刚打开 GUI，没有点启动。
+
+**2026-09-14 实测复现（`scripts/memory/mem-config-timing.ps1`）。**
+用真实应用，先把配置目录清空/写入，再启动读任务管理器「内存」列（专用工作集）：
+
+| 启动页 | 配置数 | 磁盘配置总量 | 任务管理器「内存」 |
+|---|---|---|---|
+| 仪表盘 | 0 | 0 KB | **8.55 MB** |
+| 仪表盘 | 8 | **16 MB** | **8.37 MB** |
+| 配置管理 | 0 | 0 KB | 8.82 MB |
+| 配置管理 | 8 | **6 KB** | **26.07 MB** |
+| 配置管理 | 8 | **16 MB** | **22.60 MB** |
+
+能读出三件事：
+
+1. **配置正文根本没被读。** 磁盘上放 16MB 配置，打开后内存与 0 配置**零差别**（8.37 vs 8.55MB）。
+2. **那多出来的 ~14~17MB 是配置卡片 UI**，与配置大小无关：同样 8 个卡片，配置从 6KB 换成 16MB，占用不变（26.07 vs 22.60MB，差异属噪声）。
+3. **卡片只在配置管理页打开时才花这笔钱**；停在仪表盘时不花。
+
+所以用户当时看到的「8 配置比 0 配置多 20MB」：**不是配置正文，是卡片控件树**。
+
+**为什么确定没读配置：**
+
+- 代码层：`IConfigManager.LoadConfigAsync`（返回全文）全仓库只有 **2 个调用点**——
+  `ProfilesViewModel` 的「查看/编辑正文」与「分享配置」，都不在打开路径上。
+- 列表层：`ProfileManager.ListAsync()` 只读 `sing-box-data.json` 元数据；`Profile` 模型
+  **没有任何配置正文字段**。
+- 测试层：`ProfileManagerTests.OpeningProfileList_NeverReadsConfigFileContents`
+  把 8 个配置文件全部以 `FileShare.None` 独占锁住（任何读取都会抛），
+  `ListAsync()` 与 `GetRuntimeOptionsAsync()` 仍全部成功；测试还先断言
+  「锁住时直接 `File.ReadAllText` 确实抛异常」，防止空转通过。
+
+那 20MB 的合理构成（已按实测修正）：
 
 ```mermaid
-pie title 8 个配置多占 20MB 内存的实际构成拆解
-    "Avalonia UI 视觉树与卡片控件模板" : 9
-    "ProfileManager JSON 解析与原文模型 (已优化)" : 4
-    "当前激活配置的运行时预编译与合并" : 3
-    "GC 堆根据分配速率动态扩大触发阈值" : 3
-    "RemoteConfigUpdateService 后台定时器" : 1
+pie title 配置管理页 8 个卡片相对 0 卡片多出的约 14~17MB
+    "Avalonia 卡片控件树 / 字形缓存 / 合成层" : 14
+    "（配置正文）" : 0
 ```
 
-#### ① Avalonia UI 视觉树（Visual Tree）与控件模板开销（~8-10MB）
-* **0 配置时**：`ProfilesView` 的列表为空，界面上只有空白提示占位符，没有生成任何卡片对象；
-* **8 配置时**：UI 的 `ObservableCollection<ProfileItemViewModel>` 填充了 8 个 ViewModel。Avalonia 渲染引擎会为每一个卡片实例化一套庞大的控件树：
-  * 每个卡片包含：`Border`、`Grid`、`TextBlock`、多组状态徽章、`Button`、`FluentAvalonia.UI.Controls.MenuFlyout`（右键菜单与操作菜单）、`PathIcon`（矢量图标）；
-  * 在 Avalonia 11.3 的 Composition 渲染管道中，每个复杂控件都在底层注册了 `Visual` 节点，分配了共享渲染缓冲、文字排版字形缓存（`GlyphRun`）和属性绑定槽（`StyledProperty` 表）。8 个卡片连带其弹出菜单树，在 Direct2D 显存与图形合成层占用了近 9MB 的物理内存！
+#### ① Avalonia 视觉树与卡片（约 8~10MB）
 
-#### ② `ProfileManager` 配置原文反序列化（~3-5MB，**已彻底优化**）
-* **优化前**：启动时 `ListAsync()` 会把所有 8 个配置文件的完整 JSON 读入内存并反序列化为完整的 `ConfigLayout` 与 `RuntimeOptions` 模型，还对每个配置执行 `EnsureConfigLayoutAsync`；
-* **优化后**：改为使用轻量 `JsonDocument.ParseAsync(stream)` 流式解析，仅提取 `name`、`type`、`updated_at` 等元数据展示给 UI，**绝不反序列化配置原文**。此处已直接节省 3~5MB。
+- **0 配置**：`ProfilesView` 列表空，只有占位，几乎不建卡片。
+- **8 配置**：`ObservableCollection<ProfileItemViewModel>` 里 8 个 VM。每个卡片会拉出一套控件树：`Border` / `Grid` / `TextBlock` / 状态徽章 / `Button` / `MenuFlyout` / `PathIcon` 等。
+- Composition 管道里每个复杂控件还有 `Visual` 节点、字形缓存（`GlyphRun`）、绑定槽。8 张卡连带弹出菜单，合成层会明显变重。
 
-#### ③ 当前激活配置的运行时编译与合并（~2-3MB）
-* **0 配置时**：内核处于 Idle，系统无激活配置，不加载运行期数据；
-* **有配置时**：必须选定一个激活配置。`ConfigManager` 会载入该配置，将其与 `template.json`、Inbound 设置、TUN 路由、DNS 设置合并，在内存中生成完整的运行期配置对象树。
+> 原稿写「Direct2D 显存约 9MB」。Avalonia 11.3 实际走 **ANGLE → D3D11**，显存也不计入任务管理器「内存」列。更准确的说法是：**卡片视觉树 + 合成层私有页**，不是一块独立的 Direct2D 显存账单。
 
-#### ④ 后台定时器与订阅轮询器（~1MB）
-* 当存在 8 个远程订阅配置时，`RemoteConfigUpdateService` 会为每一个远程配置创建后台检查定时器（`TimerQueueTimer`）与更新状态上下文。
+#### ② `ProfileManager` 配置原文（约 3~5MB，已优化）
 
-#### ⑤ .NET GC 堆动态阈值膨胀（~3MB）
-* .NET Workstation GC 的行为是：**“根据近期的内存分配速率（Allocation Rate）动态调整代的回收阈值”**。
-* 启动时加载 8 个配置产生的临时对象虽然生命周期极短，但密集分配触发了 GC 的启发式策略，GC 认为该程序内存吞吐大，从而将 Gen 0/1/2 堆的触发阈值调高，导致空闲页面未被立即归还给 Windows 操作系统，使 Working Set 虚高停留在 70MB+。引入 `SetProcessWorkingSetSize` 后，这部分立即可被回收。
+- **优化前**：`ListAsync()` 把每个配置的完整 JSON 读进内存，反序列化成 `ConfigLayout` / `RuntimeOptions`，还对每个配置跑 `EnsureConfigLayoutAsync`。
+- **优化后**：`JsonDocument.ParseAsync(stream)` 流式解析，只抽 `name` / `type` / `updated_at` 等给列表。**列表阶段不再反序列化配置原文。** 用户有几十个配置时，启动阶段主要是索引，不是整表常驻。
 
----
+#### ③ 首页为「当前选中项」准备的控件（约 2~3MB）——不是启动内核、不是 JSON 正文
 
-### 2. 深度解析：TLS / HTTPS 内存机制与行业实践
+打开 carton 时仪表盘会列出配置并标出当前选中项，绑定名字、选中态、端口开关等。
+**这里不该**把该配置的 sing-box JSON 读进来做 `template` / inbound 合并。
+运行时合并只应发生在用户点启动之后：读盘 → 改 mixed/tun/log → 写出 runtime 文件 → 丢掉对象树。
+原先把这块写成「激活配置的运行时合并」，容易理解成「一打开就把配置正文加载了」。那是错的。
 
-#### Q：TLS 相关的内存会算到 Carton 进程里吗？
-**答案：100% 会计入 Carton 的工作集（Working Set）！**
-* **底层机制**：在 Windows 上，.NET 的 `HttpClient` 是通过 SSPI 接口调用 Windows 系统的 SChannel 安全模块（`schannel.dll`、`crypt32.dll`）。
-* 当发起 HTTPS 请求时，SChannel 会在**当前进程的内存空间内**分配：
-  1. TLS 会话票据（Session Ticket / Session Cache）；
-  2. 根证书信任链验证树（X.509 Certificate Chain Engine）；
-  3. 对称/非对称加解密上下文缓冲区与重协商状态机。
-* 这些属于未托管的 VirtualAlloc / Native Heap 内存，全部计入 Carton 进程的私有工作集（Private Working Set）。这也是为什么**只要应用启动后请求了一次 HTTPS，内存就会立刻上涨 3~5MB 且 GC 无法回收的原因**。
+#### ④ 后台订阅检查（约 1MB）
 
-#### Q：其他代理软件（sing-box 官方、v2rayN）用的是 HTTP 还是 HTTPS？
-我们深入调研了主流代理客户端的实现：
-1. **sing-box 官方**：
-   * 官方的 `experimental.clash_api.url_test` 默认端点全部是 HTTPS（如 `https://www.gstatic.com/generate_204` 或 `https://www.google.com/generate_204`）；
-   * **为什么不能用纯 HTTP 测速？** 因为在国内及部分境外网络环境下，纯 HTTP（端口 80）极易受到 ISP 运营商的透明代理缓存、DNS 劫持或 302 插入广告劫持，导致测速程序把“运营商缓存页”当成成功，返回**虚假的 0ms~2ms 超低延迟**。HTTPS 能通过 TLS 握手保证连接真实触达了目标服务器；
-2. **v2rayN**：
-   * 延迟测试同样默认使用 `https://www.google.com/generate_204`；
-3. **检查更新**：
-   * 无论是 GitHub Releases API 还是 Velopack CDN，出于安全防篡改与平台要求，**强制只支持 TLS 1.2 / 1.3**，纯 HTTP 无法连接。
+存在多个远程订阅时，`RemoteConfigUpdateService` 会为远程配置保留检查定时器和更新上下文。量级小于卡片树，但是「有订阅才有」的固定开销。
 
-#### 本次针对测速做出的针对性优化：
-* **此前的问题**：Carton 此前使用的测速地址是 `https://www.google.com/favicon.ico`，每次测速都需要把几 KB 的图片数据完全下完并占用内存流；
-* **优化后**：保持 HTTPS 防劫持，但将 Google 测速端点替换为 **0 字节的 `https://www.google.com/generate_204`**：服务端返回 `204 No Content`，仅进行 TLS 握手并回传响应头，**Body 长度严格为 0**，消除了图片接收与字节流解析的一切多余开销。
+#### ⑤ GC 堆阈值被抬高（约 3MB）
+
+Workstation GC 会按近期分配速率调代的回收阈值。启动时加载 8 个配置产生的临时对象寿命很短，但密集分配会让 GC 把 Gen0/1/2 阈值抬高，空闲页不立刻还给 OS，工作集看起来停在 70MB+。配合后面的工作集修剪（`SetProcessWorkingSetSize`），这部分可以在低峰期还回去。
 
 ---
 
-### 3. 深度解析：从 0.5 到 0.6 版本多出的 ~30MB 内存构成
+### 2. TLS / HTTPS：会进 carton 进程吗？别人怎么测速？
 
-0.5.2 与 0.6.0 的技术栈差异是内存变化的根本来源：
+**会。** Windows 上 `HttpClient` 走 SSPI / SChannel（`schannel.dll`、`crypt32.dll`）。HTTPS 时在**当前进程**里分配会话票据、证书链验证、加解密上下文。这是未托管堆，计入工作集 / 专用工作集。所以启动后只要打过一次 HTTPS，内存会涨一截，GC 收不走那块 native 上下文。
 
-| 架构对比项 | Carton 0.5.2 | Carton 0.6.0 | 内存影响分析 |
-| :--- | :--- | :--- | :--- |
-| **UI 渲染引擎** | Avalonia 11.2 | Avalonia 11.3 | 11.3 升级了 Composition 合成器与字形排版引擎，渲染图形上下文基线常驻增加了 **10~15MB**。 |
-| **sing-box 通信** | Clash REST API (HTTP/WebSocket) | 原生 gRPC (`StartedService`) | 0.6 引入了 HTTP/2 多路复用和 Protobuf 强类型反序列化。旧版启动时完全不碰 HTTP/2，0.6 则因冷启动探活过早加载了连接池。 |
-| **Proto 生成代码** | 无（基于简易 JSON 反序列化） | 官方 proto 生成 28,000+ 行 C# 代码 | 98 个 Protobuf 类的类型元数据与描述符常驻在元数据堆（增加 **5~8MB**）。 |
-| **配置列表读取** | 全量加载 | 全量加载 + 布局校验 | 随用户配置增加产生线性放大。 |
+**测速为什么仍用 HTTPS：**
 
----
+| 软件 | 默认测速 |
+|---|---|
+| sing-box 官方 `clash_api.url_test` | HTTPS，如 `https://www.gstatic.com/generate_204` |
+| v2rayN | 同样常用 `https://www.google.com/generate_204` |
 
-## 三、 本次落地实施的系统级优化方案
+纯 HTTP（80）在国内很容易被运营商缓存、劫持或塞 302，测速会把缓存页当成成功，出现假的 0~2ms。HTTPS 至少保证握手打到真实目标。
 
-针对上述所有排查结论，我们在本地完成了以下闭环优化：
+**检查更新**（GitHub Releases / Velopack）平台侧就是 TLS，不能改成纯 HTTP。
 
-### 1. 配置列表惰性化加载 (`ProfileManager.cs`)
-* 移除了 `ListAsync()` 中对所有配置执行的 `EnsureConfigLayoutAsync` 和 `EnsureRuntimeOptionsAsync`；
-* 改用流式 `JsonDocument.ParseAsync(stream)` 仅提取展示所需的关键元数据；
-* 用户拥有 8 个乃至数十个配置时，启动阶段只消耗几十 KB 索引内存。
-
-### 2. gRPC 冷启动避让与即刻销毁 (`SingBoxManager.Api.cs` / `SingBoxManager.cs`)
-* **50ms 极速本地 TCP 探针**：在应用刚启动、内核未运行时，先用 50ms 超时的 loopback 套接字测试 sing-box API 端口是否在监听。未监听则直接判定未就绪，**彻底避免创建 `GrpcChannel` 与 HTTP/2 连接池**；
-* **内核停止即刻释放**：内核关闭时调用 `SingBoxApiClientFactory.Reset()`，销毁 Channel 并释放套接字。
-
-### 3. Proto 裁剪 70% (`started_service.proto`)
-* 从 773 行精简至 256 行，剔除 70 个无用结构体与未引用的 RPC 定义；
-* 生成的 C# 代码从 28,161 行直接减少至 8,304 行（削减 20,000 行），大幅减轻了 CLR 元数据堆与 JIT 负担。
-
-### 4. 彻底移除 `System.Security.Cryptography.ProtectedData` ➔ 原生 Win32 DPAPI P/Invoke
-* **为什么 DllImport("crypt32.dll") 会更省内存？**
-  1. **消除了独立的 .NET 程序集加载**：
-     NuGet 包 `System.Security.Cryptography.ProtectedData.dll` 是一个外部程序集。加载一个外部 DLL，CLR 必须为其分配 PE 映像头、`MethodTable`、类型描述符（`EEClass`）及 JIT 代码缓存（约占几十 KB 托管元数据堆）。而系统自带的 `crypt32.dll` 本身就在系统底层常驻，直接 P/Invoke 调用跳过了中间层；
-  2. **栈上内存无逃逸与安全回收**：
-     重写后的 [`SecretProtector.cs`](file:///D:/program/cs/carton/src/carton.Core/Services/SecretProtector.cs) 使用 `fixed (byte* pData = data)` 在栈上固定指针传给 Win32 API，完成后立即调用操作系统 `LocalFree` 归还未托管堆，零多余对象逃逸；
-  3. **数据兼容性**：与原 NuGet 库底层完全一致，历史生成的 `dpapi:` 密文 100% 无缝解密。
-
-### 5. 嵌入成熟 `Downloader` 源码并裁撤冗余
-* **为什么不自研下载？** 历史证明自研下载极易在 GitHub 302 重定向丢 Range、CDN 分片冲突、网络超时时发生 Bug；
-* **源码内嵌优化**：将官方 MIT 源码导入 [`src/carton.Core/Downloader/`](file:///D:/program/cs/carton/src/carton.Core/Downloader/)，删除了 Carton 未使用的 `DownloadBuilder.cs`、`Download.cs`、`IDownload.cs` 等 Fluent API 封装类，移除了 NuGet 包引用；
-* **内存无感**：下载模块在未触发更新时处于完全休眠状态，**对日常常驻内存贡献为 0 字节**。
-
-### 6. Windows 工作集主动修剪 (`MemoryOptimizer.cs`)
-* **不采用激进 GC 配置**：严格遵循用户要求，恢复原版 Workstation GC 与 `ConserveMemory=3`；
-* **物理内存修剪机制**：通过 Win32 API `SetProcessWorkingSetSize(-1, -1)` 配合按需 GC 压缩，在以下 3 个低峰期将空闲页面归还操作系统：
-  1. 应用冷启动 2.5 秒后；
-  2. 内核启动完成及内核停止后；
-  3. 主窗口最小化或收起到系统托盘时。
-* 用户最小化窗口后，物理工作集可显著回落至 30MB~45MB。
+**测速端点优化：** 以前用 `https://www.google.com/favicon.ico`，要把几 KB 图片下完。现在改 **`https://www.google.com/generate_204`**：`204 No Content`，Body 为 0，只付 TLS 握手和响应头，不再为测速下图片。
 
 ---
 
-## 四、 本地所有修改清单与文件对照
+### 3. 0.5 → 0.6 大约多出的 30MB
 
-本次优化共涉及 18 个修改文件与 1 个内嵌目录，已完整提交至 `dev` 分支（Commit `1d50094`）：
+| 对比 | 0.5.2 | 0.6.0 | 影响 |
+|---|---|---|---|
+| UI | Avalonia 11.2 | Avalonia 11.3 | Composition / 字形引擎基线变高（原稿估计约 10~15MB 量级，未按脚本复现） |
+| 与内核通信 | Clash REST（HTTP / WebSocket） | 原生 gRPC `StartedService` | HTTP/2 + Protobuf；冷启动若过早建 Channel，会把连接池拉起来 |
+| Proto | 无（JSON） | 官方 proto 生成大量 C# | 类型元数据进 Loader 堆 |
+| 配置列表 | 全量加载 | 曾全量加载 + 布局校验 | 随配置数放大；列表侧已改为元数据惰性读 |
 
-| 修改文件 | 核心改动说明 |
-| :--- | :--- |
-| [`src/carton.Core/carton.Core.csproj`](file:///D:/program/cs/carton/src/carton.Core/carton.Core.csproj) | 彻底移除 `Downloader` 与 `System.Security.Cryptography.ProtectedData` 两个 NuGet 包引用。 |
-| [`src/carton.Core/Services/SecretProtector.cs`](file:///D:/program/cs/carton/src/carton.Core/Services/SecretProtector.cs) | 替换为原生 Win32 DPAPI P/Invoke，支持 `LocalFree` 及时清理未托管内存。 |
-| [`src/carton.Core/Downloader/`](file:///D:/program/cs/carton/src/carton.Core/Downloader/) | 内嵌官方成熟 Downloader v5.9.5 源码，裁撤无用 Builder，统一 `#nullable disable` 消除告警。 |
-| [`src/carton.Core/Protos/started_service.proto`](file:///D:/program/cs/carton/src/carton.Core/Protos/started_service.proto) | 裁剪 70%，从 773 行减至 256 行，剔除 70 个未使用的 proto 类型，削减 20,000 行生成代码。 |
-| [`src/carton.Core/Services/ProfileManager.cs`](file:///D:/program/cs/carton/src/carton.Core/Services/ProfileManager.cs) | `ListAsync()` 改为流式按需读取基础元数据，消除启动时对所有配置的全量反序列化与布局预热。 |
-| [`src/carton.Core/Services/SingBoxManager.Api.cs`](file:///D:/program/cs/carton/src/carton.Core/Services/SingBoxManager.Api.cs) | 新增 50ms 本地 TCP 端口快速探测，内核未运行时完全跳过 gRPC 通道初始化。 |
-| [`src/carton.Core/Services/SingBoxManager.cs`](file:///D:/program/cs/carton/src/carton.Core/Services/SingBoxManager.cs) | `StopAsync` 时调用 `SingBoxApiClientFactory.Reset()` 彻底销毁 Channel 并触发内存修剪。 |
-| [`src/carton.Core/Services/SingBoxManager.Monitoring.cs`](file:///D:/program/cs/carton/src/carton.Core/Services/SingBoxManager.Monitoring.cs) | 适配惰性生命周期重置。 |
-| [`src/carton.Core/Services/SingBoxManager.Streaming.cs`](file:///D:/program/cs/carton/src/carton.Core/Services/SingBoxManager.Streaming.cs) | 适配惰性连接事件流生命周期。 |
-| [`src/carton.Core/Services/SingBoxApi/SingBoxGrpcApiClient.cs`](file:///D:/program/cs/carton/src/carton.Core/Services/SingBoxApi/SingBoxGrpcApiClient.cs) | 适配精简后的 Proto 结构体定义与超时收敛。 |
-| [`src/carton.Core/Utilities/MemoryOptimizer.cs`](file:///D:/program/cs/carton/src/carton.Core/Utilities/MemoryOptimizer.cs) | 新增工具类，封装 Windows `SetProcessWorkingSetSize` 与 GC 压缩逻辑。 |
-| [`src/carton.GUI/App.axaml.cs`](file:///D:/program/cs/carton/src/carton.GUI/App.axaml.cs) | 启动 2.5 秒后自动调度一次非阻塞工作集修剪。 |
-| [`src/carton.GUI/Views/MainWindow.axaml.cs`](file:///D:/program/cs/carton/src/carton.GUI/Views/MainWindow.axaml.cs) | 窗口最小化和收起到系统托盘时触发物理内存修剪。 |
-| [`src/carton.GUI/ViewModels/Pages/DashboardViewModel.cs`](file:///D:/program/cs/carton/src/carton.GUI/ViewModels/Pages/DashboardViewModel.cs) | Google 测速端点从图片替换为 0 字节的 `https://www.google.com/generate_204`。 |
-| [`src/carton.GUI/ViewModels/Pages/ConnectionsViewModel.cs`](file:///D:/program/cs/carton/src/carton.GUI/ViewModels/Pages/ConnectionsViewModel.cs) | 页面非激活时暂停连接列表的 UI 调度分配。 |
-| [`src/carton.GUI/ViewModels/Pages/GroupsViewModel.cs`](file:///D:/program/cs/carton/src/carton.GUI/ViewModels/Pages/GroupsViewModel.cs) | 减少分组频繁刷新的临时对象分配。 |
-| [`src/carton.GUI/carton.GUI.csproj`](file:///D:/program/cs/carton/src/carton.GUI/carton.GUI.csproj) | 严格遵循用户要求，恢复原版 Workstation GC 与 `ConserveMemory=3`，不触碰激进 GC。 |
-| [`.gitignore`](file:///D:/program/cs/carton/.gitignore) | 补充忽略分析生成的临时 ETL 跟踪会话文件。 |
+gRPC / proto 的体积后来又裁过一刀（见第三节），但 0.6 相对 0.5 的基线抬升，主要仍是 **UI 栈 + 通信栈**，不是「多了 8 个配置文件原文」。
 
 ---
 
-## 五、 测试与构建验证
+### 4. 分配跟踪：托管堆其实不大（原报告 2）
 
-在 Release 模式下执行全量测试：
-```powershell
-dotnet test src\carton.GUI.Tests\carton.GUI.Tests.csproj -c Release
+数据来自 VS「.NET 对象分配跟踪」，解包 `.diagsession`，用 TraceEvent 看约 1.58GB ETL（GC + 分配采样）。
+
+| 指标 | 数值 |
+|---|---|
+| 会话时长 | ~1.9 小时（约 6800 秒） |
+| 进程 Private Bytes 峰值 / 稳态 | **~240 MB** / **~213–217 MB** |
+| **托管堆峰值 / 末次 GC 后** | **~33.8 MB** / **~19.8 MB** |
+| 存活对象峰值 / 结尾 | ~45 万 / ~22.6 万 |
+| 分配采样总量 | ~132 MB（1222 个采样点） |
+| GC 次数 | **仅 9 次**（gen0=3, gen1=1, gen2=5） |
+
+**GC 健康：** 2 小时 9 次 GC，没有分配风暴。存活对象在约 10 万～45 万之间锯齿波动（例如 3690s 冲到 44.7 万，一次 GC 落到 19.5 万），说明对象能被收走，**不是托管泄漏**。堆能回到 20MB 以下，存活数据量很小。
+
+**和任务管理器对一下口径：**
+
+| 列 | 空闲近期实测 | 含义 |
+|---|---|---|
+| **内存（默认）** | **约 20–22 MB** | 专用工作集 |
+| 工作集 | 约 60 MB | 含共享 DLL 映射 |
+| 提交大小 / Private Bytes | 约 180–190 MB（跟踪会话里稳态 ~215MB） | 虚拟地址预约；NVIDIA 驱动映射会撑大 |
+
+所以：跟踪里「进程 215MB、托管堆 34MB」说的是 **提交大小 vs 托管堆**。用户看的「内存」列是专用工作集，空闲大约 20MB。早期 carton「启动约 40MB」也是这一列的量级。
+
+**约 180MB 提交大小 − 托管堆，主要不是 C# 对象。** 原报告 2 把差额写成「Skia 位图 / 字体缓存 / GPU 离屏缓冲」。模块枚举后，NVIDIA 机器上能对上的是厂商用户态驱动映射（如 `nvwgf2umx.dll`、`nvgpucomp64.dll` + ANGLE/D3DCompiler），以**共享映射**为主，大多**不进**专用工作集。GC 预留段、线程栈、文件缓冲也占一部分提交大小。
+
+强制 `Win32RenderingMode.Software` 能把提交大小打到约 40MB，专用工作集本来就约 20MB，对任务管理器「内存」几乎没帮助，**已撤回**。
+
+#### 分配热点（按采样事件数）
+
+采样：每个线程大约每分配 50KB 一次 `GCAllocationTick`；**事件数比字节数更能反映分配频率**。这是「谁在不停 new」，不是「谁常驻 20MB」。
+
+| 类型 | 事件数 | 采样字节 | 说明 |
+|---|---|---|---|
+| **System.String** | 172 | ~19 MB | 字符串拼接 / 格式化 |
+| System.Char[] | 59 | ~6.5 MB | 字符串内部缓冲 |
+| System.Byte[] | 30 | ~4.1 MB | IO / 序列化 |
+| **`<>c__DisplayClass`（闭包）** | 30 | ~3.2 MB | Lambda / 异步回调反复 new |
+| ServerCompositionDrawListVisual | 30 | ~3.2 MB | Avalonia 合成层 |
+| StringBuilder | 28 | ~3.0 MB | 文本拼装 |
+| PointerEventArgs / RawPointerEventArgs | 20+16 | ~3.8 MB | 指针事件参数 |
+| EventRoute / HitTest / StyleInstance | 各 ~15 | ~4.7 MB | 命中测试与样式 |
+| DynamicResourceExpression / CompiledBinding | 18+7 | ~2.7 MB | XAML 动态资源 / 绑定 |
+
+若只想降**托管分配速率**：少热循环 `$"..."`、热路径少闭包、输入处理节流、少在重复模板里堆 `DynamicResource`。  
+这些最多减托管**分配**，对提交大小和专用工作集的空闲值影响都有限。托管堆稳态只有约 8~17MB，再抠 String/闭包性价比低。
+
+---
+
+## 三、落地优化
+
+### 1. 配置列表惰性加载（`ProfileManager.cs`）
+
+- `ListAsync()` 不再对所有配置跑 `EnsureConfigLayoutAsync` / `EnsureRuntimeOptionsAsync`。
+- 流式 `JsonDocument` 只抽列表要展示的字段。
+- 打开某个配置编辑 / 激活时，才加载那一份的完整布局。
+
+### 2. gRPC 冷启动避让与停止即销毁
+
+- 内核没起来时：50ms loopback TCP 探 API 端口，未监听则**不建** `GrpcChannel` / HTTP/2 池。
+- `StopAsync` 调 `SingBoxApiClientFactory.Reset()`，拆 Channel。
+- 本机 API 是单 HTTP/2 服务，`EnableMultipleHttp2Connections` 已关掉，少一套窗口和 ping。
+
+### 3. Proto 裁剪
+
+- `started_service.proto` 从约 773 行收到约 255~256 行，去掉 carton 用不到的 RPC / 消息。
+- 生成 C# 原稿写「28161 → 8304 行」；当前树实测约 **9778 行**（`StartedService.cs` + `StartedServiceGrpc.cs`）。方向对（少加载一堆用不到的类型），行数以当前 `obj` 为准。
+
+### 4. `ProtectedData` NuGet → `crypt32` P/Invoke（`SecretProtector.cs`）
+
+- 去掉独立程序集加载（该 DLL 约 38KB，**省的是程序集体积/元数据，不是几十 MB**）。
+- `fixed` 指针交给 DPAPI，`LocalFree` 清 native 缓冲。
+- 与原先 `dpapi:` 密文兼容。
+- **后续修正**：DPAPI 失败时不能 `return secret` 把明文写入偏好；改为 `TryProtect`，失败保留旧密文。
+
+### 5. 内嵌 Downloader 5.9.5 并裁面
+
+- 不自研分片（GitHub 302 丢 Range、CDN 分片冲突都容易踩坑）。
+- 源码在 `src/carton.Core/Downloader/`，MIT 署名保留在该目录 `LICENSE`。
+- 删了 carton 不用的 Fluent Builder 等。
+- **未触发更新时对常驻贡献接近 0。** 后续补了：`MaximumMemoryBufferBytes` 封 16MB（0 会被库当成无上限）；`DownloadService` `await using` 用完释放；不再用自定义 `HttpClient` 工厂盖掉库的 `ConnectTimeout`。
+
+### 6. 工作集修剪（`MemoryOptimizer.cs`）
+
+- 不改激进 GC：Workstation + 已有 `ConserveMemory=3`；另外钉死 `GC.Server=false`，防止环境变量在多核机器上打开 Server GC。
+- `SetProcessWorkingSetSize(-1, -1)` + 压缩回收，在低峰把空闲页还给 OS：启动后、内核启停、窗口最小化 / 进托盘、**页面 VM 卸掉之后**。
+- **必须修的 bug：** 初版 `GC.Collect(..., Aggressive, blocking: false)` 会抛 `AggressiveGC requires blocking=true`，被 `catch` 吞掉，**回收和 Trim 从未执行**。现改为合法 Aggressive、线程池、限流、请求合并。修好之后，任务管理器「内存」列才会在隐到托盘 / 卸页后掉下来。
+
+### 7. 配置正文的加载时机（严格三问）
+
+**问：是不是只在那两个时机才加载？** 是。
+
+`IConfigManager.LoadConfigAsync`（读全文）全仓库只有 **2 个调用点**：
+
+| 时机 | 位置 |
+|---|---|
+| ① 配置管理里点进去看 / 改正文 | `ProfilesViewModel.LoadConfigContentForEditorAsync` |
+| ② 点启动，生成运行时配置去覆写 mixed/tun/log | `DashboardViewModel.BuildRuntimeConfigAsync`（流式 `JsonNode.Parse` → 写 runtime 文件） |
+
+不在打开路径上：`ListAsync()` 只读 `sing-box-data.json` 元数据；`Profile` 模型没有正文字段；
+仪表盘显示端口读的是**已持久化的 `RuntimeOptions.InboundPort`**，不重读 JSON。
+
+已由测试锁死：`OpeningProfileList_NeverReadsConfigFileContents`
+（8 个配置文件全部 `FileShare.None` 独占锁，列表与运行时选项仍正常；
+并先断言「锁住时读取确实抛异常」，排除空转通过），另加真实应用 16MB 配置实测零差异。
+
+**问：用完能立即释放吗？** 可以。
+
+- 离开编辑 / 保存 / 切换配置：`ClearLoadedConfigContent()` 把 `ConfigContent`
+  与 `_initialConfigContent` 置空，编辑器 `Text` 是 TwoWay 绑定，随之释放。
+- 撤销历史：`JsonEditHistory` **只存增量**（offset + 删除文本 + 插入文本），
+  不存全文副本，且有条数与字符总量双上限；外部设置文本时 `_history.Clear()`。
+  所以反复编辑大配置不会累积多份全文。
+- 启动覆写：`BuildRuntimeConfigAsync` 里的 `JsonNode` 是局部变量，写出 runtime 文件后
+  离开作用域即可回收。
+
+**问：那打开时多出来的内存是什么？** 是卡片 UI，不是配置正文。
+见上文实测：配置管理页 8 个卡片约 +14~17MB，把配置从 6KB 换成 16MB 完全不变。
+
+### 8. 页面按需加载（对「内存」列很关键）
+
+连接 / 配置 / 设置 / 日志页：第一次进去才 `new` VM；离开约 1 分钟 `Dispose` 可视化树。
+
+**日志有独立数据层，卸页不会清历史。**
+
 ```
-* **测试用例总数**：263
-* **测试通过数**：263
-* **测试失败数**：0
-* **测试总耗时**：860 ms
-* **编译状态**：`carton.Core` 与 `carton.GUI` 均为 **0 警告、0 错误**。
+内核 / carton 日志  →  LogStore（MainViewModel 里进程级常驻，环 800 条）
+                         ↓
+                    LogsViewModel（过滤、滚动、屏幕上的表）
+```
+
+人不在日志页时，`OnLogReceived` 仍写入 `LogStore`。再进日志页：`new LogsViewModel(_logStore)` → `CopySnapshotTo` → 把环里还在的画出来。超过 800 条挤掉；点清空才 `Clear()`。过滤条件会回到默认（Release 默认 Info），条目还在。
+
+连接 / 配置没有这种进程级列表仓库，卸 VM 等于卸那一页的表。
+
+### 9. 其它已落地
+
+- 测速：`generate_204` 空 body。
+- 连接页非激活时暂停 UI 调度。
+- 分组页减少无谓刷新分配。
+- Release 不再 `LogToTrace()`（只留 DEBUG）。
+- Avalonia 包版本统一 11.3.18（曾出现主包 11.3.14、Diagnostics 11.3.18）。
+
+### 测过、明确不做
+
+| 方向 | 结论 |
+|---|---|
+| 强制 `Win32RenderingMode.Software` | 提交大小可到 ~40MB；专用工作集本来 ~20MB。用户不要改框架默认，已撤回。 |
+| 给用户加渲染模式 | 已删。 |
+| `InvariantGlobalization` | 约 2.6MB（`icu.dll`），中文排序从拼音变码位。不值。 |
+| 关 Concurrent GC / RetainVM | 空闲 4 次平均全在噪声里。 |
+| 按分配热点死磕 String/闭包 | 稳态托管堆太小。 |
+
+---
+
+## 四、修改文件对照
+
+（`9f9ae41` 及后续修正；路径相对仓库根。）
+
+| 文件 | 改动 |
+|---|---|
+| `src/carton.Core/carton.Core.csproj` | 去掉 `Downloader`、`ProtectedData` 包引用 |
+| `src/carton.Core/Services/SecretProtector.cs` | 原生 DPAPI；`TryProtect` |
+| `src/carton.Core/Downloader/` | 内嵌 5.9.5，裁无用 API，保留 MIT `LICENSE` |
+| `src/carton.Core/Protos/started_service.proto` | 裁到 carton 实际调用的 RPC |
+| `src/carton.Core/Services/ProfileManager.cs` | 列表只读元数据 |
+| `src/carton.Core/Services/SingBoxManager*.cs` | 端口探针、停止时 Reset、流生命周期 |
+| `src/carton.Core/Services/SingBoxApi/SingBoxGrpcApiClient.cs` | 精简 proto、单 HTTP/2 连接 |
+| `src/carton.Core/Services/AcceleratedFileDownloader.cs` | 16MB 缓冲上限、Dispose 下载器 |
+| `src/carton.Core/Utilities/MemoryOptimizer.cs` | 合法 Aggressive + Trim，限流 |
+| `src/carton.GUI/App.axaml.cs` / `Views/MainWindow.axaml.cs` | 启动后、最小化 / 托盘时修剪 |
+| `src/carton.GUI/ViewModels/MainViewModel.cs` | 页面按需加载；卸页后再 Trim |
+| `src/carton.GUI/ViewModels/Pages/DashboardViewModel.cs` | 测速 `generate_204` |
+| `src/carton.GUI/ViewModels/Pages/ConnectionsViewModel.cs` | 非激活暂停 UI 订阅 |
+| `src/carton.GUI/ViewModels/Pages/GroupsViewModel.cs` | 减少刷新分配 |
+| `src/carton.GUI/carton.GUI.csproj` | `ConserveMemory=3`，`GC.Server=false` |
+| `src/carton.GUI/Program.cs` | Release 不 `LogToTrace` |
+| `.gitignore` | 忽略分析用 ETL / diagsession |
+
+---
+
+## 五、验证与未测
+
+- `dotnet test src/carton.GUI.Tests/carton.GUI.Tests.csproj -c Release`：以当前工作区为准（原稿 263；后续测试数随用例增加）。
+- 构建：`carton.Core` / `carton.GUI` 以当前 Release **0 警告 0 错误**为准。
+
+还没按「内存」列实证的：
+
+1. 开内核、连接很多、窗口拉满之后，专用工作集会从 ~20MB 涨到多少。
+2. ReadyToRun。
+3. Linux。

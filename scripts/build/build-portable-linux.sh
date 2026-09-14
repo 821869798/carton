@@ -2,15 +2,15 @@
 set -euo pipefail
 
 # Usage:
-#   scripts/build-portable-linux.sh [rid] [configuration] [--skip-kernel]
-#   scripts/build-portable-linux.sh --rid linux-arm64 --configuration Release
+#   scripts/build/build-portable-linux.sh [rid] [configuration] [--skip-kernel]
+#   scripts/build/build-portable-linux.sh --rid linux-arm64 --configuration Release
 
 RID="linux-x64"
 CONFIG="Release"
 SKIP_KERNEL=0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 APP_NAME="carton"
 GUI_PROJECT="${REPO_ROOT}/src/carton.GUI/carton.GUI.csproj"
 HELPER_PROJECT="${REPO_ROOT}/src/carton.Helper"

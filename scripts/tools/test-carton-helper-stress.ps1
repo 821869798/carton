@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$repoRoot = (Resolve-Path "$scriptDir\..").Path
+$repoRoot = (Resolve-Path "$scriptDir\..\..").Path
 
 if ([string]::IsNullOrWhiteSpace($HelperPath)) {
     $HelperPath = Join-Path $repoRoot "src\carton.Helper\target\x86_64-pc-windows-msvc\release\carton-helper.exe"

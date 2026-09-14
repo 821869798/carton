@@ -480,10 +480,11 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
 
             EnsureRuntimeMonitorsRunning();
 
-            _ = Task.Delay(1500).ContinueWith(_ =>
-            {
-                MemoryOptimizer.CompactAndTrim();
-            }, TaskScheduler.Default);
+            // Kernel startup churns config JSON, gRPC handshakes and process plumbing;
+            // reclaim once the dust settles. CompactAndTrim is already async + rate limited.
+            _ = Task.Delay(1500).ContinueWith(
+                static _ => MemoryOptimizer.CompactAndTrim(),
+                TaskScheduler.Default);
 
             LogTiming("start.end_success", timing.Elapsed);
             return true;
@@ -681,10 +682,12 @@ public partial class SingBoxManager : ISingBoxManager, IDisposable
             LogInfo("sing-box stopped");
             LogTiming("stop.end_success", timing.Elapsed);
             SingBoxApiClientFactory.Reset();
-            _ = Task.Delay(500).ContinueWith(_ =>
-            {
-                MemoryOptimizer.CompactAndTrim();
-            }, TaskScheduler.Default);
+            // Kernel stopped: gRPC channels, connection rows and proxy group snapshots are
+            // all dead now. Force the trim (bypass the rate limiter) - this is rare and
+            // reclaims the most.
+            _ = Task.Delay(500).ContinueWith(
+                static _ => MemoryOptimizer.CompactAndTrimNow(),
+                TaskScheduler.Default);
         }
         catch (Exception ex)
         {

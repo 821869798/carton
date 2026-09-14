@@ -1,8 +1,8 @@
 @echo off
 setlocal enabledelayedexpansion
 
-REM Usage: scripts\publish-win-aot.bat [rid] [configuration]
-REM Example: scripts\publish-win-aot.bat win-x64 Release
+REM Usage: scripts\build\test-publish-win-aot.bat [rid] [configuration]
+REM Example: scripts\build\test-publish-win-aot.bat win-x64 Release
 
 set RID=%1
 if "%RID%"=="" set RID=win-x64
@@ -11,7 +11,7 @@ set CONFIG=%2
 if "%CONFIG%"=="" set CONFIG=Release
 
 set SCRIPT_DIR=%~dp0
-set REPO_ROOT=%SCRIPT_DIR%..
+set REPO_ROOT=%SCRIPT_DIR%..\..
 set PROJECT=%REPO_ROOT%\src\carton.GUI\carton.GUI.csproj
 set HELPER_PROJECT=%REPO_ROOT%\src\carton.Helper
 set OUTPUT=%REPO_ROOT%\artifacts\publish\%RID%

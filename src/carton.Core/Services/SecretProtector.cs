@@ -32,12 +32,47 @@ public static class SecretProtector
         try
         {
             var plainBytes = Encoding.UTF8.GetBytes(secret);
-            var cipherBytes = DpapiProtect(plainBytes);
-            return Prefix + Convert.ToBase64String(cipherBytes);
+            try
+            {
+                var cipherBytes = DpapiProtect(plainBytes);
+                return Prefix + Convert.ToBase64String(cipherBytes);
+            }
+            finally
+            {
+                // The plaintext secret must not linger in a pooled/collectable buffer.
+                Array.Clear(plainBytes);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Silently returning the raw secret here would write it to preferences.json in
+            // PLAINTEXT, and IsProtected() would then report false forever - a silent,
+            // permanent downgrade of the at-rest protection. Fail loudly instead: the
+            // caller decides whether to keep the old ciphertext or surface the error.
+            throw new InvalidOperationException(
+                "Failed to protect the sing-box API secret with DPAPI. Refusing to persist it in plaintext.",
+                ex);
+        }
+    }
+
+    /// <summary>
+    /// Non-throwing variant of <see cref="Protect"/> for persistence paths that must not
+    /// fail the surrounding operation. Returns <see langword="false"/> when the secret
+    /// could not be encrypted, in which case <paramref name="protectedValue"/> is empty and
+    /// the caller must leave the previously stored value untouched rather than writing
+    /// plaintext.
+    /// </summary>
+    public static bool TryProtect(string? secret, out string protectedValue)
+    {
+        try
+        {
+            protectedValue = Protect(secret);
+            return true;
         }
         catch
         {
-            return secret;
+            protectedValue = string.Empty;
+            return false;
         }
     }
 

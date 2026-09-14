@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: scripts/test-publish-linux-aot.sh [rid] [configuration] [output] [build_macro]
+# Usage: scripts/build/test-publish-linux-aot.sh [rid] [configuration] [output] [build_macro]
 # Examples:
-#   scripts/test-publish-linux-aot.sh linux-x64 Release
-#   scripts/test-publish-linux-aot.sh linux-x64 Release artifacts/publish/linux-x64-appimage INSTALLER_BUILD
+#   scripts/build/test-publish-linux-aot.sh linux-x64 Release
+#   scripts/build/test-publish-linux-aot.sh linux-x64 Release artifacts/publish/linux-x64-appimage INSTALLER_BUILD
 
 RID="${1:-linux-x64}"
 CONFIG="${2:-Release}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 PROJECT="${REPO_ROOT}/src/carton.GUI/carton.GUI.csproj"
 HELPER_PROJECT="${REPO_ROOT}/src/carton.Helper"
 OUTPUT="${3:-${REPO_ROOT}/artifacts/publish/${RID}}"

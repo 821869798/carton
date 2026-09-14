@@ -124,24 +124,24 @@ cargo test --manifest-path src\carton.Helper\Cargo.toml
 ### Windows NativeAOT 发布
 
 ```powershell
-scripts\test-publish-win-aot.bat win-x64 Release
+scripts\build\test-publish-win-aot.bat win-x64 Release
 ```
 
 或使用带安装包封装的脚本：
 
 ```powershell
-scripts\build-release-win-x64.bat
+scripts\build\build-release-win-x64.bat
 ```
 
 其中：
 
-- `scripts\test-publish-win-aot.bat` 只执行 NativeAOT 发布
-- `scripts\build-release-win-x64.bat` 会执行 `scripts\build-release-win-x64.ps1`，并额外生成便携压缩包和 NSIS 安装包
+- `scripts\build\test-publish-win-aot.bat` 只执行 NativeAOT 发布
+- `scripts\build\build-release-win-x64.bat` 会执行 `scripts\build\build-release-win-x64.ps1`，并额外生成便携压缩包和 NSIS 安装包
 
 ### Linux NativeAOT 发布
 
 ```bash
-./scripts/test-publish-linux-aot.sh linux-x64 Release
+./scripts/build/test-publish-linux-aot.sh linux-x64 Release
 ```
 
 输出目录为 `artifacts/publish/<rid>`。
@@ -161,3 +161,13 @@ scripts\build-release-win-x64.bat
 ## License
 
 本项目基于 GNU General Public License v3.0（GPL-3.0）开源，详见 [LICENSE](./LICENSE)。
+
+### 第三方代码
+
+本仓库内置（vendored）了以下第三方源码，其许可证与署名均随源码保留：
+
+| 组件 | 位置 | 上游 | 许可证 |
+|---|---|---|---|
+| Downloader 5.9.5 | [`src/carton.Core/Downloader/`](./src/carton.Core/Downloader/) | [bezzad/Downloader](https://github.com/bezzad/Downloader) | MIT，见 [LICENSE](./src/carton.Core/Downloader/LICENSE) |
+
+内置原因、本地改动与同步上游的步骤见 [`src/carton.Core/Downloader/README.md`](./src/carton.Core/Downloader/README.md)。

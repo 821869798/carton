@@ -124,24 +124,24 @@ Pushes and pull requests to `main` run the build and tests above via `.github/wo
 ### Windows NativeAOT publish
 
 ```powershell
-scripts\test-publish-win-aot.bat win-x64 Release
+scripts\build\test-publish-win-aot.bat win-x64 Release
 ```
 
 Or use the packaging script that also creates the installer:
 
 ```powershell
-scripts\build-release-win-x64.bat
+scripts\build\build-release-win-x64.bat
 ```
 
 In practice:
 
-- `scripts\test-publish-win-aot.bat` performs the NativeAOT publish only
-- `scripts\build-release-win-x64.bat` runs `scripts\build-release-win-x64.ps1` and additionally creates the portable archive and NSIS installer
+- `scripts\build\test-publish-win-aot.bat` performs the NativeAOT publish only
+- `scripts\build\build-release-win-x64.bat` runs `scripts\build\build-release-win-x64.ps1` and additionally creates the portable archive and NSIS installer
 
 ### Linux NativeAOT publish
 
 ```bash
-./scripts/test-publish-linux-aot.sh linux-x64 Release
+./scripts/build/test-publish-linux-aot.sh linux-x64 Release
 ```
 
 This script writes output to `artifacts/publish/<rid>`.
@@ -161,3 +161,15 @@ then `carton` is being built in that direction.
 ## License
 
 This project is released under the GNU General Public License v3.0. See [LICENSE](./LICENSE) for details.
+
+### Third-party code
+
+This repository vendors the following third-party source. Its licence and attribution are
+retained alongside the sources:
+
+| Component | Location | Upstream | Licence |
+|---|---|---|---|
+| Downloader 5.9.5 | [`src/carton.Core/Downloader/`](./src/carton.Core/Downloader/) | [bezzad/Downloader](https://github.com/bezzad/Downloader) | MIT, see [LICENSE](./src/carton.Core/Downloader/LICENSE) |
+
+For why it is vendored, the local modifications, and how to re-sync with upstream, see
+[`src/carton.Core/Downloader/README.md`](./src/carton.Core/Downloader/README.md).

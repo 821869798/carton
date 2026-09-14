@@ -1,8 +1,6 @@
 using System.ComponentModel;
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
-using System.Net.Http.Headers;
 using Downloader;
 
 namespace carton.Core.Services;
@@ -48,6 +46,19 @@ public sealed class AcceleratedFileDownloader
     private const long MinimumChunkSizeBytes = 1L * 1024 * 1024;
     private const string DownloadFileExtension = ".download";
 
+    /// <summary>
+    /// Hard ceiling on the in-flight packet queue held in RAM while writing to disk.
+    /// <para>
+    /// Downloader's <c>ConcurrentPacketBuffer</c> treats a value of 0 as
+    /// <see cref="long.MaxValue"/>, i.e. UNBOUNDED: with 8 parallel chunks on a fast link
+    /// and a slower disk, the producer threads outrun the single writer and the queue grows
+    /// without limit, so a 100 MB kernel/app archive can transiently pin ~100 MB of pooled
+    /// byte arrays. Capping it applies backpressure instead (producers pause until the
+    /// writer drains), which bounds the download-time spike at a few MB.
+    /// </para>
+    /// </summary>
+    private const long MaximumDownloadMemoryBufferBytes = 16L * 1024 * 1024;
+
     private readonly HttpClient _httpClient;
     private readonly Action<string>? _statusLog;
     private readonly Action<string>? _diagnosticLog;
@@ -78,14 +89,11 @@ public sealed class AcceleratedFileDownloader
         var completion = new TaskCompletionSource<AsyncCompletedEventArgs>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         var configuration = CreateConfiguration();
-        var createdHttpClients = new ConcurrentBag<HttpClient>();
-        configuration.CustomHttpClientFactory = () =>
-        {
-            var client = CreateDownloadHttpClient();
-            createdHttpClients.Add(client);
-            return client;
-        };
-        var download = new DownloadService(configuration);
+        // Let DownloadService own its SocketsHttpHandler so ConnectTimeout / keep-alive
+        // from RequestConfiguration actually apply. A CustomHttpClientFactory that returns
+        // a bare HttpClient would discard those settings. Dispose the service in finally so
+        // the handler, chunk buffers and resume metadata are released after each download.
+        await using var download = new DownloadService(configuration);
         var lastDiagnosticLogAt = DateTimeOffset.MinValue;
 
         _diagnosticLog?.Invoke(
@@ -142,13 +150,6 @@ public sealed class AcceleratedFileDownloader
         {
             throw new DownloadStalledException(_options.NoDataTimeout, ex);
         }
-        finally
-        {
-            foreach (var client in createdHttpClients)
-            {
-                client.Dispose();
-            }
-        }
     }
 
     private DownloadConfiguration CreateConfiguration()
@@ -168,18 +169,9 @@ public sealed class AcceleratedFileDownloader
             EnableAutoResumeDownload = true,
             DownloadFileExtension = DownloadFileExtension,
             FileExistPolicy = FileExistPolicy.Delete,
+            MaximumMemoryBufferBytes = MaximumDownloadMemoryBufferBytes,
             RequestConfiguration = CreateRequestConfiguration()
         };
-    }
-
-    private HttpClient CreateDownloadHttpClient()
-    {
-        var client = new HttpClient
-        {
-            Timeout = Timeout.InfiniteTimeSpan
-        };
-        CopyHeaders(_httpClient.DefaultRequestHeaders, client.DefaultRequestHeaders);
-        return client;
     }
 
     private RequestConfiguration CreateRequestConfiguration()
@@ -247,14 +239,6 @@ public sealed class AcceleratedFileDownloader
         catch (Exception ex)
         {
             _diagnosticLog?.Invoke($"Skipped download request header '{name}': {ex.Message}");
-        }
-    }
-
-    private static void CopyHeaders(HttpHeaders source, HttpHeaders destination)
-    {
-        foreach (var header in source)
-        {
-            destination.TryAddWithoutValidation(header.Key, header.Value);
         }
     }
 

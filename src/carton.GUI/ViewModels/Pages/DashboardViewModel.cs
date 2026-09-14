@@ -1888,7 +1888,12 @@ public partial class DashboardViewModel : PageViewModelBase
             {
                 var preferences = _preferencesService.Load();
                 preferences.LastNativeApiPort = nativeApiPort;
-                preferences.LastNativeApiSecret = carton.Core.Services.SecretProtector.Protect(nativeApiSecret);
+                // If DPAPI ever fails, keep the previous stored value rather than writing
+                // the secret to disk in plaintext.
+                if (carton.Core.Services.SecretProtector.TryProtect(nativeApiSecret, out var protectedSecret))
+                {
+                    preferences.LastNativeApiSecret = protectedSecret;
+                }
                 _preferencesService.Save(preferences);
             }
 

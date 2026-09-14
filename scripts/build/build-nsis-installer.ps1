@@ -39,7 +39,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$repoRoot = (Resolve-Path "$scriptDir\..").Path
+$repoRoot = (Resolve-Path "$scriptDir\..\..").Path
 $installerScript = Join-Path $repoRoot "scripts\installer\windows\carton-installer.nsi"
 
 if (-not (Test-Path $installerScript)) {

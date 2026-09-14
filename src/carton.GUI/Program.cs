@@ -41,7 +41,8 @@ sealed class Program
     }
 
     public static AppBuilder BuildAvaloniaApp()
-        => AppBuilder.Configure<App>()
+    {
+        var builder = AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
             // Pin the default UI font to the embedded Inter family so Latin text
@@ -55,6 +56,15 @@ sealed class Program
                 {
                     new FontFallback { FontFamily = FontFamily.Default },
                 },
-            })
-            .LogToTrace();
+            });
+
+#if DEBUG
+        // LogToTrace installs a global Avalonia log sink that formats every framework
+        // diagnostic into strings. In release that is pure allocation for output nobody
+        // reads, so it is debug-only.
+        builder = builder.LogToTrace();
+#endif
+
+        return builder;
+    }
 }

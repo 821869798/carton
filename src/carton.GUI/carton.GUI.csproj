@@ -48,7 +48,28 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<!-- GC configuration. Idle private-bytes A/B (scripts/memory/mem-repeat.ps1) showed
+		     no-config / ConserveMemory-only / extra flags all inside run-to-run noise.
+		     carton's managed heap is only ~8-17 MB, so GC tuning cannot move idle RAM.
+
+		     What is kept, and why:
+
+		     ConserveMemory=3 - bounds heap growth under allocation load (config parsing,
+		     gRPC streaming), which the idle benchmark does not exercise. Pre-existing.
+
+		     Server=false - defensive, not an optimization. Workstation GC is already the
+		     default for a WinExe, but server GC allocates per-core heaps; on a many-core
+		     machine (this one has 20 logical cores) an inherited COMPlus_gcServer or
+		     DOTNET_gcServer environment variable would multiply the heap. Pinning it here
+		     makes the process immune to that.
+
+		     Deliberately NOT set: System.GC.Concurrent=false. It removes background GC,
+		     which makes gen2 collections blocking and risks UI hitches, and it showed no
+		     measurable memory benefit. A real cost for no measured gain.
+
+		     See docs/MEMORY_OPTIMIZATION_REPORT.md. -->
 		<RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="3" />
+		<RuntimeHostConfigurationOption Include="System.GC.Server" Value="false" />
 		<Folder Include="Models\" />
 		<AvaloniaResource Include="Assets\**" Exclude="Assets\carton_icon_full.png" />
 		<AvaloniaResource Include="Resources\**" Exclude="Resources\Localization\Strings.en.axaml;Resources\Localization\Strings.zh-Hans.axaml" />
@@ -59,17 +80,17 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Avalonia" Version="11.3.14" />
-		<PackageReference Include="Avalonia.Desktop" Version="11.3.14" />
+		<PackageReference Include="Avalonia" Version="11.3.18" />
+		<PackageReference Include="Avalonia.Desktop" Version="11.3.18" />
 		<PackageReference Include="FluentAvaloniaUI" Version="2.5.1" />
-		<PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.14" />
+		<PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.18" />
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
 		<PackageReference Include="NuGet.Versioning" Version="7.6.0" />
 		<PackageReference Include="Velopack" Version="1.2.0" />
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(Configuration)' == 'Debug' and '$(EnableAvaloniaDiagnostics)' == 'true'">
-		<PackageReference Include="Avalonia.Diagnostics" Version="11.3.14" />
+		<PackageReference Include="Avalonia.Diagnostics" Version="11.3.18" />
 	</ItemGroup>
 
 	<ItemGroup>

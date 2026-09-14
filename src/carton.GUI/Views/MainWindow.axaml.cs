@@ -90,7 +90,10 @@ public partial class MainWindow : Window
         SaveWindowPlacement();
         e.Cancel = true;
         Hide();
-        MemoryOptimizer.CompactAndTrim();
+        // Hidden to tray: the whole visual tree, render surfaces and page view models are
+        // now idle, so this is the single best moment to hand memory back to the OS.
+        // Non-blocking - the actual collection happens on a thread-pool thread.
+        MemoryOptimizer.CompactAndTrimNow();
     }
 
     private void OnOpened(object? sender, System.EventArgs e)
@@ -118,6 +121,8 @@ public partial class MainWindow : Window
             NotifyWindowVisible(isWindowVisible);
             if (!isWindowVisible)
             {
+                // Rate limited + off-thread: this property fires repeatedly during
+                // minimize/restore animations, so it must never do work inline.
                 MemoryOptimizer.CompactAndTrim();
             }
         }

@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$repoRoot = (Resolve-Path "$scriptDir\..").Path
+$repoRoot = (Resolve-Path "$scriptDir\..\..").Path
 
 $appName = "carton"
 $rid = "win-x64"
@@ -21,8 +21,8 @@ $publishDirInstaller = "$repoRoot\artifacts\publish\$rid-installer"
 $publishDirHelper = "$repoRoot\artifacts\publish\$rid-helper"
 $helperProject = "$repoRoot\src\carton.Helper"
 $packDir = "$repoRoot\artifacts\pack\$Channel"
-$includeKernelScript = "$repoRoot\scripts\include-singbox-kernel.ps1"
-$nsisBuilderScript = "$repoRoot\scripts\build-nsis-installer.ps1"
+$includeKernelScript = "$repoRoot\scripts\build\include-singbox-kernel.ps1"
+$nsisBuilderScript = "$repoRoot\scripts\build\build-nsis-installer.ps1"
 $kernelStageDir = Join-Path $env:TEMP ("carton-singbox-runtime-" + [Guid]::NewGuid().ToString("N"))
 
 Write-Host "==== Environment ===="

@@ -7,14 +7,14 @@ param(
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$repoRoot = (Resolve-Path "$scriptDir\..").Path
+$repoRoot = (Resolve-Path "$scriptDir\..\..").Path
 $appName = "carton"
 $guiProject = "$repoRoot\src\carton.GUI\carton.GUI.csproj"
 $helperProject = "$repoRoot\src\carton.Helper"
 $publishDir = "$repoRoot\artifacts\publish\$Rid-portable"
 $helperDir = "$repoRoot\artifacts\publish\$Rid-helper"
 $packDir = "$repoRoot\artifacts\pack\$Rid-portable"
-$includeKernelScript = "$repoRoot\scripts\include-singbox-kernel.ps1"
+$includeKernelScript = "$repoRoot\scripts\build\include-singbox-kernel.ps1"
 
 [xml]$csproj = Get-Content $guiProject
 $version = $csproj.Project.PropertyGroup.Version | Select-Object -First 1

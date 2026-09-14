@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-REM Usage: scripts\build-release-win-x64.bat
+REM Usage: scripts\build\build-release-win-x64.bat
 
 set SCRIPT_DIR=%~dp0
 

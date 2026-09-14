@@ -296,8 +296,11 @@ public partial class MainViewModel : ViewModelBase
             if (!string.IsNullOrWhiteSpace(storedSecret) &&
                 !carton.Core.Services.SecretProtector.IsProtected(_currentPreferences.LastNativeApiSecret))
             {
-                var reProtected = carton.Core.Services.SecretProtector.Protect(storedSecret);
-                if (!string.Equals(reProtected, _currentPreferences.LastNativeApiSecret, StringComparison.Ordinal))
+                var reProtected = carton.Core.Services.SecretProtector.TryProtect(storedSecret, out var protectedSecret)
+                    ? protectedSecret
+                    : null;
+                if (reProtected != null &&
+                    !string.Equals(reProtected, _currentPreferences.LastNativeApiSecret, StringComparison.Ordinal))
                 {
                     _currentPreferences.LastNativeApiSecret = reProtected;
                     _preferencesService.Save(_currentPreferences);
@@ -816,7 +819,16 @@ public partial class MainViewModel : ViewModelBase
 
     private void OnTransientPageUnloadTimerTick(object? sender, EventArgs e)
     {
-        TryUnloadInactiveTransientPages();
+        var unloaded = TryUnloadInactiveTransientPages();
+        if (unloaded)
+        {
+            // Disposing a page frees its view models and lets the visual tree go, but the
+            // pages stay in the GC heap and in the working set until something collects
+            // and trims. Without this, navigating around leaves the working set elevated
+            // indefinitely (measured: 19 MB -> 65 MB after navigation churn, with no
+            // recovery). CompactAndTrim is async and rate limited, so this is cheap.
+            MemoryOptimizer.CompactAndTrim();
+        }
     }
 
     private void UpdateSessionStartTime()
@@ -921,14 +933,19 @@ public partial class MainViewModel : ViewModelBase
         StopSessionDurationTimer();
     }
 
-    private void TryUnloadInactiveTransientPages()
+    /// <summary>
+    /// Unloads transient pages whose inactivity delay has elapsed.
+    /// </summary>
+    /// <returns>True when at least one page was actually disposed.</returns>
+    private bool TryUnloadInactiveTransientPages()
     {
         var now = DateTime.UtcNow;
         TryUnloadGroupsPage(now);
-        TryUnloadTransientPage(NavigationPage.Profiles, _profilesInactiveAtUtc, _profilesViewModel, disposable => _profilesViewModel = null, now);
-        TryUnloadTransientPage(NavigationPage.Connections, _connectionsInactiveAtUtc, _connectionsViewModel, disposable => _connectionsViewModel = null, now);
-        TryUnloadTransientPage(NavigationPage.Logs, _logsInactiveAtUtc, _logsViewModel, disposable => _logsViewModel = null, now);
-        TryUnloadTransientPage(NavigationPage.Settings, _settingsInactiveAtUtc, _settingsViewModel, disposable => _settingsViewModel = null, now);
+        var unloaded = TryUnloadTransientPage(NavigationPage.Profiles, _profilesInactiveAtUtc, _profilesViewModel, disposable => _profilesViewModel = null, now);
+        unloaded |= TryUnloadTransientPage(NavigationPage.Connections, _connectionsInactiveAtUtc, _connectionsViewModel, disposable => _connectionsViewModel = null, now);
+        unloaded |= TryUnloadTransientPage(NavigationPage.Logs, _logsInactiveAtUtc, _logsViewModel, disposable => _logsViewModel = null, now);
+        unloaded |= TryUnloadTransientPage(NavigationPage.Settings, _settingsInactiveAtUtc, _settingsViewModel, disposable => _settingsViewModel = null, now);
+        return unloaded;
     }
 
     /// <summary>
@@ -973,16 +990,21 @@ public partial class MainViewModel : ViewModelBase
         _groupsInactiveAtUtc = null;
     }
 
-    private void TryUnloadTransientPage(NavigationPage page, DateTime? inactiveAtUtc, IDisposable? viewModel, Action<IDisposable> clearReference, DateTime now)
+    /// <summary>
+    /// Disposes one transient page if it is not the selected page and its inactivity
+    /// delay has elapsed.
+    /// </summary>
+    /// <returns>True when the page was disposed by this call.</returns>
+    private bool TryUnloadTransientPage(NavigationPage page, DateTime? inactiveAtUtc, IDisposable? viewModel, Action<IDisposable> clearReference, DateTime now)
     {
         if (SelectedPage == page || inactiveAtUtc == null || viewModel == null)
         {
-            return;
+            return false;
         }
 
         if (now - inactiveAtUtc.Value < TransientPageUnloadDelay)
         {
-            return;
+            return false;
         }
 
         clearReference(viewModel);
@@ -991,6 +1013,8 @@ public partial class MainViewModel : ViewModelBase
         {
             OnPropertyChanged(nameof(ActiveTransientPage));
         }
+
+        return true;
     }
 
     private void MarkTransientPageInactive(NavigationPage? page)

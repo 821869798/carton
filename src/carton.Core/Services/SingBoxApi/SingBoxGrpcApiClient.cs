@@ -130,7 +130,9 @@ internal sealed class SingBoxGrpcApiClient : ISingBoxApiClient, IDisposable
     internal static SocketsHttpHandler CreateSocketsHttpHandler() => new()
     {
         UseProxy = false,
-        EnableMultipleHttp2Connections = true,
+        // Local sing-box API is a single HTTP/2 server on loopback. Extra connections
+        // only duplicate windows, ping timers and receive buffers.
+        EnableMultipleHttp2Connections = false,
         PooledConnectionIdleTimeout = TimeSpan.FromSeconds(30),
         KeepAlivePingDelay = TimeSpan.FromSeconds(15),
         KeepAlivePingTimeout = TimeSpan.FromSeconds(5),

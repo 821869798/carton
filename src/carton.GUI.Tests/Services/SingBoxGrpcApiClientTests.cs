@@ -139,11 +139,13 @@ public sealed class SingBoxGrpcApiClientTests
     }
 
     [Fact]
-    public void CreateSocketsHttpHandler_DisablesProxyAndEnablesHttp2Multiplexing()
+    public void CreateSocketsHttpHandler_DisablesProxyAndKeepsASingleHttp2Connection()
     {
         using var handler = SingBoxGrpcApiClient.CreateSocketsHttpHandler();
         Assert.False(handler.UseProxy);
-        Assert.True(handler.EnableMultipleHttp2Connections);
+        // Local sing-box is one HTTP/2 server. Extra connections only duplicate windows
+        // and ping timers; multiplexing already happens inside the single connection.
+        Assert.False(handler.EnableMultipleHttp2Connections);
     }
 
     [Fact]
