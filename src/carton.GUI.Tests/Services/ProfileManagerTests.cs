@@ -103,12 +103,16 @@ public sealed class ProfileManagerTests
     }
 
     [Fact]
-    public async Task OpeningProfileList_NeverReadsConfigFileContents()
+    public async Task ListAndRuntimeOptions_AfterCreate_DoNotReadConfigFileContents()
     {
-        // The requirement: config JSON must not be read when carton opens. It may only be
-        // read when the user opens the editor, or when starting the kernel to write the
-        // runtime overlay. Everything else (the list, the dashboard's port display) must
-        // work off persisted metadata.
+        // Scope: this pins the steady-state contract, NOT cold start. CreateAsync resolves the
+        // runtime options and persists them, so by the time the list or the dashboard reads
+        // metadata there is nothing left to derive from the config body.
+        //
+        // A profile whose RuntimeOptions were never initialized (legacy data, or a
+        // hand-edited sing-box-data.json) IS parsed once on its first read and immediately
+        // persisted - see GetRuntimeOptionsAsync. That one-time migration is deliberate and
+        // is not what this test covers, so it must not be cited as a cold-start guarantee.
         //
         // Proof method: hold every config file open with FileShare.None. Any read attempt
         // from ProfileManager would throw IOException/UnauthorizedAccessException. If both

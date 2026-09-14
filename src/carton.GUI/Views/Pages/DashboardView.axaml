@@ -1,4 +1,4 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -311,9 +311,12 @@
         </Border>
       </Grid>
 
-      <!-- 配置列表独立成卡片。ListBox 自带虚拟化，且不再每行一个 RadioButton（Fluent 模板很重）。 -->
+      <!-- 配置列表独立成卡片。ListBox 自带虚拟化，且不再每行一个 RadioButton（Fluent 模板很重）。
+           内核 Starting/Stopping 期间禁用：选择只在 Stopped|Error 才落盘，此时放行会让界面
+           显示一个内核并没有在用的配置（看起来换了、实际没换）。 -->
       <Border Classes="card sfmCard" Padding="12"
-              IsVisible="{Binding ShowStartupSelector}">
+              IsVisible="{Binding ShowStartupSelector}"
+              IsEnabled="{Binding CanUseDashboardControls}">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="10">
             <PathIcon Width="16"
