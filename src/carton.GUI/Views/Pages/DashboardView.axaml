@@ -142,7 +142,7 @@
             IsEnabled="{Binding CanUseDashboardControls}">
         <Border Grid.Column="0"
                 Classes="card sfmCard"
-                Padding="10"
+                Padding="12"
                 VerticalAlignment="Top">
           <StackPanel Spacing="8">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
@@ -279,7 +279,7 @@
 
         <Border Grid.Column="1"
                 Classes="card sfmCard"
-                Padding="10"
+                Padding="12"
                 VerticalAlignment="Top">
           <StackPanel Spacing="8">
             <StackPanel Orientation="Horizontal" Spacing="10">
@@ -423,7 +423,7 @@
                 </Grid>
 
                 <Grid ColumnDefinitions="*,*,*" ColumnSpacing="16">
-                  <Border Classes="card sfmCard compact" Padding="12,12" Height="98">
+                  <Border Classes="card sfmCard compact" Padding="12" Height="98">
                     <Grid RowDefinitions="*,*,*">
                       <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                         <PathIcon Width="15"
@@ -462,7 +462,7 @@
                     </Grid>
                   </Border>
 
-                  <Border Grid.Column="1" Classes="card sfmCard compact" Padding="12,12" Height="98">
+                  <Border Grid.Column="1" Classes="card sfmCard compact" Padding="12" Height="98">
                     <Grid RowDefinitions="*,*,*">
                       <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                         <PathIcon Width="15"
@@ -501,7 +501,7 @@
                     </Grid>
                   </Border>
 
-                  <Border Grid.Column="2" Classes="card sfmCard compact" Padding="12,12" Height="98">
+                  <Border Grid.Column="2" Classes="card sfmCard compact" Padding="12" Height="98">
                     <Grid RowDefinitions="*,*,*">
                       <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
                         <PathIcon Grid.Column="0"

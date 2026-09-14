@@ -19,7 +19,7 @@ namespace carton.Views;
 public partial class MainWindow : Window
 {
     private const double DefaultWindowWidth = 910;
-    private const double DefaultWindowHeight = 640;
+    private const double DefaultWindowHeight = 658;
     private bool _allowClose;
     private bool _hideOnFirstOpen;
     private bool _restoredWindowPlacement;
