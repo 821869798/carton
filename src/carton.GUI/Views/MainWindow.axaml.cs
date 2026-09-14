@@ -561,44 +561,92 @@ public partial class MainWindow : Window
 
     private void MoveNavigationSelectionRail(NavigationItem selectedItem, bool retryIfMissing = false)
     {
-        var fallbackTop = GetFallbackNavigationRailTop(selectedItem);
-        var selectedContainer = FindNavigationItemContainer(selectedItem);
-        var center = selectedContainer?.Bounds.Height > 0
-            ? selectedContainer.TranslatePoint(new Point(0, selectedContainer.Bounds.Height / 2), RootNavigationView)
-            : null;
-
-        if (center == null)
+        // Prefer the exact position of the selected item's own container.
+        var measuredTop = TryMeasureNavigationRailTop(selectedItem);
+        if (measuredTop != null)
         {
-            SetNavigationSelectionRailTop(fallbackTop);
-            if (retryIfMissing)
-            {
-                Dispatcher.UIThread.Post(
-                    () => MoveNavigationSelectionRail(selectedItem),
-                    DispatcherPriority.Loaded);
-            }
+            SetNavigationSelectionRailTop(measuredTop.Value);
             return;
         }
 
-        var measuredTop = center.Value.Y - NavigationSelectionRail.Height / 2;
-        SetNavigationSelectionRailTop(measuredTop > 80 ? measuredTop : fallbackTop);
-    }
-
-    private double GetFallbackNavigationRailTop(NavigationItem selectedItem)
-    {
-        var index = 0;
-        if (_viewModel != null)
+        // Its container is not laid out yet. Derive the position from a container that IS,
+        // or leave the rail where it is and retry - never place it at a guessed offset.
+        if (GetDerivedNavigationRailTop(selectedItem) is { } derivedTop)
         {
-            for (var i = 0; i < _viewModel.NavigationItems.Count; i++)
-            {
-                if (ReferenceEquals(_viewModel.NavigationItems[i], selectedItem))
-                {
-                    index = i;
-                    break;
-                }
-            }
+            SetNavigationSelectionRailTop(derivedTop);
         }
 
-        return 188 + index * 46;
+        if (retryIfMissing)
+        {
+            Dispatcher.UIThread.Post(
+                () => MoveNavigationSelectionRail(selectedItem),
+                DispatcherPriority.Loaded);
+        }
+    }
+
+    /// <summary>
+    /// Rail top for the selected item measured from its own container, or
+    /// <see langword="null"/> when that container is not realised/laid out yet.
+    /// </summary>
+    private double? TryMeasureNavigationRailTop(NavigationItem selectedItem)
+    {
+        var container = FindNavigationItemContainer(selectedItem);
+        if (container == null || container.Bounds.Height <= 0)
+        {
+            return null;
+        }
+
+        var center = container.TranslatePoint(
+            new Point(0, container.Bounds.Height / 2), RootNavigationView);
+
+        // A centre at or above the pane's origin means layout has not run yet; treating
+        // that as "not measurable" is what the old `measuredTop > 80` heuristic was
+        // approximating, but without the magic number.
+        if (center == null || center.Value.Y <= 0)
+        {
+            return null;
+        }
+
+        return center.Value.Y - NavigationRailHeight / 2;
+    }
+
+    /// <summary>
+    /// Approximate rail top used while the selected item's container is not realised.
+    /// </summary>
+    /// <remarks>
+    /// This used to be a hardcoded header offset and row pitch (<c>188 + index * 46</c>),
+    /// which would silently misplace the rail the moment the pane's metrics changed. It is
+    /// now derived from a container that is actually laid out: the pane's real row height
+    /// supplies the pitch and that container's real position supplies the origin.
+    /// Returns <see langword="null"/> when nothing is laid out yet, and the caller simply
+    /// retries rather than drawing the rail in a guessed spot.
+    /// </remarks>
+    private double? GetDerivedNavigationRailTop(NavigationItem selectedItem)
+    {
+        if (_viewModel == null ||
+            FindFirstNavigationItemContainer() is not { } reference ||
+            reference.DataContext is not NavigationItem referenceItem ||
+            reference.Bounds.Height <= 0)
+        {
+            return null;
+        }
+
+        var targetIndex = _viewModel.NavigationItems.IndexOf(selectedItem);
+        var referenceIndex = _viewModel.NavigationItems.IndexOf(referenceItem);
+        if (targetIndex < 0 || referenceIndex < 0)
+        {
+            return null;
+        }
+
+        var referenceCenter = reference.TranslatePoint(
+            new Point(0, reference.Bounds.Height / 2), RootNavigationView);
+        if (referenceCenter == null)
+        {
+            return null;
+        }
+
+        var pitch = reference.Bounds.Height;
+        return referenceCenter.Value.Y - NavigationRailHeight / 2 + (targetIndex - referenceIndex) * pitch;
     }
 
     private void SetNavigationSelectionRailTop(double top)
@@ -712,6 +760,35 @@ public partial class MainWindow : Window
     private NavigationViewItem? FindNavigationItemContainer(NavigationItem item)
     {
         return FindNavigationItemContainer(RootNavigationView, item);
+    }
+
+    /// <summary>
+    /// First navigation item container that is already in the visual tree, used purely as a
+    /// layout reference (its position and row height) when the selected item's own container
+    /// is not realised yet.
+    /// </summary>
+    private NavigationViewItem? FindFirstNavigationItemContainer()
+    {
+        return FindFirstNavigationItemContainer(RootNavigationView);
+    }
+
+    private static NavigationViewItem? FindFirstNavigationItemContainer(Visual visual)
+    {
+        if (visual is NavigationViewItem container && container.DataContext is NavigationItem)
+        {
+            return container;
+        }
+
+        foreach (var child in visual.GetVisualChildren())
+        {
+            var match = FindFirstNavigationItemContainer(child);
+            if (match != null)
+            {
+                return match;
+            }
+        }
+
+        return null;
     }
 
     private static NavigationViewItem? FindNavigationItemContainer(Visual visual, NavigationItem item)
