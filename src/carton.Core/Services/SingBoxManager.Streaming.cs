@@ -159,13 +159,72 @@ public partial class SingBoxManager
 
     private void StartConnectionsMonitorLocked()
     {
-        if (_connectionsMonitorTask is not { IsCompleted: false } && _state.Status == ServiceStatus.Running)
+        if (_state.Status != ServiceStatus.Running)
         {
-            _connectionsMonitorCts?.Dispose();
-            _connectionsMonitorCts = new CancellationTokenSource();
-            var token = _connectionsMonitorCts.Token;
-            _connectionsMonitorTask = Task.Run(() => StartConnectionsMonitorAsync(token));
+            return;
         }
+
+        // A live token plus a running loop is exactly one subscription - do not add another.
+        if (_connectionsMonitorTask is { IsCompleted: false } &&
+            _connectionsMonitorCts is { IsCancellationRequested: false })
+        {
+            return;
+        }
+
+        // Stop() only cancels: the old loop still needs a moment to observe the token and
+        // leave its stream. Starting the replacement in the same breath let two
+        // subscriptions merge into _connectionRows at once (duplicate/stale rows while the
+        // kernel restarts or the connections page is left and re-entered). Chain instead:
+        // the new loop opens its stream only once the previous one has fully exited.
+        var previous = _connectionsMonitorTask;
+        var cts = new CancellationTokenSource();
+        _connectionsMonitorCts = cts;
+        _connectionsMonitorTask = Task.Run(async () =>
+        {
+            try
+            {
+                if (previous is { IsCompleted: false })
+                {
+                    try
+                    {
+                        await previous;
+                    }
+                    catch
+                    {
+                        // The previous loop reports its own failures; nothing to add here.
+                    }
+                }
+
+                lock (_snapshotSyncRoot)
+                {
+                    // Superseded while waiting, or the kernel went away again: opening a
+                    // stream now would defeat the chaining above.
+                    if (!ReferenceEquals(_connectionsMonitorCts, cts) ||
+                        _state.Status != ServiceStatus.Running)
+                    {
+                        return;
+                    }
+                }
+
+                await StartConnectionsMonitorAsync(cts);
+            }
+            finally
+            {
+                // Give the field back only if this loop is still the current one: a newer
+                // start may have taken it over while this loop was draining. Clearing it
+                // here keeps "a non-null _connectionsMonitorCts is never disposed" true, so
+                // the check in StartConnectionsMonitorLocked can read it safely.
+                lock (_snapshotSyncRoot)
+                {
+                    if (ReferenceEquals(_connectionsMonitorCts, cts))
+                    {
+                        _connectionsMonitorCts = null;
+                    }
+                }
+
+                cts.Dispose();
+            }
+        });
     }
 
     private void StopConnectionsMonitorLocked()
@@ -173,13 +232,15 @@ public partial class SingBoxManager
         try
         {
             _connectionsMonitorCts?.Cancel();
-            _connectionsMonitorCts?.Dispose();
         }
         catch
         {
         }
+
         _connectionsMonitorCts = null;
-        _connectionsMonitorTask = null;
+        // The task reference is deliberately kept: StartConnectionsMonitorLocked uses it to
+        // wait for this loop to finish before opening the next subscription. The token
+        // source is disposed by that loop's own wrapper once it exits.
         _connectionRows.Clear();
         _connectionsSnapshot = ConnectionsSnapshot.Empty;
     }
@@ -204,8 +265,9 @@ public partial class SingBoxManager
         }
     }
 
-    private async Task StartConnectionsMonitorAsync(CancellationToken cancellationToken)
+    private async Task StartConnectionsMonitorAsync(CancellationTokenSource cts)
     {
+        var cancellationToken = cts.Token;
         var consecutiveFailures = 0;
 
         while (_state.Status == ServiceStatus.Running && !cancellationToken.IsCancellationRequested)
@@ -221,7 +283,13 @@ public partial class SingBoxManager
                     }
 
                     consecutiveFailures = 0;
-                    MergeConnectionEvents(message);
+                    if (!TryMergeConnectionEvents(message, cts))
+                    {
+                        // Superseded while this message was in flight: the snapshot now
+                        // belongs to the replacement monitor - or to nobody, if the page was
+                        // left - so this loop must stop writing to it.
+                        break;
+                    }
                 }
 
                 if (_state.Status == ServiceStatus.Running)
@@ -408,7 +476,22 @@ public partial class SingBoxManager
         }
     }
 
-    private void MergeConnectionEvents(Daemon.ConnectionEvents message)
+    /// <summary>
+    /// Applies one connection-events message, unless <paramref name="owner"/> has been
+    /// superseded in the meantime.
+    /// </summary>
+    /// <remarks>
+    /// Stop() resets the rows and the published snapshot under <see cref="_snapshotSyncRoot"/>,
+    /// so the ownership check has to sit in the same critical section that mutates them.
+    /// Without it, the last message dequeued by a loop that is already leaving would merge
+    /// after the reset and leave a stale, never-again-cleared snapshot behind - the
+    /// connections page is gone yet <see cref="CurrentConnections"/> is non-empty, which in
+    /// turn makes the groups page skip its GetConnectionsAsync fallback (its condition is
+    /// "snapshot is empty") for the rest of the kernel session.
+    /// </remarks>
+    /// <returns><see langword="false"/> when the message was dropped because another
+    /// monitor - or a stop - now owns the snapshot.</returns>
+    private bool TryMergeConnectionEvents(Daemon.ConnectionEvents message, CancellationTokenSource owner)
     {
         ConnectionsSnapshot snapshot;
         // ApplyConnectionEvents is copy-on-write and returns a fresh dictionary: the
@@ -418,6 +501,11 @@ public partial class SingBoxManager
         Dictionary<string, ConnectionSnapshotRow> rows;
         lock (_snapshotSyncRoot)
         {
+            if (!ReferenceEquals(_connectionsMonitorCts, owner))
+            {
+                return false;
+            }
+
             rows = ApplyConnectionEvents(_connectionRows, message);
             _connectionRows = rows;
         }
@@ -428,6 +516,13 @@ public partial class SingBoxManager
         // together); the expensive conversion has already happened above.
         lock (_snapshotSyncRoot)
         {
+            // Re-check: a stop may have reset the snapshot while this one was being built,
+            // in which case publishing it would resurrect rows that were just dropped.
+            if (!ReferenceEquals(_connectionsMonitorCts, owner))
+            {
+                return false;
+            }
+
             _state.ConnectionCount = snapshot.ActiveCount;
             _connectionsSnapshot = snapshot;
         }
@@ -435,6 +530,7 @@ public partial class SingBoxManager
         // Events are raised OUTSIDE the lock: handlers may read CurrentConnections or
         // re-enter manager methods that take the same lock.
         _connectionsUpdated?.Invoke(this, snapshot);
+        return true;
     }
 
     /// <summary>
