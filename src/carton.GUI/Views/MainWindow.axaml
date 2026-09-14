@@ -48,9 +48,12 @@
     <Border Grid.Row="0" Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}">
       <Grid Margin="12,6">
         <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto"/>
+          <!-- Equal star columns on both sides keep the centred page title dead-centre no
+               matter how long the profile name on the left happens to be. With Auto,*,Auto
+               the middle column's centre drifted right as the name grew. -->
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <TextBlock Grid.Column="0"
                    Text="{Binding DashboardViewModel.CurrentProfile}"

@@ -121,6 +121,13 @@ public partial class DashboardViewModel : PageViewModelBase
     [ObservableProperty]
     private DashboardProfileItemViewModel? _selectedStartupProfile;
 
+    /// <summary>
+    /// True while <see cref="AvailableProfiles"/> is being rebuilt. Selection is reassigned
+    /// during population, and that must not be mistaken for a user picking a profile (it
+    /// would re-persist and re-load runtime options on every refresh).
+    /// </summary>
+    private bool _isPopulatingProfiles;
+
     public bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
     public bool IsLinux => RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
     public bool ShowTerminalProxyButtons => IsConnected;
@@ -423,6 +430,41 @@ public partial class DashboardViewModel : PageViewModelBase
     {
         OnPropertyChanged(nameof(HasSelectedProfile));
         OnPropertyChanged(nameof(CanToggleConnection));
+
+        // The dashboard list and the tray menu both end up here, so the side effects -
+        // mirroring IsSelected, persisting the choice, reloading runtime options - live in
+        // exactly one place instead of being duplicated per caller.
+        if (value is null || _isPopulatingProfiles)
+        {
+            return;
+        }
+
+        foreach (var item in AvailableProfiles)
+        {
+            item.IsSelected = ReferenceEquals(item, value);
+        }
+
+        CurrentProfile = value.Name;
+        _ = PersistAndApplyStartupProfileAsync(value);
+    }
+
+    private async Task PersistAndApplyStartupProfileAsync(DashboardProfileItemViewModel profile)
+    {
+        if (_profileManager == null ||
+            _singBoxManager?.State.Status is not (ServiceStatus.Stopped or ServiceStatus.Error))
+        {
+            return;
+        }
+
+        try
+        {
+            await _profileManager.SetSelectedProfileIdAsync(profile.Id);
+            await LoadRuntimeOptionsAsync(profile.Id);
+        }
+        catch (Exception ex)
+        {
+            LogError($"Failed to apply startup profile: {ex.Message}");
+        }
     }
 
     partial void OnKernelStatusChanged(ServiceStatus value)
@@ -682,34 +724,42 @@ public partial class DashboardViewModel : PageViewModelBase
 
         await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
         {
-            AvailableProfiles.Clear();
-            SelectedStartupProfile = null;
-
-            foreach (var profile in profiles)
+            _isPopulatingProfiles = true;
+            try
             {
-                var vm = new DashboardProfileItemViewModel
-                {
-                    Id = profile.Id,
-                    Name = string.IsNullOrWhiteSpace(profile.Name) ? $"Profile {profile.Id}" : profile.Name,
-                    IsSelected = profile.Id == selectedId
-                };
-                AvailableProfiles.Add(vm);
+                AvailableProfiles.Clear();
+                SelectedStartupProfile = null;
 
-                if (vm.IsSelected)
+                foreach (var profile in profiles)
                 {
-                    SelectedStartupProfile = vm;
-                    currentProfileName = vm.Name;
+                    var vm = new DashboardProfileItemViewModel
+                    {
+                        Id = profile.Id,
+                        Name = string.IsNullOrWhiteSpace(profile.Name) ? $"Profile {profile.Id}" : profile.Name,
+                        IsSelected = profile.Id == selectedId
+                    };
+                    AvailableProfiles.Add(vm);
+
+                    if (vm.IsSelected)
+                    {
+                        SelectedStartupProfile = vm;
+                        currentProfileName = vm.Name;
+                    }
                 }
-            }
 
-            if (SelectedStartupProfile == null && AvailableProfiles.Count > 0)
+                if (SelectedStartupProfile == null && AvailableProfiles.Count > 0)
+                {
+                    SelectedStartupProfile = AvailableProfiles[0];
+                    SelectedStartupProfile.IsSelected = true;
+                    currentProfileName = SelectedStartupProfile.Name;
+                }
+
+                CurrentProfile = currentProfileName;
+            }
+            finally
             {
-                SelectedStartupProfile = AvailableProfiles[0];
-                SelectedStartupProfile.IsSelected = true;
-                currentProfileName = SelectedStartupProfile.Name;
+                _isPopulatingProfiles = false;
             }
-
-            CurrentProfile = currentProfileName;
         });
 
         if (SelectedStartupProfile != null)
@@ -719,24 +769,18 @@ public partial class DashboardViewModel : PageViewModelBase
     }
 
     [RelayCommand]
-    private async Task SelectStartupProfile(DashboardProfileItemViewModel? profile)
+    private Task SelectStartupProfile(DashboardProfileItemViewModel? profile)
     {
-        if (_profileManager == null ||
-            profile == null ||
-            _singBoxManager?.State.Status is not (ServiceStatus.Stopped or ServiceStatus.Error))
+        if (profile == null)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        foreach (var item in AvailableProfiles)
-        {
-            item.IsSelected = item.Id == profile.Id;
-        }
-
+        // Assigning is enough - OnSelectedStartupProfileChanged persists the choice and
+        // reloads runtime options. Callers (tray menu) pass the same instance held in
+        // AvailableProfiles, so the selection mirroring below stays in sync.
         SelectedStartupProfile = profile;
-        CurrentProfile = profile.Name;
-        await _profileManager.SetSelectedProfileIdAsync(profile.Id);
-        await LoadRuntimeOptionsAsync(profile.Id);
+        return Task.CompletedTask;
     }
 
     private DashboardProfileItemViewModel? GetFirstAvailableProfile()

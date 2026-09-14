@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -135,195 +135,217 @@
 
   <ScrollViewer>
     <StackPanel Margin="20" Spacing="16">
-      <Border Classes="card"
-              Padding="12"
-              IsEnabled="{Binding CanUseDashboardControls}">
+      <!-- 左右两张配置卡片，样式与上传/下载状态卡片一致；不再有内嵌的画线框。
+           列宽沿用原先的 *,180，右侧开关卡片不需要更多空间；
+           两张卡片 VerticalAlignment=Top，各撑各的高度，不被拉平成一样高。 -->
+      <Grid ColumnDefinitions="*,180" ColumnSpacing="16"
+            IsEnabled="{Binding CanUseDashboardControls}">
+        <Border Grid.Column="0"
+                Classes="card sfmCard"
+                Padding="10"
+                VerticalAlignment="Top">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+              <StackPanel Grid.Column="0"
+                          Orientation="Horizontal"
+                          Spacing="10"
+                          VerticalAlignment="Center">
+                <PathIcon Width="16"
+                          Height="16"
+                          Data="M6 2 H14 L19 8 V22 H6 Z"
+                          VerticalAlignment="Center"/>
+                <TextBlock Text="{DynamicResource Dashboard.Section.Configuration}"
+                           FontSize="16"
+                           FontWeight="Bold"
+                           VerticalAlignment="Center"/>
+              </StackPanel>
+              <Button Grid.Column="1"
+                      Classes="iconButton"
+                      Command="{Binding ResetRuntimeOptionsToConfigCommand}"
+                      IsEnabled="{Binding ShowStartupSelector}"
+                      ToolTip.Tip="{DynamicResource Dashboard.Button.ResetToConfig}">
+                <PathIcon Width="14"
+                          Height="14"
+                          Data="M12 5 V1 L7 6 L12 11 V7 C15.3 7 18 9.7 18 13 C18 16.3 15.3 19 12 19 C8.7 19 6 16.3 6 13 H4 C4 17.4 7.6 21 12 21 C16.4 21 20 17.4 20 13 C20 8.6 16.4 5 12 5 Z"/>
+              </Button>
+            </Grid>
+
+            <WrapPanel Orientation="Horizontal">
+              <StackPanel Orientation="Horizontal"
+                          Spacing="10"
+                          Margin="0,0,10,6">
+                <TextBlock Text="{DynamicResource Dashboard.Field.Port}"
+                           Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"
+                           VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding InboundPortText}"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
+                <Button Classes="iconButton"
+                        Command="{Binding EditInboundPortCommand}"
+                        IsEnabled="{Binding ShowStartupSelector}"
+                        ToolTip.Tip="{DynamicResource Dashboard.Port.Edit}">
+                  <PathIcon Width="14"
+                            Height="14"
+                            Data="M4 16.5 V20 H7.5 L17.8 9.7 L14.3 6.2 Z M19 8.5 L20.5 7 C21.1 6.4 21.1 5.4 20.5 4.8 L19.2 3.5 C18.6 2.9 17.6 2.9 17 3.5 L15.5 5 Z"/>
+                </Button>
+              </StackPanel>
+
+              <Border Classes="portScopeTrack"
+                      Margin="0,0,10,6">
+                <Grid ColumnDefinitions="Auto,Auto"
+                      ColumnSpacing="3">
+                  <RadioButton Grid.Column="0"
+                               Classes="portScopeSegment"
+                               Content="{DynamicResource Dashboard.Port.Scope.LocalOnly}"
+                               GroupName="port-scope"
+                               IsChecked="{Binding IsLocalOnlySelected, Mode=OneWay}"
+                               Command="{Binding SelectLocalOnlyCommand}"
+                               IsEnabled="{Binding ShowStartupSelector}"
+                               ToolTip.Tip="{Binding LocalOnlyAccessToolTip}"/>
+                  <RadioButton Grid.Column="1"
+                               Classes="portScopeSegment"
+                               Content="{DynamicResource Dashboard.Port.Scope.Lan}"
+                               GroupName="port-scope"
+                               IsChecked="{Binding IsLanAccessSelected, Mode=OneWay}"
+                               Command="{Binding SelectLanAccessCommand}"
+                               IsEnabled="{Binding ShowStartupSelector}"
+                               ToolTip.Tip="{Binding LanAccessToolTip}"/>
+                </Grid>
+              </Border>
+
+              <StackPanel Orientation="Horizontal"
+                          Spacing="10"
+                          Margin="0,0,0,6">
+                <Button Classes="iconButton"
+                        IsEnabled="{Binding ShowDashboardMetrics}"
+                        ToolTip.Tip="{DynamicResource Dashboard.Menu.OpenTool}">
+                  <Button.Flyout>
+                    <MenuFlyout Placement="Bottom">
+                      <MenuItem Header="{DynamicResource Dashboard.Menu.OpenCmd}"
+                                Command="{Binding OpenCmdTerminalProxyCommand}"
+                                IsVisible="{Binding IsWindows}"/>
+                      <MenuItem Header="{DynamicResource Dashboard.Menu.OpenPs}"
+                                Command="{Binding OpenPsTerminalProxyCommand}"
+                                IsVisible="{Binding IsWindows}"/>
+                      <MenuItem Header="{DynamicResource Dashboard.Button.CopyCmdProxy}"
+                                Command="{Binding CopyCmdTerminalProxyCommand}"
+                                IsVisible="{Binding IsWindows}"/>
+                      <MenuItem Header="{DynamicResource Dashboard.Button.CopyPsProxy}"
+                                Command="{Binding CopyPsTerminalProxyCommand}"
+                                IsVisible="{Binding IsWindows}"/>
+                      <MenuItem Header="{DynamicResource Dashboard.Button.CopyLinuxProxy}"
+                                Command="{Binding CopyLinuxTerminalProxyCommand}"
+                                IsVisible="{Binding IsLinux}"/>
+                    </MenuFlyout>
+                  </Button.Flyout>
+                  <PathIcon Width="14"
+                            Height="14"
+                            Data="M3 6 H21 V18 H3 Z M6.5 10 L9.5 12 L6.5 14 M11.5 14 H16.5"/>
+                </Button>
+                <Button Classes="iconButton"
+                        Command="{Binding OpenSingBoxWebUiCommand}"
+                        IsEnabled="{Binding CanOpenSingBoxWebUi}"
+                        ToolTip.Tip="{DynamicResource Dashboard.Button.OpenWebUi}">
+                  <PathIcon Width="14"
+                            Height="14"
+                            Data="{StaticResource DashboardWebUiIconData}"/>
+                </Button>
+              </StackPanel>
+            </WrapPanel>
+
+            <Grid ColumnDefinitions="Auto,120,*" ColumnSpacing="10">
+              <TextBlock Grid.Column="0"
+                         Text="{DynamicResource Dashboard.Field.LogLevel}"
+                         Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"
+                         VerticalAlignment="Center"/>
+              <ComboBox Grid.Column="1"
+                        ItemsSource="{Binding LogLevelOptions}"
+                        SelectedItem="{Binding SelectedLogLevel}"
+                        Width="120"
+                        IsEnabled="{Binding ShowStartupSelector}"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"/>
+              <TextBlock Grid.Column="2"
+                         Text="{DynamicResource Dashboard.LogLevel.HighVolumeHint}"
+                         IsVisible="{Binding ShowVerboseLogLevelHint}"
+                         VerticalAlignment="Center"
+                         TextWrapping="NoWrap"
+                         TextTrimming="CharacterEllipsis"
+                         Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
+            </Grid>
+          </StackPanel>
+        </Border>
+
+        <Border Grid.Column="1"
+                Classes="card sfmCard"
+                Padding="10"
+                VerticalAlignment="Top">
+          <StackPanel Spacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <PathIcon Width="16"
+                        Height="16"
+                        Data="M5 9 H19 V15 H5 Z M14 10.5 H17.5 V13.5 H14 Z"
+                        VerticalAlignment="Center"/>
+              <TextBlock Text="{DynamicResource Dashboard.Section.Switches}"
+                         FontSize="16"
+                         FontWeight="Bold"
+                         VerticalAlignment="Center"/>
+            </StackPanel>
+
+            <Grid MinHeight="32" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBlock Text="{DynamicResource Dashboard.Option.SystemProxy}"
+                         VerticalAlignment="Center"/>
+              <ToggleSwitch Grid.Column="1"
+                            IsChecked="{Binding EnableSystemProxy}"/>
+            </Grid>
+
+            <Grid MinHeight="32" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBlock Text="{DynamicResource Dashboard.Option.Tun}"
+                         VerticalAlignment="Center"/>
+              <ToggleSwitch Grid.Column="1"
+                            IsChecked="{Binding EnableTunInbound}"
+                            IsEnabled="{Binding CanToggleTunInbound}"/>
+            </Grid>
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <!-- 配置列表独立成卡片。ListBox 自带虚拟化，且不再每行一个 RadioButton（Fluent 模板很重）。 -->
+      <Border Classes="card sfmCard" Padding="12"
+              IsVisible="{Binding ShowStartupSelector}">
         <StackPanel Spacing="10">
-          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-            <TextBlock Grid.Column="0"
-                       Text="{DynamicResource Dashboard.Section.Configuration}"
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <PathIcon Width="16"
+                      Height="16"
+                      Data="M4 6 H20 V8 H4 Z M4 11 H20 V13 H4 Z M4 16 H20 V18 H4 Z"
+                      VerticalAlignment="Center"/>
+            <TextBlock Text="{DynamicResource Dashboard.Section.StartupProfile}"
                        FontSize="16"
                        FontWeight="Bold"
                        VerticalAlignment="Center"/>
-            <Button Grid.Column="1"
-                    Classes="iconButton"
-                    Command="{Binding ResetRuntimeOptionsToConfigCommand}"
-                    IsEnabled="{Binding ShowStartupSelector}"
-                    ToolTip.Tip="{DynamicResource Dashboard.Button.ResetToConfig}">
-              <PathIcon Width="14"
-                        Height="14"
-                        Data="M12 5 V1 L7 6 L12 11 V7 C15.3 7 18 9.7 18 13 C18 16.3 15.3 19 12 19 C8.7 19 6 16.3 6 13 H4 C4 17.4 7.6 21 12 21 C16.4 21 20 17.4 20 13 C20 8.6 16.4 5 12 5 Z"/>
-            </Button>
-          </Grid>
-
-          <Grid ColumnDefinitions="*,180" ColumnSpacing="14">
-            <Border Grid.Column="0"
-                    BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
-                    BorderThickness="1"
-                    CornerRadius="12"
-                    Padding="8">
-              <Grid RowDefinitions="Auto,8,Auto">
-                <WrapPanel Grid.Row="0" Orientation="Horizontal">
-                  <StackPanel Orientation="Horizontal"
-                              Spacing="10"
-                              Margin="0,0,10,6">
-                    <TextBlock Text="{DynamicResource Dashboard.Field.Port}"
-                               Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"
-                               VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding InboundPortText}"
-                               FontSize="16"
-                               FontWeight="SemiBold"
-                               VerticalAlignment="Center"/>
-                    <Button Classes="iconButton"
-                            Command="{Binding EditInboundPortCommand}"
-                            IsEnabled="{Binding ShowStartupSelector}"
-                            ToolTip.Tip="{DynamicResource Dashboard.Port.Edit}">
-                      <PathIcon Width="14"
-                                Height="14"
-                                Data="M4 16.5 V20 H7.5 L17.8 9.7 L14.3 6.2 Z M19 8.5 L20.5 7 C21.1 6.4 21.1 5.4 20.5 4.8 L19.2 3.5 C18.6 2.9 17.6 2.9 17 3.5 L15.5 5 Z"/>
-                    </Button>
-                  </StackPanel>
-
-                  <Border Classes="portScopeTrack"
-                          Margin="0,0,10,6">
-                    <Grid ColumnDefinitions="Auto,Auto"
-                          ColumnSpacing="3">
-                      <RadioButton Grid.Column="0"
-                                   Classes="portScopeSegment"
-                                   Content="{DynamicResource Dashboard.Port.Scope.LocalOnly}"
-                                   GroupName="port-scope"
-                                   IsChecked="{Binding IsLocalOnlySelected, Mode=OneWay}"
-                                   Command="{Binding SelectLocalOnlyCommand}"
-                                   IsEnabled="{Binding ShowStartupSelector}"
-                                   ToolTip.Tip="{Binding LocalOnlyAccessToolTip}"/>
-                      <RadioButton Grid.Column="1"
-                                   Classes="portScopeSegment"
-                                   Content="{DynamicResource Dashboard.Port.Scope.Lan}"
-                                   GroupName="port-scope"
-                                   IsChecked="{Binding IsLanAccessSelected, Mode=OneWay}"
-                                   Command="{Binding SelectLanAccessCommand}"
-                                   IsEnabled="{Binding ShowStartupSelector}"
-                                   ToolTip.Tip="{Binding LanAccessToolTip}"/>
-                    </Grid>
-                  </Border>
-
-                  <StackPanel Orientation="Horizontal"
-                              Spacing="10"
-                              Margin="0,0,0,6">
-                    <Button Classes="iconButton"
-                            IsEnabled="{Binding ShowDashboardMetrics}"
-                            ToolTip.Tip="{DynamicResource Dashboard.Menu.OpenTool}">
-                      <Button.Flyout>
-                        <MenuFlyout Placement="Bottom">
-                          <MenuItem Header="{DynamicResource Dashboard.Menu.OpenCmd}"
-                                    Command="{Binding OpenCmdTerminalProxyCommand}"
-                                    IsVisible="{Binding IsWindows}"/>
-                          <MenuItem Header="{DynamicResource Dashboard.Menu.OpenPs}"
-                                    Command="{Binding OpenPsTerminalProxyCommand}"
-                                    IsVisible="{Binding IsWindows}"/>
-                          <MenuItem Header="{DynamicResource Dashboard.Button.CopyCmdProxy}"
-                                    Command="{Binding CopyCmdTerminalProxyCommand}"
-                                    IsVisible="{Binding IsWindows}"/>
-                          <MenuItem Header="{DynamicResource Dashboard.Button.CopyPsProxy}"
-                                    Command="{Binding CopyPsTerminalProxyCommand}"
-                                    IsVisible="{Binding IsWindows}"/>
-                          <MenuItem Header="{DynamicResource Dashboard.Button.CopyLinuxProxy}"
-                                    Command="{Binding CopyLinuxTerminalProxyCommand}"
-                                    IsVisible="{Binding IsLinux}"/>
-                        </MenuFlyout>
-                      </Button.Flyout>
-                      <PathIcon Width="14"
-                                Height="14"
-                                Data="M3 6 H21 V18 H3 Z M6.5 10 L9.5 12 L6.5 14 M11.5 14 H16.5"/>
-                    </Button>
-                    <Button Classes="iconButton"
-                            Command="{Binding OpenSingBoxWebUiCommand}"
-                            IsEnabled="{Binding CanOpenSingBoxWebUi}"
-                            ToolTip.Tip="{DynamicResource Dashboard.Button.OpenWebUi}">
-                      <PathIcon Width="14"
-                                Height="14"
-                                Data="{StaticResource DashboardWebUiIconData}"/>
-                    </Button>
-                  </StackPanel>
-                </WrapPanel>
-
-                <Grid Grid.Row="2" ColumnDefinitions="Auto,120,*" ColumnSpacing="10">
-                  <TextBlock Grid.Column="0"
-                             Text="{DynamicResource Dashboard.Field.LogLevel}"
-                             VerticalAlignment="Center"/>
-                  <ComboBox Grid.Column="1"
-                            ItemsSource="{Binding LogLevelOptions}"
-                            SelectedItem="{Binding SelectedLogLevel}"
-                            Width="120"
-                            IsEnabled="{Binding ShowStartupSelector}"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Center"/>
-                  <TextBlock Grid.Column="2"
-                             Text="{DynamicResource Dashboard.LogLevel.HighVolumeHint}"
-                             IsVisible="{Binding ShowVerboseLogLevelHint}"
-                             VerticalAlignment="Center"
-                             TextWrapping="NoWrap"
-                             TextTrimming="CharacterEllipsis"
-                             Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
-                </Grid>
-              </Grid>
-            </Border>
-
-            <Border Grid.Column="1"
-                    BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
-                    BorderThickness="1"
-                    CornerRadius="12"
-                    Padding="8">
-              <Grid RowDefinitions="Auto,8,Auto">
-                <Grid Grid.Row="0" MinHeight="32" ColumnDefinitions="*,Auto" ColumnSpacing="8" VerticalAlignment="Center">
-                  <TextBlock Grid.Column="0"
-                             Text="{DynamicResource Dashboard.Option.SystemProxy}"
-                             VerticalAlignment="Center"/>
-                  <ToggleSwitch Grid.Column="1"
-                                IsChecked="{Binding EnableSystemProxy}"/>
-                </Grid>
-
-                <Grid Grid.Row="2" MinHeight="32" ColumnDefinitions="*,Auto" ColumnSpacing="8" VerticalAlignment="Center">
-                  <TextBlock Grid.Column="0"
-                             Text="{DynamicResource Dashboard.Option.Tun}"
-                             VerticalAlignment="Center"/>
-                  <ToggleSwitch Grid.Column="1"
-                                IsChecked="{Binding EnableTunInbound}"
-                                IsEnabled="{Binding CanToggleTunInbound}"/>
-                </Grid>
-              </Grid>
-            </Border>
-          </Grid>
-
-          <StackPanel Spacing="12" IsVisible="{Binding ShowStartupSelector}">
-            <ItemsControl ItemsSource="{Binding AvailableProfiles}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="vm:DashboardProfileItemViewModel">
-                  <Border BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
-                          BorderThickness="0,0,0,1"
-                          Padding="6,10">
-                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-                      <RadioButton Grid.Column="0"
-                                   GroupName="startup-profile"
-                                   IsChecked="{Binding IsSelected}"
-                                   Command="{Binding $parent[ItemsControl].((vm:DashboardViewModel)DataContext).SelectStartupProfileCommand}"
-                                   CommandParameter="{Binding}"
-                                   VerticalAlignment="Center"/>
-                      <TextBlock Grid.Column="1"
-                                 Text="{Binding Name}"
-                                 FontSize="16"
-                                 VerticalAlignment="Center"/>
-                    </Grid>
-                  </Border>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-
-            <TextBlock Text="{Binding StartupStatus}"
-                       IsVisible="{Binding StartupStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                       TextWrapping="Wrap"
-                       Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
           </StackPanel>
+
+          <ListBox ItemsSource="{Binding AvailableProfiles}"
+                   SelectedItem="{Binding SelectedStartupProfile, Mode=TwoWay}"
+                   Background="Transparent"
+                   BorderThickness="0"
+                   Padding="0"
+                   MaxHeight="240"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <ListBox.ItemTemplate>
+              <DataTemplate DataType="vm:DashboardProfileItemViewModel">
+                <TextBlock Text="{Binding Name}"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center"/>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+          <TextBlock Text="{Binding StartupStatus}"
+                     IsVisible="{Binding StartupStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
         </StackPanel>
       </Border>
 
@@ -338,7 +360,7 @@
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                           <PathIcon Width="16"
                                     Height="16"
-                                    Data="M12 5 V19 M7 10 L12 5 L17 10"
+                                    Data="M12 3 L17 10 H14 V21 H10 V10 H7 Z"
                                     VerticalAlignment="Center"/>
                           <TextBlock Text="{DynamicResource Dashboard.Label.UploadSpeed}"
                                      FontSize="16"
@@ -370,7 +392,7 @@
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                           <PathIcon Width="16"
                                     Height="16"
-                                    Data="M12 19 V5 M7 14 L12 19 L17 14"
+                                    Data="M12 21 L7 14 H10 V3 H14 V14 H17 Z"
                                     VerticalAlignment="Center"/>
                           <TextBlock Text="{DynamicResource Dashboard.Label.DownloadSpeed}"
                                      FontSize="16"

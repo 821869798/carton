@@ -260,6 +260,14 @@ public class ProfileManager : IProfileManager
             resolved.LogLevel = NormalizeLogLevel(resolved.LogLevel);
             resolved.LogLevelInitialized = true;
 
+            // The two switches are user intent, not facts derived from the config file, so a
+            // reset must not flip them. Only the values that the config file genuinely owns
+            // (port, LAN scope, log level) are restored; system proxy and TUN keep whatever
+            // the user currently has.
+            var current = profile.RuntimeOptions ?? new ProfileRuntimeOptions();
+            resolved.EnableSystemProxy = current.EnableSystemProxy;
+            resolved.EnableTunInbound = current.EnableTunInbound;
+
             profile.RuntimeOptions = CloneRuntimeOptions(resolved);
             await SaveDataUnlockedAsync(data);
             return CloneRuntimeOptions(profile.RuntimeOptions);

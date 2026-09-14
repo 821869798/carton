@@ -139,7 +139,9 @@
   <x:String x:Key="Profiles.Status.ProfileNotFound">profile not found</x:String>
 
 
-  <x:String x:Key="Dashboard.Section.Configuration">Configuration</x:String>
+  <x:String x:Key="Dashboard.Section.Configuration">Overwrite Config</x:String>
+  <x:String x:Key="Dashboard.Section.Switches">Switches</x:String>
+  <x:String x:Key="Dashboard.Section.StartupProfile">Startup Profile</x:String>
   <x:String x:Key="Dashboard.Field.Port">Mixed Port</x:String>
   <x:String x:Key="Dashboard.Field.LogLevel">Log Level</x:String>
   <x:String x:Key="Dashboard.Option.AllowLan">Allow LAN Connections</x:String>
