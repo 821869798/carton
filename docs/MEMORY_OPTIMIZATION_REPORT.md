@@ -220,6 +220,10 @@ gRPC / proto 的体积后来又裁过一刀（见第三节），但 0.6 相对 0
 - `fixed` 指针交给 DPAPI，`LocalFree` 清 native 缓冲。
 - 与原先 `dpapi:` 密文兼容。
 - **后续修正**：DPAPI 失败时不能 `return secret` 把明文写入偏好；改为 `TryProtect`，失败保留旧密文。
+- **已回退（后续修正）**：换回 `ProtectedData` 包引用。收益与代价不成比例——省下的只是几十 KB 程序集
+  元数据，却要引入 `AllowUnsafeBlocks`、手动 `LocalFree` 和手写缓冲清理；两轮 code review 都指出这个替换
+  的「内存收益很可疑」。两侧都是 `CryptProtectData`（同 flag、无 optional entropy、CurrentUser），
+  `dpapi:` 密文互相兼容，**已有密文无需迁移**。
 
 ### 5. 内嵌 Downloader 5.9.5 并裁面
 
@@ -307,8 +311,8 @@ gRPC / proto 的体积后来又裁过一刀（见第三节），但 0.6 相对 0
 
 | 文件 | 改动 |
 |---|---|
-| `src/carton.Core/carton.Core.csproj` | 去掉 `Downloader`、`ProtectedData` 包引用 |
-| `src/carton.Core/Services/SecretProtector.cs` | 原生 DPAPI；`TryProtect` |
+| `src/carton.Core/carton.Core.csproj` | 去掉 `Downloader` 包引用（`ProtectedData` 先去掉、后已回退为 10.0.5 包引用） |
+| `src/carton.Core/Services/SecretProtector.cs` | 原生 DPAPI（**后已回退**为 `ProtectedData`）；`TryProtect` |
 | `src/carton.Core/Downloader/` | 内嵌 5.9.5，裁无用 API，保留 MIT `LICENSE` |
 | `src/carton.Core/Protos/started_service.proto` | 裁到 carton 实际调用的 RPC |
 | `src/carton.Core/Services/ProfileManager.cs` | 列表只读元数据 |

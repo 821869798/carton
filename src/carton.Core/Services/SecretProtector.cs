@@ -1,5 +1,4 @@
-using System.ComponentModel;
-using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace carton.Core.Services;
@@ -12,6 +11,14 @@ namespace carton.Core.Services;
 /// behaviour (the API is loopback-bound and the file inherits OS user isolation - see
 /// docs/SINGBOX_API_MIGRATION.md threat model note).
 /// </summary>
+/// <remarks>
+/// DPAPI goes through the <c>System.Security.Cryptography.ProtectedData</c> package on
+/// purpose. A hand-written <c>crypt32</c> P/Invoke briefly replaced it, which bought no
+/// measurable memory (the assembly is tens of KB of metadata) while adding
+/// <c>AllowUnsafeBlocks</c>, a manual <c>LocalFree</c> and hand-rolled buffer hygiene.
+/// Both call <c>CryptProtectData</c> with the same flags and no optional entropy, so
+/// <c>dpapi:</c> blobs written by either version stay readable - no migration needed.
+/// </remarks>
 public static class SecretProtector
 {
     private const string Prefix = "dpapi:";
@@ -34,7 +41,10 @@ public static class SecretProtector
             var plainBytes = Encoding.UTF8.GetBytes(secret);
             try
             {
-                var cipherBytes = DpapiProtect(plainBytes);
+                var cipherBytes = ProtectedData.Protect(
+                    plainBytes,
+                    optionalEntropy: null,
+                    scope: DataProtectionScope.CurrentUser);
                 return Prefix + Convert.ToBase64String(cipherBytes);
             }
             finally
@@ -108,8 +118,20 @@ public static class SecretProtector
             try
             {
                 var cipherBytes = Convert.FromBase64String(stored[Prefix.Length..]);
-                var plainBytes = DpapiUnprotect(cipherBytes);
-                return plainBytes != null ? Encoding.UTF8.GetString(plainBytes) : null;
+                var plainBytes = ProtectedData.Unprotect(
+                    cipherBytes,
+                    optionalEntropy: null,
+                    scope: DataProtectionScope.CurrentUser);
+                try
+                {
+                    return Encoding.UTF8.GetString(plainBytes);
+                }
+                finally
+                {
+                    // Same discipline as Protect: the decrypted bytes must not linger in the
+                    // heap waiting for a collection.
+                    Array.Clear(plainBytes);
+                }
             }
             catch
             {
@@ -122,107 +144,5 @@ public static class SecretProtector
 
         // No prefix: legacy plain value (pre-DPAPI or non-Windows writer) - use as-is.
         return stored;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct DATA_BLOB
-    {
-        public int cbData;
-        public IntPtr pbData;
-    }
-
-    private const int CRYPTPROTECT_UI_FORBIDDEN = 0x1;
-
-    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CryptProtectData(
-        ref DATA_BLOB pDataIn,
-        string? szDataDescr,
-        IntPtr pOptionalEntropy,
-        IntPtr pvReserved,
-        IntPtr pPromptStruct,
-        int dwFlags,
-        ref DATA_BLOB pDataOut);
-
-    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CryptUnprotectData(
-        ref DATA_BLOB pDataIn,
-        IntPtr ppszDataDescr,
-        IntPtr pOptionalEntropy,
-        IntPtr pvReserved,
-        IntPtr pPromptStruct,
-        int dwFlags,
-        ref DATA_BLOB pDataOut);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr LocalFree(IntPtr hMem);
-
-    private static byte[] DpapiProtect(byte[] data)
-    {
-        unsafe
-        {
-            fixed (byte* pData = data)
-            {
-                var inBlob = new DATA_BLOB
-                {
-                    cbData = data.Length,
-                    pbData = (IntPtr)pData
-                };
-                var outBlob = default(DATA_BLOB);
-                try
-                {
-                    if (!CryptProtectData(ref inBlob, null, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, CRYPTPROTECT_UI_FORBIDDEN, ref outBlob))
-                    {
-                        throw new Win32Exception(Marshal.GetLastWin32Error());
-                    }
-
-                    var result = new byte[outBlob.cbData];
-                    Marshal.Copy(outBlob.pbData, result, 0, outBlob.cbData);
-                    return result;
-                }
-                finally
-                {
-                    if (outBlob.pbData != IntPtr.Zero)
-                    {
-                        LocalFree(outBlob.pbData);
-                    }
-                }
-            }
-        }
-    }
-
-    private static byte[]? DpapiUnprotect(byte[] data)
-    {
-        unsafe
-        {
-            fixed (byte* pData = data)
-            {
-                var inBlob = new DATA_BLOB
-                {
-                    cbData = data.Length,
-                    pbData = (IntPtr)pData
-                };
-                var outBlob = default(DATA_BLOB);
-                try
-                {
-                    if (!CryptUnprotectData(ref inBlob, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, CRYPTPROTECT_UI_FORBIDDEN, ref outBlob))
-                    {
-                        return null;
-                    }
-
-                    var result = new byte[outBlob.cbData];
-                    Marshal.Copy(outBlob.pbData, result, 0, outBlob.cbData);
-                    return result;
-                }
-                finally
-                {
-                    if (outBlob.pbData != IntPtr.Zero)
-                    {
-                        LocalFree(outBlob.pbData);
-                    }
-                }
-            }
-        }
     }
 }

@@ -108,7 +108,22 @@ public class PreferencesService : IPreferencesService
         // (FileMode.Create) leaves a truncated preferences.json behind when the process
         // dies mid-write (power loss / kill), silently wiping every user setting.
         var tempPath = _preferencesPath + ".tmp";
-        using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+        var tempOptions = new FileStreamOptions
+        {
+            Mode = FileMode.Create,
+            Access = FileAccess.Write,
+            Share = FileShare.None
+        };
+
+        // This file is about to receive the native API secret. Create it owner-only so the
+        // secret never sits in a world-readable file even for an instant - the default umask
+        // (usually 022) would otherwise leave it at 0644 for the whole duration of the write.
+        if (!OperatingSystem.IsWindows())
+        {
+            tempOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        }
+
+        using (var stream = new FileStream(tempPath, tempOptions))
         using (var writer = new Utf8JsonWriter(
             stream,
             new JsonWriterOptions
@@ -124,6 +139,18 @@ public class PreferencesService : IPreferencesService
             // last "renamed onto an incomplete file" window (milliseconds, settings
             // file - cheap enough to not leave the edge open).
             stream.Flush(flushToDisk: true);
+        }
+
+        // UnixCreateMode above only applies when the file is CREATED, so a .tmp left behind
+        // by a crashed run keeps its old mode while FileMode.Create truncates and reuses it.
+        // Re-assert owner-only before publishing, since the rename below carries the temp
+        // file's mode onto preferences.json.
+        //
+        // Deliberately a mode bit and NOT an ACL: portable installs get moved to other
+        // machines and accounts, and mode bits travel without locking the new user out.
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(tempPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
         }
 
         File.Move(tempPath, _preferencesPath, overwrite: true);
