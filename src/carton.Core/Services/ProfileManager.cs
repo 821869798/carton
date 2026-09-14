@@ -260,13 +260,9 @@ public class ProfileManager : IProfileManager
             resolved.LogLevel = NormalizeLogLevel(resolved.LogLevel);
             resolved.LogLevelInitialized = true;
 
-            // The two switches are user intent, not facts derived from the config file, so a
-            // reset must not flip them. Only the values that the config file genuinely owns
-            // (port, LAN scope, log level) are restored; system proxy and TUN keep whatever
-            // the user currently has.
-            var current = profile.RuntimeOptions ?? new ProfileRuntimeOptions();
-            resolved.EnableSystemProxy = current.EnableSystemProxy;
-            resolved.EnableTunInbound = current.EnableTunInbound;
+            // Only config-owned values are restored here: port, LAN scope, log level. The system
+            // proxy / TUN switches are app-level preferences now (see
+            // AppPreferences.SystemProxyEnabled), so a reset cannot reach them at all.
 
             profile.RuntimeOptions = CloneRuntimeOptions(resolved);
             await SaveDataUnlockedAsync(data);
@@ -406,7 +402,6 @@ public class ProfileManager : IProfileManager
                 return null;
             }
 
-            var hasTun = false;
             JsonElement? firstInbound = null;
             JsonElement? mixedInbound = null;
             JsonElement? primaryInbound = null;
@@ -423,7 +418,8 @@ public class ProfileManager : IProfileManager
                 var type = TryReadString(inbound, "type");
                 if (string.Equals(type, "tun", StringComparison.OrdinalIgnoreCase))
                 {
-                    hasTun = true;
+                    // A tun inbound exposes no listen port for carton to mirror, so it is
+                    // skipped when deriving the inbound settings below.
                     continue;
                 }
 
@@ -443,15 +439,12 @@ public class ProfileManager : IProfileManager
 
             var port = TryReadInt(inboundElement.Value, "listen_port") ?? 2028;
             var listen = TryReadString(inboundElement.Value, "listen");
-            var setSystemProxy = TryReadBool(inboundElement.Value, "set_system_proxy") ?? false;
             var logLevel = NormalizeLogLevel(ReadLogLevel(document.RootElement));
 
             return new ProfileRuntimeOptions
             {
                 InboundPort = NormalizePort(port),
                 AllowLanConnections = IsLanListenAddress(listen),
-                EnableSystemProxy = setSystemProxy,
-                EnableTunInbound = hasTun,
                 LogLevel = logLevel,
                 LogLevelInitialized = true,
                 Initialized = true
@@ -546,8 +539,6 @@ public class ProfileManager : IProfileManager
         {
             InboundPort = NormalizePort(options.InboundPort),
             AllowLanConnections = options.AllowLanConnections,
-            EnableSystemProxy = options.EnableSystemProxy,
-            EnableTunInbound = options.EnableTunInbound,
             LogLevel = NormalizeLogLevel(options.LogLevel),
             LogLevelInitialized = options.LogLevelInitialized,
             Initialized = options.Initialized

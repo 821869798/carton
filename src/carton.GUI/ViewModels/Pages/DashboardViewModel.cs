@@ -381,7 +381,9 @@ public partial class DashboardViewModel : PageViewModelBase
     }
     partial void OnEnableSystemProxyChanged(bool value)
     {
-        UpdateRuntimeOptions(options => options.EnableSystemProxy = value);
+        // App-level switch: stored in the app preferences, never in the profile's runtime
+        // options (see AppPreferences.SystemProxyEnabled).
+        UpdateAppPreferences(preferences => preferences.SystemProxyEnabled = value);
 
         if (_suppressSystemProxyApply || !IsConnected)
         {
@@ -392,7 +394,8 @@ public partial class DashboardViewModel : PageViewModelBase
     }
     partial void OnEnableTunInboundChanged(bool oldValue, bool newValue)
     {
-        UpdateRuntimeOptions(options => options.EnableTunInbound = newValue);
+        // App-level switch, same as the system proxy one above.
+        UpdateAppPreferences(preferences => preferences.TunInboundEnabled = newValue);
 
         if (_suppressRuntimeOptionUpdates || !IsConnected)
         {
@@ -525,6 +528,16 @@ public partial class DashboardViewModel : PageViewModelBase
         _configManager = configManager;
         _remoteConfigUpdateService = new RemoteConfigUpdateService(configManager, profileManager, preferencesService);
         _preferencesService = preferencesService;
+
+        // The two dashboard switches are app-level, not per profile: read them once here,
+        // writing the backing fields directly so no change handler fires a redundant save
+        // during construction (see AppPreferences.SystemProxyEnabled).
+        if (preferencesService != null)
+        {
+            var storedPreferences = preferencesService.Load();
+            _enableSystemProxy = storedPreferences.SystemProxyEnabled;
+            _enableTunInbound = storedPreferences.TunInboundEnabled;
+        }
         _toastWriter = toastWriter;
         _logWriter = logWriter;
         _profilesChangedCallback = profilesChangedCallback;
@@ -539,9 +552,6 @@ public partial class DashboardViewModel : PageViewModelBase
         if (_singBoxManager.IsRunning)
         {
             UpdateLiveRefreshState();
-            _suppressSystemProxyApply = true;
-            EnableSystemProxy = _runtimeOptions.EnableSystemProxy;
-            _suppressSystemProxyApply = false;
         }
     }
 
@@ -581,13 +591,6 @@ public partial class DashboardViewModel : PageViewModelBase
             {
                 StartupStatus = BuildStartFailureStatus();
             }
-
-            _suppressSystemProxyApply = true;
-            if (status == ServiceStatus.Running)
-            {
-                EnableSystemProxy = _runtimeOptions.EnableSystemProxy;
-            }
-            _suppressSystemProxyApply = false;
         });
 
         if (status == ServiceStatus.Running)
@@ -944,7 +947,7 @@ public partial class DashboardViewModel : PageViewModelBase
             var profileId = _runningProfileId ?? SelectedStartupProfile?.Id;
             if (profileId == null)
             {
-                await RevertTunToggleAsync(previousValue);
+                RevertTunToggle(previousValue);
                 StartupStatus = GetString("Dashboard.Startup.NoProfileAvailable", "No profile available");
                 LogError("Failed to restart for TUN toggle: no running profile");
                 LogTiming($"tun_restart.failed_no_profile {timing.Elapsed.TotalMilliseconds:F0}ms");
@@ -955,7 +958,7 @@ public partial class DashboardViewModel : PageViewModelBase
             CommitInboundPortEdit();
             if (!TryGetValidatedPort(out var port, out var validationError))
             {
-                await RevertTunToggleAsync(previousValue);
+                RevertTunToggle(previousValue);
                 StartupStatus = validationError;
                 LogError(validationError);
                 LogTiming($"tun_restart.failed_invalid_port {timing.Elapsed.TotalMilliseconds:F0}ms");
@@ -967,7 +970,7 @@ public partial class DashboardViewModel : PageViewModelBase
             var profile = await _profileManager.GetAsync(profileId.Value);
             if (profile == null)
             {
-                await RevertTunToggleAsync(previousValue);
+                RevertTunToggle(previousValue);
                 StartupStatus = GetString("Dashboard.Startup.ProfileNotFound", "Profile not found");
                 LogError($"Failed to restart for TUN toggle: profile not found: {profileId.Value}");
                 LogTiming($"tun_restart.failed_profile_not_found {timing.Elapsed.TotalMilliseconds:F0}ms");
@@ -982,7 +985,7 @@ public partial class DashboardViewModel : PageViewModelBase
 
             if (string.IsNullOrWhiteSpace(sourceConfigPath) || !File.Exists(sourceConfigPath))
             {
-                await RevertTunToggleAsync(previousValue);
+                RevertTunToggle(previousValue);
                 StartupStatus = _localizationService["Status.ConfigMissing"];
                 LogError($"Failed to restart for TUN toggle: config not found for profile {profile.Id}");
                 LogTiming($"tun_restart.failed_config_missing {timing.Elapsed.TotalMilliseconds:F0}ms");
@@ -996,7 +999,7 @@ public partial class DashboardViewModel : PageViewModelBase
                 // before setuid can be applied; portable installs are authorized in place.
                 if (IsLinuxAppImageRuntime() && !await PrepareLinuxKernelForTunAsync())
                 {
-                    await RevertTunToggleAsync(previousValue);
+                    RevertTunToggle(previousValue);
                     StartupStatus = GetString("Dashboard.Kernel.PrepareFailed", "Failed to prepare kernel for authorization");
                     LogError("Linux kernel authorization failed during TUN toggle: unable to copy the built-in kernel to the writable data directory");
                     LogTiming($"tun_restart.failed_kernel_prepare {timing.Elapsed.TotalMilliseconds:F0}ms");
@@ -1008,7 +1011,7 @@ public partial class DashboardViewModel : PageViewModelBase
                     var password = await ShowLinuxPasswordDialogAsync();
                     if (password == null)
                     {
-                        await RevertTunToggleAsync(previousValue);
+                        RevertTunToggle(previousValue);
                         StartupStatus = string.Empty;
                         return;
                     }
@@ -1016,7 +1019,7 @@ public partial class DashboardViewModel : PageViewModelBase
                     var (authSuccess, authError) = await _singBoxManager.AuthorizeCoreOnLinuxAsync(password);
                     if (!authSuccess)
                     {
-                        await RevertTunToggleAsync(previousValue);
+                        RevertTunToggle(previousValue);
                         StartupStatus = BuildLinuxAuthFailureStatus(authError);
                         LogError($"Linux kernel authorization failed during TUN toggle: {authError}");
                         return;
@@ -1028,7 +1031,7 @@ public partial class DashboardViewModel : PageViewModelBase
             LogTiming($"tun_restart.build_runtime_config {timing.Elapsed.TotalMilliseconds:F0}ms");
             if (string.IsNullOrWhiteSpace(runtimeConfigPath))
             {
-                await RevertTunToggleAsync(previousValue);
+                RevertTunToggle(previousValue);
                 return;
             }
 
@@ -1063,7 +1066,7 @@ public partial class DashboardViewModel : PageViewModelBase
 
     private async Task RestoreTunToggleAfterRestartFailureAsync(bool previousValue, string sourceConfigPath, Profile profile, int port)
     {
-        await RevertTunToggleAsync(previousValue);
+        RevertTunToggle(previousValue);
         var failedStatus = BuildStartFailureStatus();
         LogWarning($"TUN toggle restart failed, attempting to restore previous state: {failedStatus}");
 
@@ -1090,18 +1093,15 @@ public partial class DashboardViewModel : PageViewModelBase
         StartupStatus = failedStatus;
     }
 
-    private async Task RevertTunToggleAsync(bool previousValue)
+    private void RevertTunToggle(bool previousValue)
     {
+        // Assigning the property reverts the stored app-level switch (the handler persists it
+        // before it checks the suppress flags) and keeps this revert from kicking off another
+        // kernel restart. No profile runtime options are written here: the switch is no longer
+        // part of them.
         _suppressRuntimeOptionUpdates = true;
-        _runtimeOptions.EnableTunInbound = previousValue;
         EnableTunInbound = previousValue;
         _suppressRuntimeOptionUpdates = false;
-
-        if (_profileManager != null && SelectedStartupProfile != null)
-        {
-            var snapshot = CopyRuntimeOptions(_runtimeOptions);
-            await _profileManager.SaveRuntimeOptionsAsync(SelectedStartupProfile.Id, snapshot);
-        }
     }
 
     private void SetRuntimeOperation(DashboardRuntimeOperation operation)
@@ -1609,10 +1609,31 @@ public partial class DashboardViewModel : PageViewModelBase
         _runtimeOptions = options ?? new ProfileRuntimeOptions();
         InboundPortText = _runtimeOptions.InboundPort.ToString();
         AllowLanConnections = _runtimeOptions.AllowLanConnections;
-        EnableSystemProxy = _runtimeOptions.EnableSystemProxy;
-        EnableTunInbound = _runtimeOptions.EnableTunInbound;
+        // System proxy and TUN are NOT applied from here: they are app-level switches, so the
+        // profile's options must not be able to move them.
         SelectedLogLevel = NormalizeLogLevel(_runtimeOptions.LogLevel);
         _suppressRuntimeOptionUpdates = false;
+    }
+
+    /// <summary>
+    /// Reads the app preferences, applies <paramref name="update" /> and writes them back - the
+    /// same read-modify-write the settings pages use.
+    /// </summary>
+    /// <remarks>
+    /// Note the switch handlers call this BEFORE their suppress checks, so a reverted toggle is
+    /// still persisted. See <see cref="AppPreferences.SystemProxyEnabled" /> for why the two
+    /// dashboard switches live here instead of in the profile's runtime options.
+    /// </remarks>
+    private void UpdateAppPreferences(Action<AppPreferences> update)
+    {
+        if (_preferencesService == null)
+        {
+            return;
+        }
+
+        var preferences = _preferencesService.Load();
+        update(preferences);
+        _preferencesService.Save(preferences);
     }
 
     private void UpdateRuntimeOptions(Action<ProfileRuntimeOptions> updater)
@@ -1673,8 +1694,6 @@ public partial class DashboardViewModel : PageViewModelBase
         {
             InboundPort = options.InboundPort,
             AllowLanConnections = options.AllowLanConnections,
-            EnableSystemProxy = options.EnableSystemProxy,
-            EnableTunInbound = options.EnableTunInbound,
             LogLevel = NormalizeLogLevel(options.LogLevel),
             LogLevelInitialized = true,
             Initialized = true

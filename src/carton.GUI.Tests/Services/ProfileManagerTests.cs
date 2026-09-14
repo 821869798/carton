@@ -1,5 +1,6 @@
 using carton.Core.Models;
 using carton.Core.Services;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace carton.GUI.Tests.Services;
@@ -14,6 +15,10 @@ public sealed class ProfileManagerTests
         {
             var configManager = new ConfigManager(baseDirectory);
             var profileManager = new ProfileManager(baseDirectory, configManager);
+            // The mixed inbound below still carries "set_system_proxy": true on purpose: it used to
+            // seed ProfileRuntimeOptions.EnableSystemProxy. The switch is an app-level preference
+            // now (see AppPreferences.SystemProxyEnabled), so it must influence nothing here -
+            // which is exactly what this test pins by checking only the config-owned values.
             var config = """
             {
               "log": {
@@ -45,7 +50,6 @@ public sealed class ProfileManagerTests
 
             Assert.Equal(7890, options.InboundPort);
             Assert.True(options.AllowLanConnections);
-            Assert.True(options.EnableSystemProxy);
             Assert.Equal("warn", options.LogLevel);
         }
         finally
@@ -186,6 +190,107 @@ public sealed class ProfileManagerTests
             var content = await configManager.LoadConfigAsync(firstId, ProfileType.Local);
             Assert.NotNull(content);
             Assert.Contains("listen_port", content);
+        }
+        finally
+        {
+            if (Directory.Exists(baseDirectory))
+            {
+                Directory.Delete(baseDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ResetRuntimeOptionsToConfig_RestoresOnlyConfigOwnedValues()
+    {
+        var baseDirectory = Path.Combine(Path.GetTempPath(), "carton-profile-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var configManager = new ConfigManager(baseDirectory);
+            var profileManager = new ProfileManager(baseDirectory, configManager);
+            var config = """
+            {
+              "log": { "level": "warn" },
+              "inbounds": [
+                { "type": "mixed", "listen": "0.0.0.0", "listen_port": 7890 }
+              ]
+            }
+            """;
+
+            var profile = await profileManager.CreateAsync(new Profile
+            {
+                Name = "resettable",
+                Type = ProfileType.Local
+            }, config);
+
+            // Drift every config-owned value away from the file, then reset.
+            await profileManager.SaveRuntimeOptionsAsync(profile.Id, new ProfileRuntimeOptions
+            {
+                InboundPort = 1111,
+                AllowLanConnections = false,
+                LogLevel = "error",
+                Initialized = true,
+                LogLevelInitialized = true
+            });
+
+            var reset = await profileManager.ResetRuntimeOptionsToConfigAsync(profile.Id);
+
+            Assert.NotNull(reset);
+            Assert.Equal(7890, reset!.InboundPort);
+            Assert.True(reset.AllowLanConnections);
+            Assert.Equal("warn", reset.LogLevel);
+        }
+        finally
+        {
+            if (Directory.Exists(baseDirectory))
+            {
+                Directory.Delete(baseDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task LegacyRuntimeOptionsSwitches_AreIgnoredAndDroppedOnNextSave()
+    {
+        var baseDirectory = Path.Combine(Path.GetTempPath(), "carton-profile-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var configManager = new ConfigManager(baseDirectory);
+            var profileManager = new ProfileManager(baseDirectory, configManager);
+            var config = """
+            {
+              "log": { "level": "info" },
+              "inbounds": [
+                { "type": "mixed", "listen": "127.0.0.1", "listen_port": 2080 }
+              ]
+            }
+            """;
+
+            var profile = await profileManager.CreateAsync(new Profile
+            {
+                Name = "legacy",
+                Type = ProfileType.Local
+            }, config);
+
+            // Simulate sing-box-data.json written by a build where the two switches lived in each
+            // profile's runtime options. They must not break the load, and they must disappear
+            // the next time the file is written (the model no longer has those members).
+            var dataPath = Path.Combine(baseDirectory, "sing-box-data.json");
+            var data = JsonNode.Parse(await File.ReadAllTextAsync(dataPath))!;
+            data["profiles"]![0]!["runtimeOptions"]!["enableSystemProxy"] = true;
+            data["profiles"]![0]!["runtimeOptions"]!["enableTunInbound"] = true;
+            await File.WriteAllTextAsync(dataPath, data.ToJsonString());
+
+            var options = await profileManager.GetRuntimeOptionsAsync(profile.Id);
+
+            Assert.NotNull(options);
+            Assert.Equal(2080, options!.InboundPort);
+
+            await profileManager.SaveRuntimeOptionsAsync(profile.Id, options);
+
+            var rewritten = await File.ReadAllTextAsync(dataPath);
+            Assert.DoesNotContain("enableSystemProxy", rewritten);
+            Assert.DoesNotContain("enableTunInbound", rewritten);
         }
         finally
         {

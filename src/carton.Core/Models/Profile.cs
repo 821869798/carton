@@ -32,8 +32,10 @@ public class ProfileRuntimeOptions
 {
     public int InboundPort { get; set; } = 2028;
     public bool AllowLanConnections { get; set; }
-    public bool EnableSystemProxy { get; set; }
-    public bool EnableTunInbound { get; set; }
+
+    // System proxy and TUN live in AppPreferences (see AppPreferences.SystemProxyEnabled):
+    // app-level switches rather than per-profile state. Only port, LAN scope and log level are
+    // genuinely owned by the config file and therefore belong here.
     public string LogLevel { get; set; } = carton.Core.Utilities.SingBoxLogLevelHelper.DefaultLevel;
     public bool LogLevelInitialized { get; set; }
     public bool Initialized { get; set; }

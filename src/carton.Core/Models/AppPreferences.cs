@@ -7,6 +7,25 @@ public class AppPreferences
     public bool StartHiddenAtLogin { get; set; }
     public bool AutoStartOnLaunch { get; set; }
     public bool AutoDisconnectConnectionsOnNodeSwitch { get; set; } = false;
+
+    /// <summary>
+    /// Whether carton arms the system proxy while the kernel runs.
+    /// </summary>
+    /// <remarks>
+    /// App-level, not per profile: the dashboard switch describes how this machine runs the
+    /// proxy, so it must survive a profile switch and must not be reachable by "reset to
+    /// config values" (which only restores what the profile's config file genuinely owns:
+    /// port, LAN scope, log level).
+    /// </remarks>
+    public bool SystemProxyEnabled { get; set; }
+
+    /// <summary>
+    /// Whether carton injects a TUN inbound into the generated runtime config.
+    /// </summary>
+    /// <remarks>App-level for the same reason as <see cref="SystemProxyEnabled"/>. An inbound
+    /// that already exists in the user's config is reused as-is - carton only decides whether
+    /// TUN is on, never the parameters inside the node.</remarks>
+    public bool TunInboundEnabled { get; set; }
     public bool SaveWindowPlacement { get; set; }
     public bool UseProxyForRemoteConfigUpdates { get; set; }
     public string CustomUserAgent { get; set; } = string.Empty;
