@@ -459,7 +459,7 @@ jobs:
 
       - name: Build commit changelog
         id: changelog
-        uses: mikepenz/release-changelog-builder-action@v6.2.3
+        uses: mikepenz/release-changelog-builder-action@v6.3.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
