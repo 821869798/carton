@@ -152,6 +152,37 @@ jobs:
             throw "Missing repository secret WINGET_GITHUB_TOKEN. Create a GitHub PAT (classic) with public_repo scope and save it as this secret."
           }
 
+      - name: Sync upstream winget-pkgs fork
+        if: env.SHOULD_SUBMIT == 'true'
+        shell: pwsh
+        env:
+          WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
+        run: |
+          $repoOwner = ($env:GITHUB_REPOSITORY -split '/')[0]
+          $headers = @{
+            Accept = "application/vnd.github+json"
+            Authorization = "Bearer $env:WINGET_GITHUB_TOKEN"
+            "X-GitHub-Api-Version" = "2022-11-28"
+            "User-Agent" = "carton-winget-sync"
+          }
+
+          try {
+            $userResponse = Invoke-RestMethod -Uri "https://api.github.com/user" -Headers $headers -ErrorAction SilentlyContinue
+            if ($userResponse -and $userResponse.login) {
+              $forkOwner = $userResponse.login
+            } else {
+              $forkOwner = $repoOwner
+            }
+
+            Write-Host "Attempting to sync fork $forkOwner/winget-pkgs with upstream microsoft/winget-pkgs:master..."
+            $syncUri = "https://api.github.com/repos/$forkOwner/winget-pkgs/merge-upstream"
+            $body = @{ branch = "master" } | ConvertTo-Json
+            $syncResult = Invoke-RestMethod -Uri $syncUri -Headers $headers -Method Post -Body $body -ContentType "application/json"
+            Write-Host "Fork sync result: $($syncResult.message)"
+          } catch {
+            Write-Warning "Could not automatically sync fork with upstream: $($_.Exception.Message). Continuing anyway..."
+          }
+
       - name: Setup .NET runtime
         if: env.SHOULD_SUBMIT == 'true'
         uses: actions/setup-dotnet@v6

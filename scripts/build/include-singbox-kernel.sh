@@ -32,18 +32,43 @@ download_file() {
 }
 
 resolve_latest_tag() {
+  local auth_header=()
+  local token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+  if [[ -n "$token" ]]; then
+    auth_header=(-H "Authorization: Bearer $token")
+  fi
+
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL --connect-timeout 15 "$GITHUB_API_LATEST" \
+    local api_tag=""
+    api_tag="$(curl -fsSL --connect-timeout 15 "${auth_header[@]}" -H "Accept: application/vnd.github+json" "$GITHUB_API_LATEST" 2>/dev/null \
       | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
-      | head -n 1
-    return
+      | head -n 1 || true)"
+    if [[ -n "$api_tag" ]]; then
+      echo "$api_tag"
+      return
+    fi
+
+    local redirected_url=""
+    redirected_url="$(curl -sIL --connect-timeout 15 -o /dev/null -w '%{url_effective}' "https://github.com/SagerNet/sing-box/releases/latest" 2>/dev/null || true)"
+    if [[ -n "$redirected_url" && "$redirected_url" =~ /tag/([^/]+)/?$ ]]; then
+      echo "${BASH_REMATCH[1]}"
+      return
+    fi
   fi
 
   if command -v wget >/dev/null 2>&1; then
-    wget -q -O - "$GITHUB_API_LATEST" \
+    local wget_headers=()
+    if [[ -n "$token" ]]; then
+      wget_headers=(--header="Authorization: Bearer $token")
+    fi
+    local api_tag=""
+    api_tag="$(wget -q "${wget_headers[@]}" -O - "$GITHUB_API_LATEST" 2>/dev/null \
       | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
-      | head -n 1
-    return
+      | head -n 1 || true)"
+    if [[ -n "$api_tag" ]]; then
+      echo "$api_tag"
+      return
+    fi
   fi
 
   echo ""

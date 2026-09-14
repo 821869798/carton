@@ -140,6 +140,8 @@ jobs:
     env:
       VERSION: ${{ needs.metadata.outputs.version }}
       CHANNEL: ${{ needs.metadata.outputs.channel }}
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
 

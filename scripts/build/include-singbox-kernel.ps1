@@ -45,46 +45,75 @@ $headers = @{
     "Accept" = "application/vnd.github+json"
 }
 
+$token = if (-not [string]::IsNullOrWhiteSpace($env:GH_TOKEN)) { $env:GH_TOKEN } elseif (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) { $env:GITHUB_TOKEN } else { $null }
+if ($token) {
+    $headers["Authorization"] = "Bearer $token"
+}
+
 Write-Host "Resolving latest sing-box release for $Rid..."
-$release = Invoke-RestMethod -Uri $latestReleaseUrl -Headers $headers
-$tag = [string]$release.tag_name
+$release = $null
+try {
+    $release = Invoke-RestMethod -Uri $latestReleaseUrl -Headers $headers -ErrorAction Stop
+} catch {
+    Write-Warning "Could not query GitHub API for latest release ($($_.Exception.Message)). Attempting fallback to release redirect..."
+}
+
+$tag = $null
+if ($release -and $release.tag_name) {
+    $tag = [string]$release.tag_name
+} else {
+    try {
+        $effectiveUrl = (& curl.exe -sIL -o NUL -w "%{url_effective}" "https://github.com/SagerNet/sing-box/releases/latest" 2>$null).Trim()
+        if ($effectiveUrl -match "/tag/([^/]+)/?$") {
+            $tag = $matches[1]
+        }
+    } catch {
+        Write-Warning "curl.exe redirect resolution failed: $($_.Exception.Message)"
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($tag)) {
-    throw "GitHub latest release response does not include tag_name."
+    throw "GitHub latest release tag could not be resolved."
 }
 
 $version = $tag.TrimStart("v")
 $candidates = Get-AssetCandidates -RuntimeIdentifier $Rid -VersionWithoutPrefix $version
-$asset = $null
+$selectedCandidate = $null
+$downloadUrl = $null
 
-foreach ($candidate in $candidates) {
-    $asset = $release.assets | Where-Object { $_.name -eq $candidate } | Select-Object -First 1
-    if ($asset) {
-        break
+if ($release -and $release.assets) {
+    foreach ($candidate in $candidates) {
+        $found = $release.assets | Where-Object { $_.name -eq $candidate } | Select-Object -First 1
+        if ($found) {
+            $selectedCandidate = $found.name
+            $downloadUrl = $found.browser_download_url
+            break
+        }
     }
 }
 
-if (-not $asset) {
-    $assetList = ($release.assets | Select-Object -ExpandProperty name) -join ", "
-    throw "No matching sing-box asset found for $Rid in release $tag. Assets: $assetList"
+if (-not $downloadUrl) {
+    $selectedCandidate = $candidates[0]
+    $downloadUrl = "https://github.com/SagerNet/sing-box/releases/download/$tag/$selectedCandidate"
 }
 
 $tempRoot = Join-Path $env:TEMP ("carton-singbox-" + [Guid]::NewGuid().ToString("N"))
-$archivePath = Join-Path $tempRoot $asset.name
+$archivePath = Join-Path $tempRoot $selectedCandidate
 $extractDir = Join-Path $tempRoot "extract"
 
 New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
 
 try {
-    Write-Host "Downloading $($asset.name) from $tag..."
-    Invoke-WebRequest -Uri $asset.browser_download_url -Headers $headers -OutFile $archivePath
+    Write-Host "Downloading $selectedCandidate from $tag..."
+    Invoke-WebRequest -Uri $downloadUrl -Headers $headers -OutFile $archivePath
 
     Write-Host "Extracting sing-box package..."
     Expand-Archive -LiteralPath $archivePath -DestinationPath $extractDir -Force
 
     $kernelFile = Get-ChildItem -Path $extractDir -Recurse -File -Filter "sing-box.exe" | Select-Object -First 1
     if (-not $kernelFile) {
-        throw "sing-box.exe was not found in downloaded asset: $($asset.name)"
+        throw "sing-box.exe was not found in downloaded asset: $selectedCandidate"
     }
 
     $runtimeFiles = Get-ChildItem -Path $extractDir -Recurse -File | Where-Object {
