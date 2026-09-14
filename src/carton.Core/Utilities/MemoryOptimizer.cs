@@ -17,8 +17,15 @@ namespace carton.Core.Utilities;
 /// <see cref="GCCollectionMode.Aggressive"/> is only legal when <c>blocking</c> and
 /// <c>compacting</c> are both <see langword="true"/> - passing <c>blocking: false</c>
 /// throws <see cref="ArgumentException"/> and silently defeats the whole optimization.
-/// Everything here therefore runs on a thread-pool thread and is rate limited, so callers
-/// on the UI thread never pay for it.
+/// Everything here therefore runs on a thread-pool thread and is rate limited, so the
+/// calling thread returns immediately instead of waiting for the collection.
+/// </para>
+/// <para>
+/// Off the caller's thread is not the same as free, though: a blocking collection
+/// suspends every managed thread in the process - the UI thread included - for the length
+/// of the pause, and the working-set trim makes the next paint or gRPC call fault pages
+/// back in. Both costs are knowingly traded for a smaller idle footprint, which is the
+/// whole point of trimming a background tray application.
 /// </para>
 /// </remarks>
 public static partial class MemoryOptimizer
@@ -47,7 +54,8 @@ public static partial class MemoryOptimizer
 
     /// <summary>
     /// Same as <see cref="CompactAndTrim"/> but bypasses the rate limiter. Use only for
-    /// genuinely rare, high-value moments (kernel stopped, window hidden to tray).
+    /// genuinely rare, high-value moments: the kernel was stopped or restarted, the window
+    /// was just hidden to the tray or minimized, or startup has settled.
     /// </summary>
     public static void CompactAndTrimNow() => Schedule(force: true);
 

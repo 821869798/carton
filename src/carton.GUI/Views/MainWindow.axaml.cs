@@ -89,11 +89,12 @@ public partial class MainWindow : Window
         NotifyWindowVisible(false);
         SaveWindowPlacement();
         e.Cancel = true;
+        // Hide() flips IsVisible, and OnWindowPropertyChanged reacts to exactly that with a
+        // rate-limited trim request - which is why this path does NOT also call
+        // CompactAndTrimNow(): that forced call used to land while the first trim was still in
+        // flight, so it was coalesced into it and made the loop run a second full blocking
+        // collection (plus a second working-set trim) for the same user action.
         Hide();
-        // Hidden to tray: the whole visual tree, render surfaces and page view models are
-        // now idle, so this is the single best moment to hand memory back to the OS.
-        // Non-blocking - the actual collection happens on a thread-pool thread.
-        MemoryOptimizer.CompactAndTrimNow();
     }
 
     private void OnOpened(object? sender, System.EventArgs e)
