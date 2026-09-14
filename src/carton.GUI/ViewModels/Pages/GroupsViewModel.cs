@@ -106,7 +106,7 @@ public partial class GroupsViewModel : PageViewModelBase
         _preferencesService = preferencesService;
     }
 
-    public void OnNavigatedTo()
+    public override void OnNavigatedTo()
     {
         _isPageActive = true;
         UpdateUrlTestRefreshState();
@@ -169,7 +169,7 @@ public partial class GroupsViewModel : PageViewModelBase
         }
     }
 
-    public void OnNavigatedFrom()
+    public override void OnNavigatedFrom()
     {
         _isPageActive = false;
         UpdateUrlTestRefreshState();

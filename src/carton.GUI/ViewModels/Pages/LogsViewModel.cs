@@ -91,7 +91,7 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
 #endif
     }
 
-    public void OnNavigatedTo()
+    public override void OnNavigatedTo()
     {
         _isOnPage = true;
         _hasPendingVisibleRefresh = true;
@@ -111,7 +111,7 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
         }
     }
 
-    public void OnNavigatedFrom()
+    public override void OnNavigatedFrom()
     {
         _isOnPage = false;
         ReleaseVisibleLogs();

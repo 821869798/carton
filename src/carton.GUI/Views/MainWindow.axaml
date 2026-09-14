@@ -207,8 +207,8 @@
           <Grid>
           <views:DashboardView DataContext="{Binding DashboardViewModel}"
                                IsVisible="{Binding #MainWindowRoot.DataContext.IsDashboardPage}"/>
-          <views:GroupsView DataContext="{Binding ActiveGroupsViewModel}"
-                            IsVisible="{Binding #MainWindowRoot.DataContext.IsGroupsPage}"/>
+          <!-- Groups shares this ContentControl with profiles/connections/logs/settings:
+               leaving the page destroys GroupsView. GroupsViewModel stays for the tray. -->
           <ContentControl Content="{Binding ActiveTransientPage}"
                           IsVisible="{Binding #MainWindowRoot.DataContext.IsTransientPage}"/>
           <Grid IsHitTestVisible="False">

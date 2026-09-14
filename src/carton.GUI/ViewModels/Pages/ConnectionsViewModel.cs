@@ -57,7 +57,7 @@ public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
     /// <summary>
     /// Called when the user navigates to the Connections page.
     /// </summary>
-    public void OnNavigatedTo()
+    public override void OnNavigatedTo()
     {
         _isOnPage = true;
         UpdateRefreshState();
@@ -153,7 +153,7 @@ public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
     /// <summary>
     /// Called when the user navigates away from the Connections page.
     /// </summary>
-    public void OnNavigatedFrom()
+    public override void OnNavigatedFrom()
     {
         _isOnPage = false;
         UpdateRefreshState();

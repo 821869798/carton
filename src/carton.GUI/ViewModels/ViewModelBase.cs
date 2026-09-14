@@ -24,6 +24,10 @@ public abstract partial class PageViewModelBase : ViewModelBase
 
     public abstract NavigationPage PageType { get; }
 
+    public virtual void OnNavigatedTo() { }
+
+    public virtual void OnNavigatedFrom() { }
+
     protected void InitializePageMetadata(string icon, string titleResourceKey, string titleFallback)
     {
         Icon = icon;

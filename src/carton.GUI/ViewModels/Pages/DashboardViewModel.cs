@@ -555,13 +555,13 @@ public partial class DashboardViewModel : PageViewModelBase
         }
     }
 
-    public void OnNavigatedTo()
+    public override void OnNavigatedTo()
     {
         _isOnPage = true;
         UpdateLiveRefreshState();
     }
 
-    public void OnNavigatedFrom()
+    public override void OnNavigatedFrom()
     {
         _isOnPage = false;
         UpdateLiveRefreshState();

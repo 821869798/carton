@@ -149,26 +149,16 @@ public partial class MainViewModel : ViewModelBase
     private ConnectionsViewModel? _connectionsViewModel;
     private LogsViewModel? _logsViewModel;
     private SettingsViewModel? _settingsViewModel;
-    private GroupsViewModel? _activeGroupsViewModel;
     private DateTime? _groupsInactiveAtUtc;
     private DateTime? _profilesInactiveAtUtc;
     private DateTime? _connectionsInactiveAtUtc;
     private DateTime? _logsInactiveAtUtc;
     private DateTime? _settingsInactiveAtUtc;
 
-    public GroupsViewModel? ActiveGroupsViewModel => _activeGroupsViewModel;
     public ILocalizationService Localization => _localizationService;
 
-    public bool ShowGlobalStartStop => false;
-    public bool ShowStartButton => false;
-    public bool ShowStopButton => false;
     public bool IsDashboardPage => SelectedPage == NavigationPage.Dashboard;
-    public bool IsProfilesPage => SelectedPage == NavigationPage.Profiles;
-    public bool IsGroupsPage => SelectedPage == NavigationPage.Groups;
-    public bool IsConnectionsPage => SelectedPage == NavigationPage.Connections;
-    public bool IsLogsPage => SelectedPage == NavigationPage.Logs;
-    public bool IsSettingsPage => SelectedPage == NavigationPage.Settings;
-    public bool IsTransientPage => SelectedPage is NavigationPage.Profiles or NavigationPage.Connections or NavigationPage.Logs or NavigationPage.Settings;
+    public bool IsTransientPage => SelectedPage != NavigationPage.Dashboard;
     public PageViewModelBase? ActiveTransientPage => IsTransientPage ? CurrentPage : null;
 
     public MainViewModel()
@@ -443,8 +433,6 @@ public partial class MainViewModel : ViewModelBase
             }
 
             UpdateSessionDurationRefreshState();
-            OnPropertyChanged(nameof(ShowStartButton));
-            OnPropertyChanged(nameof(ShowStopButton));
             if (_connectionsViewModel != null)
             {
                 _connectionsViewModel.OnServiceStatusChanged(status == ServiceStatus.Running);
@@ -539,25 +527,8 @@ public partial class MainViewModel : ViewModelBase
     partial void OnSelectedPageChanged(NavigationPage value)
     {
         var previousPage = CurrentPage;
-
-        if (previousPage == _logsViewModel)
-        {
-            _logsViewModel?.OnNavigatedFrom();
-        }
-        else if (previousPage == _activeGroupsViewModel)
-        {
-            _activeGroupsViewModel?.OnNavigatedFrom();
-        }
-        else if (previousPage == _connectionsViewModel)
-        {
-            _connectionsViewModel?.OnNavigatedFrom();
-        }
-        else if (previousPage == DashboardViewModel)
-        {
-            DashboardViewModel.OnNavigatedFrom();
-        }
-
-        MarkTransientPageInactive(previousPage?.PageType);
+        previousPage.OnNavigatedFrom();
+        MarkTransientPageInactive(previousPage.PageType);
 
         CurrentPage = value switch
         {
@@ -571,37 +542,13 @@ public partial class MainViewModel : ViewModelBase
         };
 
         MarkTransientPageActive(value);
-
-        if (value == NavigationPage.Groups)
-        {
-            EnsureGroupsViewModel().OnNavigatedTo();
-        }
-
-        if (value == NavigationPage.Connections)
-        {
-            _connectionsViewModel?.OnNavigatedTo();
-        }
-
+        CurrentPage.OnNavigatedTo();
         if (value == NavigationPage.Dashboard)
         {
-            DashboardViewModel.OnNavigatedTo();
             _ = DashboardViewModel.LoadProfilesAsync();
         }
 
-        if (value == NavigationPage.Logs)
-        {
-            _logsViewModel?.OnNavigatedTo();
-        }
-
-        OnPropertyChanged(nameof(ShowGlobalStartStop));
-        OnPropertyChanged(nameof(ShowStartButton));
-        OnPropertyChanged(nameof(ShowStopButton));
         OnPropertyChanged(nameof(IsDashboardPage));
-        OnPropertyChanged(nameof(IsProfilesPage));
-        OnPropertyChanged(nameof(IsGroupsPage));
-        OnPropertyChanged(nameof(IsConnectionsPage));
-        OnPropertyChanged(nameof(IsLogsPage));
-        OnPropertyChanged(nameof(IsSettingsPage));
         OnPropertyChanged(nameof(IsTransientPage));
         OnPropertyChanged(nameof(ActiveTransientPage));
     }
@@ -616,9 +563,9 @@ public partial class MainViewModel : ViewModelBase
         _isWindowVisible = isVisible;
         UpdateSessionDurationRefreshState();
         DashboardViewModel.SetWindowVisible(isVisible);
-        if (_activeGroupsViewModel != null)
+        if (_lazyGroupsViewModel.IsValueCreated)
         {
-            _activeGroupsViewModel.SetWindowVisible(isVisible);
+            _lazyGroupsViewModel.Value.SetWindowVisible(isVisible);
         }
         if (_connectionsViewModel != null)
         {
@@ -633,19 +580,10 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
-    public bool IsGroupsViewModelCreated => _lazyGroupsViewModel.IsValueCreated;
-
     public GroupsViewModel EnsureGroupsViewModel()
     {
         var groupsViewModel = _lazyGroupsViewModel.Value;
-        if (!ReferenceEquals(_activeGroupsViewModel, groupsViewModel))
-        {
-            _activeGroupsViewModel = groupsViewModel;
-            OnPropertyChanged(nameof(ActiveGroupsViewModel));
-        }
-
         groupsViewModel.SetWindowVisible(_isWindowVisible);
-
         return groupsViewModel;
     }
 
@@ -940,8 +878,8 @@ public partial class MainViewModel : ViewModelBase
     private bool TryUnloadInactiveTransientPages()
     {
         var now = DateTime.UtcNow;
-        TryUnloadGroupsPage(now);
-        var unloaded = TryUnloadTransientPage(NavigationPage.Profiles, _profilesInactiveAtUtc, _profilesViewModel, disposable => _profilesViewModel = null, now);
+        var unloaded = TryUnloadGroupsPage(now);
+        unloaded |= TryUnloadTransientPage(NavigationPage.Profiles, _profilesInactiveAtUtc, _profilesViewModel, disposable => _profilesViewModel = null, now);
         unloaded |= TryUnloadTransientPage(NavigationPage.Connections, _connectionsInactiveAtUtc, _connectionsViewModel, disposable => _connectionsViewModel = null, now);
         unloaded |= TryUnloadTransientPage(NavigationPage.Logs, _logsInactiveAtUtc, _logsViewModel, disposable => _logsViewModel = null, now);
         unloaded |= TryUnloadTransientPage(NavigationPage.Settings, _settingsInactiveAtUtc, _settingsViewModel, disposable => _settingsViewModel = null, now);
@@ -952,42 +890,39 @@ public partial class MainViewModel : ViewModelBase
     /// When the window goes to the tray we no longer need the visual trees of the
     /// transient pages the user is not currently viewing (Connections grid, up to
     /// 800 log rows, profile list, the JSON editor). Backdate their inactivity so
-    /// the existing, tested unload path frees them immediately; the scheduled unload
-    /// timer then reclaims the memory. The selected page is never unloaded, so
-    /// re-showing has no extra cost and pages re-create lazily on next navigation
-    /// as they already do.
+    /// the existing unload path frees them immediately. The selected page is never
+    /// unloaded, so re-showing has no extra cost and pages re-create lazily on next
+    /// navigation as they already do.
     ///
-    /// Dashboard and Groups are intentionally excluded — their residency strategy
-    /// is left exactly as-is per user requirement.
+    /// Dashboard stays resident. Groups keeps its ViewModel (tray menus + snapshot
+    /// cache) but the view is already gone with ActiveTransientPage; trim the row VMs.
     /// </summary>
     private void ForceUnloadInactiveTransientPagesForBackground()
     {
-        var now = DateTime.UtcNow;
-        var past = now - TransientPageUnloadDelay - TimeSpan.FromSeconds(1);
+        var past = DateTime.UtcNow - TransientPageUnloadDelay - TimeSpan.FromSeconds(1);
+        if (_groupsInactiveAtUtc != null) _groupsInactiveAtUtc = past;
         if (_profilesInactiveAtUtc != null) _profilesInactiveAtUtc = past;
         if (_connectionsInactiveAtUtc != null) _connectionsInactiveAtUtc = past;
         if (_logsInactiveAtUtc != null) _logsInactiveAtUtc = past;
         if (_settingsInactiveAtUtc != null) _settingsInactiveAtUtc = past;
-        TryUnloadTransientPage(NavigationPage.Profiles, _profilesInactiveAtUtc, _profilesViewModel, disposable => _profilesViewModel = null, now);
-        TryUnloadTransientPage(NavigationPage.Connections, _connectionsInactiveAtUtc, _connectionsViewModel, disposable => _connectionsViewModel = null, now);
-        TryUnloadTransientPage(NavigationPage.Logs, _logsInactiveAtUtc, _logsViewModel, disposable => _logsViewModel = null, now);
-        TryUnloadTransientPage(NavigationPage.Settings, _settingsInactiveAtUtc, _settingsViewModel, disposable => _settingsViewModel = null, now);
+        TryUnloadInactiveTransientPages();
     }
 
-    private void TryUnloadGroupsPage(DateTime now)
+    private bool TryUnloadGroupsPage(DateTime now)
     {
-        if (SelectedPage == NavigationPage.Groups || _groupsInactiveAtUtc == null || _activeGroupsViewModel == null)
+        if (SelectedPage == NavigationPage.Groups || _groupsInactiveAtUtc == null || !_lazyGroupsViewModel.IsValueCreated)
         {
-            return;
+            return false;
         }
 
         if (now - _groupsInactiveAtUtc.Value < TransientPageUnloadDelay)
         {
-            return;
+            return false;
         }
 
-        _activeGroupsViewModel.TrimInactiveUi();
+        _lazyGroupsViewModel.Value.TrimInactiveUi();
         _groupsInactiveAtUtc = null;
+        return true;
     }
 
     /// <summary>
