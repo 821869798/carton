@@ -271,6 +271,25 @@ jobs:
           tar -C "$portable_stage" -czf "$pack_dir/$portable_name" .
           echo "PACK_DIR=$pack_dir" >> "$GITHUB_ENV"
 
+      - name: Create package-manager archive (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          pack_dir="$GITHUB_WORKSPACE/artifacts/pack/${{ matrix.rid }}-$CHANNEL"
+          mkdir -p "$pack_dir"
+          package_name="${APP_NAME}-${VERSION}-${{ matrix.rid }}-package.tar.gz"
+          # INSTALLER_BUILD payload for the .deb/.rpm and for the AUR package. It must not
+          # contain the portable data marker (the app would then keep config/kernel/logs
+          # next to the binary, i.e. under read-only /usr) nor carton-helper (its presence
+          # alone enables in-app self-updates, which would rewrite root-owned files and
+          # desync the package manager database). Built without those two, the app reports
+          # itself as package-manager managed and points at apt/dnf/yay instead.
+          tar -C "$PUBLISH_DIR_APPIMAGE" \
+            --exclude='carton-helper' \
+            --exclude='.carton_portable_data' \
+            --exclude='*.pdb' \
+            -czf "$pack_dir/$package_name" .
+
       - name: Create portable archive (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -355,7 +374,7 @@ jobs:
             cp -f "$appimage" "$release_dir/${APP_NAME}-${VERSION}-${{ matrix.rid }}.AppImage"
           done
 
-          for pattern in '*-portable.zip' '*-portable.tar.gz' '*.deb' '*.rpm' '*.nupkg' 'releases*.json'; do
+          for pattern in '*-portable.zip' '*-portable.tar.gz' '*-package.tar.gz' '*.deb' '*.rpm' '*.nupkg' 'releases*.json'; do
             for f in "$PACK_DIR"/$pattern; do
               [[ -f "$f" ]] || continue
               cp -f "$f" "$release_dir/$(basename "$f")"

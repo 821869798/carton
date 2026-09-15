@@ -211,7 +211,12 @@ scripts\build\build-release-win-x64.bat
 ./scripts/build/build-linux-packages.sh linux-x64 1.2.3 artifacts/publish/linux-x64-appimage
 ```
 
-`linux-arm64` 同理，把 rid 换掉即可。
+`linux-arm64` 同理，把 rid 换掉即可。AUR 包见 [`packaging/aur/`](./packaging/aur/README.md)。
+
+CI 除 deb/rpm 外还会产出 `-package.tar.gz`（INSTALLER_BUILD 那一份，去掉 `carton-helper`
+与便携标记），AUR 的 `carton-bin` 就是用它重打包的：portable 变体虽然也能删文件绕过，
+但编译期常量 `IsPortableDistributionBuild` 修不了，设置页会多出一个在本安装方式下
+不可能生效的"数据存到程序目录"选项。
 
 仓库里已经包含多个运行时目标，现成脚本主要围绕 Windows AOT 构建流程整理。
 

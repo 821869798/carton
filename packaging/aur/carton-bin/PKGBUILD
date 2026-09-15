@@ -1,0 +1,105 @@
+# Maintainer: <your AUR username> <your at email dot tld>
+# Contributors: jacobmathiesen <aur at jacobmathiesen dot dk>
+#               Yukari0201 (submitter)
+#               Antiz     (last packager)
+#
+# Takeover note (2026-09): this PKGBUILD is ready for the carton-bin takeover described in
+# ../README.md. Per the AUR submission guidelines, whoever assumes maintainership puts their
+# name in the Maintainer line and the people who maintained it before become Contributors -
+# replace the placeholder above before the first push.
+#
+# Binary package: repackages the official "package-manager" tarball (app + sing-box kernel +
+# .NET runtime). Nothing is compiled here, so the AUR only needs to bump pkgver/sha256sums per
+# release.
+#
+# That tarball is the INSTALLER_BUILD payload, not the portable one: it has neither
+# carton-helper (which would enable in-app self-updates over root-owned files under /usr) nor
+# .carton_portable_data (which would send config/kernel/logs to read-only /usr). The
+# compile-time flavour matters too - a portable build offers to store user data next to the
+# binary, which is impossible here - so use the -package.tar.gz asset, never the
+# -portable.tar.gz one.
+
+pkgname=carton-bin
+pkgver=1.2.3
+pkgrel=1
+pkgdesc="Cross-platform proxy client powered by sing-box"
+arch=('x86_64' 'aarch64')
+url="https://github.com/821869798/carton"
+license=('GPL-3.0-only')
+depends=(
+  'glibc'
+  'gcc-libs'
+  'libx11'
+  'libice'
+  'libsm'
+  'libxext'
+  'libxrandr'
+  'libxi'
+  'libxcursor'
+  'libxfixes'
+  'libxkbcommon'
+  'libxkbcommon-x11'
+  'fontconfig'
+  'freetype2'
+  'mesa'
+  'dbus'
+  'zlib'
+)
+optdepends=(
+  'gtk3: file dialogs when no desktop portal is running'
+  'xdg-desktop-portal: file dialogs'
+  'sudo: TUN and system proxy setup'
+)
+# The payload is prebuilt: never strip it, and never ask makepkg to split debug info out of it
+# (that is what makes a -bin build require debugedit/binutils work on a NativeAOT binary).
+options=('!strip' '!debug')
+provides=('carton')
+conflicts=('carton')
+
+_repo="https://github.com/821869798/carton"
+_tag="v${pkgver}"
+
+source_x86_64=(
+  "${_repo}/releases/download/${_tag}/carton-${pkgver}-linux-x64-package.tar.gz"
+  "carton.desktop::${_repo}/raw/${_tag}/packaging/linux/carton.desktop"
+  "carton.png::${_repo}/raw/${_tag}/src/carton.GUI/Assets/carton_icon.png"
+)
+source_aarch64=(
+  "${_repo}/releases/download/${_tag}/carton-${pkgver}-linux-arm64-package.tar.gz"
+  "carton.desktop::${_repo}/raw/${_tag}/packaging/linux/carton.desktop"
+  "carton.png::${_repo}/raw/${_tag}/src/carton.GUI/Assets/carton_icon.png"
+)
+# Run `updpkgsums` after bumping pkgver, before pushing to the AUR.
+sha256sums_x86_64=('SKIP' 'SKIP' 'SKIP')
+sha256sums_aarch64=('SKIP' 'SKIP' 'SKIP')
+
+package() {
+  case "$CARCH" in
+    x86_64) _rid='linux-x64' ;;
+    aarch64) _rid='linux-arm64' ;;
+  esac
+
+  local _payload="${srcdir}/carton-${pkgver}-${_rid}-package"
+
+  install -d \
+    "$pkgdir/usr/lib/carton" \
+    "$pkgdir/usr/bin" \
+    "$pkgdir/usr/share/applications" \
+    "$pkgdir/usr/share/icons/hicolor/256x256/apps"
+
+  cp -a "${_payload}/." "$pkgdir/usr/lib/carton/"
+
+  # The release tarball should already be clean; this is a guard, not a fix-up. Without the
+  # helper the app never offers in-app updates, without the marker it keeps user data in
+  # ~/.config instead of trying to write to root-owned /usr, and debug symbols have no business
+  # in a package (the deb/rpm staging drops them as well).
+  rm -f \
+    "$pkgdir/usr/lib/carton/carton-helper" \
+    "$pkgdir/usr/lib/carton/.carton_portable_data" \
+    "$pkgdir/usr/lib/carton/"*.pdb
+
+  install -Dm644 "${srcdir}/carton.desktop" "$pkgdir/usr/share/applications/carton.desktop"
+  install -Dm644 "${srcdir}/carton.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/carton.png"
+
+  ln -s /usr/lib/carton/carton "$pkgdir/usr/bin/carton"
+}
