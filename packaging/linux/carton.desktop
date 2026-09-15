@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Carton
+Comment=Cross-platform proxy client powered by sing-box
+Exec=carton
+Icon=carton
+Terminal=false
+Categories=Network;
+StartupNotify=false
+StartupWMClass=carton

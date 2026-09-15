@@ -22,6 +22,9 @@ public partial class AppUpdateCoordinator : ObservableObject
     private readonly ILocalizationService? _localizationService;
     private AppUpdateResult? _pendingAppUpdate;
     private bool _requiresManualAppUpdate;
+    // Set when the running build was installed by a package manager (deb/rpm/AUR): the
+    // upgrade hint then names that package manager instead of the releases page.
+    private (string Manager, string? UpgradeCommand)? _packageManagedHint;
     private bool _suppressChannelNormalization;
     private bool _isCompletionPromptVisible;
     private bool _isLatestAppVersion;
@@ -253,7 +256,7 @@ public partial class AppUpdateCoordinator : ObservableObject
                     IsAppUpdateAvailable = true;
                     IsAppUpdateReadyToInstall = false;
                     ResetDownloadProgress();
-                    AppUpdateStatus = GetString("Settings.Update.Status.ManualRequired", "New version available. Download it from the releases page.");
+                    AppUpdateStatus = GetManualUpdateStatusMessage();
                     if (showManualPrompt)
                     {
                         await ShowManualUpdatePromptAsync();
@@ -333,7 +336,7 @@ public partial class AppUpdateCoordinator : ObservableObject
 
         if (_requiresManualAppUpdate)
         {
-            AppUpdateStatus = GetString("Settings.Update.Status.ManualRequired", "New version available. Download it from the releases page.");
+            AppUpdateStatus = GetManualUpdateStatusMessage();
             await ShowManualUpdatePromptAsync();
             return;
         }
@@ -420,7 +423,7 @@ public partial class AppUpdateCoordinator : ObservableObject
 
         if (_requiresManualAppUpdate)
         {
-            AppUpdateStatus = GetString("Settings.Update.Status.ManualRequired", "New version available. Download it from the releases page.");
+            AppUpdateStatus = GetManualUpdateStatusMessage();
             await ShowManualUpdatePromptAsync();
             return;
         }
@@ -612,11 +615,7 @@ public partial class AppUpdateCoordinator : ObservableObject
 
         var message = new TextBlock
         {
-            Text = string.Format(
-                GetString(
-                    "Settings.Update.ManualDialog.Message",
-                    "Portable builds cannot update automatically. Open the releases page to download version {0}?"),
-                versionLabel),
+            Text = BuildManualUpdateDialogMessage(versionLabel),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 16)
         };
@@ -687,7 +686,12 @@ public partial class AppUpdateCoordinator : ObservableObject
                                    !_appUpdateService.SupportsInAppUpdates &&
                                    !_appUpdateService.SupportsDirectInstallerUpdates &&
                                    !_appUpdateService.SupportsDirectPortableUpdates;
-        IsPortableApp = _requiresManualAppUpdate;
+        _packageManagedHint = _requiresManualAppUpdate
+            ? ResolvePackageManagedHint()
+            : null;
+        // Only a hand-installed portable build is really "portable": a package-managed one
+        // is upgraded through its package manager, which the status text says instead.
+        IsPortableApp = _requiresManualAppUpdate && _packageManagedHint == null;
         LatestAvailableVersion = _appUpdateService?.PendingRestartVersion ?? string.Empty;
         IsAppUpdateAvailable = false;
         IsAppUpdateReadyToInstall = _appUpdateService?.IsUpdatePendingRestart == true;
@@ -695,6 +699,66 @@ public partial class AppUpdateCoordinator : ObservableObject
         AppUpdateStatus = IsAppUpdateReadyToInstall
             ? GetString("Settings.Update.Status.Ready", "Update downloaded. Restart to apply.")
             : string.Empty;
+    }
+
+    private string GetManualUpdateStatusMessage()
+        => _packageManagedHint != null
+            ? GetString(
+                "Settings.Update.Status.ManagedByPackageManager",
+                "New version available. Download the new package to upgrade.")
+            : GetString("Settings.Update.Status.ManualRequired", "New version available. Download it from the releases page.");
+
+    private string BuildManualUpdateDialogMessage(string versionLabel)
+    {
+        if (_packageManagedHint is not { } hint)
+        {
+            return string.Format(
+                GetString(
+                    "Settings.Update.ManualDialog.Message",
+                    "Portable builds cannot update automatically. Open the releases page to download version {0}?"),
+                versionLabel);
+        }
+
+        // Only the AUR can upgrade on its own; for deb/rpm the user has to install the newly
+        // downloaded package (Carton publishes no apt/dnf repository).
+        return hint.UpgradeCommand is { Length: > 0 } upgradeCommand
+            ? string.Format(
+                GetString(
+                    "Settings.Update.ManualDialog.ManagedMessageWithCommand",
+                    "This build is managed by your package manager, so Carton cannot update itself. Run {0} to upgrade to {1}?"),
+                upgradeCommand,
+                versionLabel)
+            : string.Format(
+                GetString(
+                    "Settings.Update.ManualDialog.ManagedMessage",
+                    "This build is managed by your package manager ({0}), so Carton cannot update itself. Download version {1} from the releases page and install it over the current one?"),
+                hint.Manager,
+                versionLabel);
+    }
+
+    /// <summary>
+    /// Package manager hint for a package-managed install, or null when this build is not
+    /// managed by one (portable/AppImage/Windows) or the distribution is unknown.
+    /// </summary>
+    private static (string Manager, string? UpgradeCommand)? ResolvePackageManagedHint()
+    {
+        if (!PackageManagedInstall.IsSystemInstall(AppContext.BaseDirectory))
+        {
+            return null;
+        }
+
+        try
+        {
+            const string osReleasePath = "/etc/os-release";
+            return System.IO.File.Exists(osReleasePath)
+                ? PackageManagedInstall.ResolveHint(System.IO.File.ReadAllText(osReleasePath))
+                : null;
+        }
+        catch (Exception)
+        {
+            // Best effort: an unreadable /etc/os-release just means the generic wording.
+            return null;
+        }
     }
 
     private bool TryApplyPendingRestartState()

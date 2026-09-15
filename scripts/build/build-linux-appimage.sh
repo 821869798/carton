@@ -148,18 +148,13 @@ resolve_appimagetool() {
 
 generate_desktop_file() {
   local desktop_file="$1"
-  cat >"$desktop_file" <<EOF
-[Desktop Entry]
-Type=Application
-Name=${APP_NAME}
-Comment=Cross-platform proxy client powered by sing-box
-Exec=${APP_BINARY_NAME}
-Icon=carton
-Terminal=false
-Categories=Network;
-StartupNotify=false
-StartupWMClass=carton
-EOF
+  # Single source of truth: the .deb/.rpm build uses the same file.
+  local source_file="${REPO_ROOT}/packaging/linux/carton.desktop"
+  if [[ ! -f "$source_file" ]]; then
+    echo "Desktop entry template not found: $source_file" >&2
+    exit 1
+  fi
+  cp -f "$source_file" "$desktop_file"
 }
 
 generate_apprun() {

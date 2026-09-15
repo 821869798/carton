@@ -16,6 +16,24 @@
 - 在不打乱主流程的前提下补上一些实用能力
 - 使用非 Electron / Tauri / Web 技术栈的桌面实现，内存占用更低、性能更好
 
+## 安装
+
+普通用户直接到 [Releases](https://github.com/821869798/carton/releases) 下载对应平台的包：
+
+| 平台 | 推荐文件 | 说明 |
+| --- | --- | --- |
+| Windows | `-win-x64-Setup.exe` | 安装版，支持应用内自动更新 |
+| Windows | `-win-x64-portable.zip` | 免安装，数据保存在程序目录 |
+| Ubuntu / Debian | `-linux-x64.deb` | `sudo apt install ./carton-<版本>-linux-x64.deb` |
+| Fedora / openSUSE | `-linux-x64.rpm` | `sudo dnf install ./carton-<版本>-linux-x64.rpm` |
+| Arch / CachyOS / EndeavourOS | AUR `carton-bin` | `yay -S carton-bin` |
+| 其他发行版 | `-linux-x64.AppImage` | 免安装；Ubuntu 24.04+ 需要额外装 `libfuse2` |
+| 其他发行版 | `-linux-x64-portable.tar.gz` | 解包即用，支持应用内自动更新 |
+
+用 `.deb` / `.rpm` / AUR 安装时，应用**不会自更新**（避免覆盖 `/usr` 下的文件、避免与包管理器数据库脱节）：
+应用内的"检查更新"仍然可用，检测到新版本时不再引导你去下载自更新，而是提示对应的升级方式
+（AUR 直接给出 `yay -Syu`，deb/rpm 提示下载新版安装包覆盖安装）。
+
 ## 配置复写说明
 
 `carton` 启动时不会直接整份覆盖你的 `sing-box` 配置，而是在原配置基础上生成运行时配置，只修改少量和桌面开关直接相关的内容。
@@ -145,6 +163,17 @@ scripts\build\build-release-win-x64.bat
 ```
 
 输出目录为 `artifacts/publish/<rid>`。
+
+生成 `.deb` / `.rpm`（包管理器托管，应用内不自更新）：
+
+```bash
+# 先用 INSTALLER_BUILD 发布（AppImage / .deb / .rpm 共用这一份）
+./scripts/build/test-publish-linux-aot.sh linux-x64 Release artifacts/publish/linux-x64-appimage INSTALLER_BUILD
+# 再打包（需要 nfpm，脚本会自动下载到 artifacts/tools/）
+./scripts/build/build-linux-packages.sh linux-x64 1.2.3 artifacts/publish/linux-x64-appimage
+```
+
+`linux-arm64` 同理，把 rid 换掉即可。
 
 仓库里已经包含多个运行时目标，现成脚本主要围绕 Windows AOT 构建流程整理。
 
