@@ -424,8 +424,10 @@
                 </Grid>
 
                 <Grid ColumnDefinitions="*,*,*" ColumnSpacing="16">
-                  <Border Classes="card sfmCard compact" Padding="14" Height="98">
-                    <Grid RowDefinitions="*,*,*">
+                  <!-- 状态三卡：标题与内容之间留 6px 空行（*,6,*,*），卡片高度同步 +6，
+                       内容行的位置和行高不变，只是标题下面多出 6px。三张卡保持一致。 -->
+                  <Border Classes="card sfmCard compact" Padding="14" Height="104">
+                    <Grid RowDefinitions="*,6,*,*">
                       <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                         <PathIcon Width="15"
                                   Height="15"
@@ -437,7 +439,7 @@
                                    VerticalAlignment="Center"/>
                       </StackPanel>
 
-                      <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="12" VerticalAlignment="Center">
+                      <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="12" VerticalAlignment="Center">
                         <TextBlock Text="{DynamicResource Dashboard.KernelMemory.MemoryUsage}"
                                    FontSize="12"
                                    VerticalAlignment="Center"
@@ -449,7 +451,7 @@
                                    HorizontalAlignment="Right"/>
                       </Grid>
 
-                      <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="12" VerticalAlignment="Center">
+                      <Grid Grid.Row="3" ColumnDefinitions="Auto,*" ColumnSpacing="12" VerticalAlignment="Center">
                         <TextBlock Text="{DynamicResource Dashboard.KernelStatus.Goroutines}"
                                    FontSize="12"
                                    VerticalAlignment="Center"
@@ -463,8 +465,8 @@
                     </Grid>
                   </Border>
 
-                  <Border Grid.Column="1" Classes="card sfmCard compact" Padding="14" Height="98">
-                    <Grid RowDefinitions="*,*,*">
+                  <Border Grid.Column="1" Classes="card sfmCard compact" Padding="14" Height="104">
+                    <Grid RowDefinitions="*,6,*,*">
                       <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                         <PathIcon Width="15"
                                   Height="15"
@@ -476,7 +478,7 @@
                                    VerticalAlignment="Center"/>
                       </StackPanel>
 
-                      <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="12" VerticalAlignment="Center">
+                      <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="12" VerticalAlignment="Center">
                         <TextBlock Text="{DynamicResource Dashboard.Connections.Inbound}"
                                    FontSize="12"
                                    VerticalAlignment="Center"
@@ -488,7 +490,7 @@
                                    HorizontalAlignment="Right"/>
                       </Grid>
 
-                      <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="12" VerticalAlignment="Center">
+                      <Grid Grid.Row="3" ColumnDefinitions="Auto,*" ColumnSpacing="12" VerticalAlignment="Center">
                         <TextBlock Text="{DynamicResource Dashboard.Connections.Outbound}"
                                    FontSize="12"
                                    VerticalAlignment="Center"
@@ -502,8 +504,8 @@
                     </Grid>
                   </Border>
 
-                  <Border Grid.Column="2" Classes="card sfmCard compact" Padding="14" Height="98">
-                    <Grid RowDefinitions="*,*,*">
+                  <Border Grid.Column="2" Classes="card sfmCard compact" Padding="14" Height="104">
+                    <Grid RowDefinitions="*,6,*,*">
                       <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
                         <PathIcon Grid.Column="0"
                                   Width="15"
@@ -529,7 +531,7 @@
                         </Button>
                       </Grid>
 
-                      <ItemsControl Grid.Row="1" Grid.RowSpan="2" ItemsSource="{Binding ConnectivityItems}">
+                      <ItemsControl Grid.Row="2" Grid.RowSpan="2" ItemsSource="{Binding ConnectivityItems}">
                         <ItemsControl.ItemsPanel>
                           <ItemsPanelTemplate>
                             <UniformGrid Rows="2"/>
@@ -557,7 +559,9 @@
                 </Grid>
 
                 <Border Classes="card sfmCard" Padding="14">
-                  <StackPanel Spacing="10">
+                  <!-- 出站模式卡：无固定高度（Auto），标题与内容间距由 Spacing 撑开；
+                       10 → 12，卡片高度随之自动 +2。 -->
+                  <StackPanel Spacing="12">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                       <PathIcon Width="15"
                                 Height="15"
