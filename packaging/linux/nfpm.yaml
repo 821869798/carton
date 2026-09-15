@@ -1,0 +1,102 @@
+# nfpm config for Carton's .deb and .rpm packages.
+#
+# This file is a TEMPLATE. nfpm itself does not expand ${...}, so
+# scripts/build/build-linux-packages.sh substitutes the placeholders and renders one copy per
+# packager -- needed because the version string and the architecture name differ between the
+# two formats, and nfpm's `overrides` cannot change `version`/`arch` (only
+# depends/recommends/contents/scripts/...).
+#
+# Placeholders:
+#   ${CARTON_VERSION}     deb: 1.2.3 or 1.2.3~beta.1   | rpm: 1.2.3
+#   ${CARTON_RELEASE}     deb: empty                   | rpm: 1 or 0.1.beta.1
+#   ${CARTON_ARCH}        deb: amd64/arm64             | rpm: x86_64/aarch64
+#   ${CARTON_STAGE}       staging root (usr/lib/carton, usr/share/...)
+#   ${CARTON_MAINTAINER} / ${CARTON_HOMEPAGE} / ${CARTON_LICENSE}
+
+name: carton
+arch: ${CARTON_ARCH}
+platform: linux
+# Debian-style versions (1.2.3~beta.1) are not semver, so validation is off: the script
+# hands nfpm a value that is already valid for the format being built.
+version: ${CARTON_VERSION}
+release: "${CARTON_RELEASE}"
+version_schema: none
+section: net
+priority: optional
+maintainer: ${CARTON_MAINTAINER}
+vendor: Carton
+homepage: ${CARTON_HOMEPAGE}
+license: ${CARTON_LICENSE}
+description: |
+  Carton - cross-platform proxy client powered by sing-box.
+  Ships its own sing-box kernel and supports TUN and system proxy modes.
+
+contents:
+  # The whole application, flat, next to the bundled sing-box kernel. The staging step in
+  # the build script already dropped carton-helper and .carton_portable_data.
+  - src: ${CARTON_STAGE}/usr/lib/carton
+    dst: /usr/lib/carton
+  - src: ${CARTON_STAGE}/usr/share/applications/carton.desktop
+    dst: /usr/share/applications/carton.desktop
+  - src: ${CARTON_STAGE}/usr/share/icons/hicolor/256x256/apps/carton.png
+    dst: /usr/share/icons/hicolor/256x256/apps/carton.png
+  # Only the launcher is on PATH. /usr/lib/carton/carton resolves to the real path at
+  # runtime, so the app's own "files next to the executable" lookups keep working.
+  - src: /usr/lib/carton/carton
+    dst: /usr/bin/carton
+    type: symlink
+
+overrides:
+  deb:
+    depends:
+      - libc6 (>= 2.31)
+      - libgcc-s1
+      - libstdc++6
+      - libx11-6
+      - libice6
+      - libsm6
+      - libxext6
+      - libxrandr2
+      - libxi6
+      - libxcursor1
+      - libxfixes3
+      - libxkbcommon0
+      - libxkbcommon-x11-0
+      - libfontconfig1
+      - libfreetype6
+      - libgl1
+      - libglx0
+      - libegl1
+      - libdbus-1-3
+      - zlib1g
+    recommends:
+      # Avalonia file pickers go through the XDG portal, with GTK as the fallback.
+      - libgtk-3-0
+      - xdg-desktop-portal
+      # TUN and system proxy modes prompt for a password with sudo.
+      - sudo
+  rpm:
+    depends:
+      - glibc
+      - libgcc
+      - libstdc++
+      - libX11
+      - libICE
+      - libSM
+      - libXext
+      - libXrandr
+      - libXi
+      - libXcursor
+      - libXfixes
+      - libxkbcommon
+      - libxkbcommon-x11
+      - fontconfig
+      - freetype
+      - mesa-libGL
+      - mesa-libEGL
+      - dbus-libs
+      - zlib
+    recommends:
+      - gtk3
+      - xdg-desktop-portal
+      - sudo

@@ -310,6 +310,12 @@ jobs:
             --icon "$icon_path" \
             --outputDir "$PACK_DIR"
 
+      - name: Package .deb and .rpm (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          bash scripts/build/build-linux-packages.sh "${{ matrix.rid }}" "$VERSION" "$PUBLISH_DIR_APPIMAGE" "$PACK_DIR"
+
       - name: Package with NSIS (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -349,7 +355,7 @@ jobs:
             cp -f "$appimage" "$release_dir/${APP_NAME}-${VERSION}-${{ matrix.rid }}.AppImage"
           done
 
-          for pattern in '*-portable.zip' '*-portable.tar.gz' '*.nupkg' 'releases*.json'; do
+          for pattern in '*-portable.zip' '*-portable.tar.gz' '*.deb' '*.rpm' '*.nupkg' 'releases*.json'; do
             for f in "$PACK_DIR"/$pattern; do
               [[ -f "$f" ]] || continue
               cp -f "$f" "$release_dir/$(basename "$f")"

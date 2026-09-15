@@ -6,7 +6,7 @@
 
 **Download based on your OS:**
 
-如果不确定下载哪个版本，Windows 用户优先选择 <a href="__BASE_URL__/__APP_NAME__-__VERSION__-win-x64-Setup.exe"><code>win-x64</code> 安装版</a>，Linux 用户优先选择 <a href="__BASE_URL__/__APP_NAME__-__VERSION__-linux-x64.AppImage"><code>linux-x64</code> AppImage 版</a>。
+如果不确定下载哪个版本，Windows 用户优先选择 <a href="__BASE_URL__/__APP_NAME__-__VERSION__-win-x64-Setup.exe"><code>win-x64</code> 安装版</a>；Linux 用户中 Ubuntu / Debian 优先 <a href="__BASE_URL__/__APP_NAME__-__VERSION__-linux-x64.deb"><code>linux-x64</code> deb 版</a>，Arch 用户可用 AUR 的 <code>carton-bin</code>，其他发行版用 AppImage。
 
 <table>
   <thead align="left">
@@ -29,8 +29,12 @@
       <td>Linux</td>
       <td>
         <a href="__BASE_URL__/__APP_NAME__-__VERSION__-linux-x64.AppImage"><img src="https://img.shields.io/badge/AppImage-x64-f84e29.svg?logo=linux" alt="Linux x64 AppImage"></a><br>
+        <a href="__BASE_URL__/__APP_NAME__-__VERSION__-linux-x64.deb"><img src="https://img.shields.io/badge/deb%2Fapt-x64-A81D33.svg?logo=debian" alt="Linux x64 deb"></a><br>
+        <a href="__BASE_URL__/__APP_NAME__-__VERSION__-linux-x64.rpm"><img src="https://img.shields.io/badge/rpm%2Fdnf-x64-294172.svg?logo=fedora" alt="Linux x64 rpm"></a><br>
         <a href="__BASE_URL__/__APP_NAME__-__VERSION__-linux-x64-portable.tar.gz"><img src="https://img.shields.io/badge/Portable-x64-FCC624.svg?logo=linux" alt="Linux x64 Portable"></a><br>
         <a href="__BASE_URL__/__APP_NAME__-__VERSION__-linux-arm64.AppImage"><img src="https://img.shields.io/badge/AppImage-ARM64-DD4814.svg?logo=linux" alt="Linux ARM64 AppImage"></a><br>
+        <a href="__BASE_URL__/__APP_NAME__-__VERSION__-linux-arm64.deb"><img src="https://img.shields.io/badge/deb%2Fapt-ARM64-A81D33.svg?logo=debian" alt="Linux ARM64 deb"></a><br>
+        <a href="__BASE_URL__/__APP_NAME__-__VERSION__-linux-arm64.rpm"><img src="https://img.shields.io/badge/rpm%2Fdnf-ARM64-294172.svg?logo=fedora" alt="Linux ARM64 rpm"></a><br>
         <a href="__BASE_URL__/__APP_NAME__-__VERSION__-linux-arm64-portable.tar.gz"><img src="https://img.shields.io/badge/Portable-ARM64-FFB000.svg?logo=linux" alt="Linux ARM64 Portable"></a>
       </td>
     </tr>

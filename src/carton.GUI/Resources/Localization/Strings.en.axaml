@@ -291,11 +291,14 @@
 	<x:String x:Key="Settings.Update.Status.Latest">You are up to date</x:String>
 	<x:String x:Key="Settings.Update.Status.Unsupported">Update service unavailable</x:String>
 	<x:String x:Key="Settings.Update.Status.ManualRequired">New version available. Download it from the releases page.</x:String>
+	<x:String x:Key="Settings.Update.Status.ManagedByPackageManager">New version available. Download the new package to upgrade.</x:String>
 	<x:String x:Key="Settings.Update.Status.OpenReleasesFailed">Failed to open releases page</x:String>
 	<x:String x:Key="Settings.Update.Status.DownloadFirst">Download the update first</x:String>
 	<x:String x:Key="Settings.Update.Status.Applying">Restarting to apply update...</x:String>
 	<x:String x:Key="Settings.Update.ManualDialog.Title">Manual update required</x:String>
 	<x:String x:Key="Settings.Update.ManualDialog.Message">Portable builds cannot update automatically. Open the releases page to download version {0}?</x:String>
+	<x:String x:Key="Settings.Update.ManualDialog.ManagedMessage">This build is managed by your package manager ({0}), so Carton cannot update itself. Download version {1} from the releases page and install it over the current one?</x:String>
+	<x:String x:Key="Settings.Update.ManualDialog.ManagedMessageWithCommand">This build is managed by your package manager, so Carton cannot update itself. Run {0} to upgrade to {1}?</x:String>
 	<x:String x:Key="Settings.Update.ManualDialog.OpenButton">Open Releases</x:String>
 	<x:String x:Key="Settings.Update.ManualDialog.LaterButton">Later</x:String>
   <x:String x:Key="Settings.Update.ApplyPrompt.Title">Update Ready</x:String>
