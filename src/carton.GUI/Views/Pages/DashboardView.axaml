@@ -142,7 +142,7 @@
             IsEnabled="{Binding CanUseDashboardControls}">
         <Border Grid.Column="0"
                 Classes="card sfmCard"
-                Padding="12"
+                Padding="14"
                 VerticalAlignment="Top">
           <StackPanel Spacing="8">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
@@ -279,7 +279,7 @@
 
         <Border Grid.Column="1"
                 Classes="card sfmCard"
-                Padding="12"
+                Padding="14"
                 VerticalAlignment="Top">
           <StackPanel Spacing="8">
             <StackPanel Orientation="Horizontal" Spacing="10">
@@ -314,7 +314,7 @@
       <!-- 配置列表独立成卡片。ListBox 自带虚拟化，且不再每行一个 RadioButton（Fluent 模板很重）。
            内核 Starting/Stopping 期间禁用：选择只在 Stopped|Error 才落盘，此时放行会让界面
            显示一个内核并没有在用的配置（看起来换了、实际没换）。 -->
-      <Border Classes="card sfmCard" Padding="12"
+      <Border Classes="card sfmCard" Padding="14"
               IsVisible="{Binding ShowStartupSelector}"
               IsEnabled="{Binding CanUseDashboardControls}">
         <StackPanel Spacing="10">
@@ -358,7 +358,7 @@
           <DataTemplate DataType="vm:DashboardViewModel">
             <StackPanel Spacing="12">
               <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
-                  <Border Classes="card sfmCard" Padding="12" Height="164">
+                  <Border Classes="card sfmCard" Padding="14" Height="164">
                     <StackPanel Spacing="8" VerticalAlignment="Center">
                       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
@@ -390,7 +390,7 @@
                     </StackPanel>
                   </Border>
 
-                  <Border Grid.Column="1" Classes="card sfmCard" Padding="12" Height="164">
+                  <Border Grid.Column="1" Classes="card sfmCard" Padding="14" Height="164">
                     <StackPanel Spacing="8" VerticalAlignment="Center">
                       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
@@ -424,7 +424,7 @@
                 </Grid>
 
                 <Grid ColumnDefinitions="*,*,*" ColumnSpacing="16">
-                  <Border Classes="card sfmCard compact" Padding="12" Height="98">
+                  <Border Classes="card sfmCard compact" Padding="14" Height="98">
                     <Grid RowDefinitions="*,*,*">
                       <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                         <PathIcon Width="15"
@@ -463,7 +463,7 @@
                     </Grid>
                   </Border>
 
-                  <Border Grid.Column="1" Classes="card sfmCard compact" Padding="12" Height="98">
+                  <Border Grid.Column="1" Classes="card sfmCard compact" Padding="14" Height="98">
                     <Grid RowDefinitions="*,*,*">
                       <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                         <PathIcon Width="15"
@@ -502,7 +502,7 @@
                     </Grid>
                   </Border>
 
-                  <Border Grid.Column="2" Classes="card sfmCard compact" Padding="12" Height="98">
+                  <Border Grid.Column="2" Classes="card sfmCard compact" Padding="14" Height="98">
                     <Grid RowDefinitions="*,*,*">
                       <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
                         <PathIcon Grid.Column="0"
@@ -556,7 +556,7 @@
                   </Border>
                 </Grid>
 
-                <Border Classes="card sfmCard" Padding="12">
+                <Border Classes="card sfmCard" Padding="14">
                   <StackPanel Spacing="10">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                       <PathIcon Width="15"
