@@ -35,6 +35,19 @@ public partial class MainViewModel : ViewModelBase
         _logStore.AddLog(message);
     }
 
+    /// <summary>
+    /// One line describing where this build came from, so a bug report states the package format
+    /// and the data directory instead of leaving both to guesswork.
+    /// </summary>
+    private static string BuildInstallSummary()
+    {
+        var appDirectory = AppContext.BaseDirectory;
+        var kind = InstallStamp.Slug(InstallStamp.Detect(appDirectory));
+        var portableData = File.Exists(Path.Combine(appDirectory, PathHelper.PortableMarkerFileName));
+        return $"[INFO] install: {kind}, data: {PathHelper.GetAppDataPath()} "
+             + $"({(portableData ? "portable" : "non-portable")})";
+    }
+
     private readonly LogStore _logStore;
     private readonly DispatcherTimer _transientPageUnloadTimer;
     private readonly DispatcherTimer _sessionDurationTimer;
@@ -225,6 +238,7 @@ public partial class MainViewModel : ViewModelBase
 
         _currentPage = DashboardViewModel;
         _logStore.AddLog("[DEBUG] Log pipeline initialized");
+        _logStore.AddLog(BuildInstallSummary());
         ConnectionStatus = _localizationService["Status.Disconnected"];
 
         _ = InitializeAsync();

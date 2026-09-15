@@ -98,6 +98,11 @@ package() {
     "$pkgdir/usr/lib/carton/.carton_portable_data" \
     "$pkgdir/usr/lib/carton/"*.pdb
 
+  # Packager stamp (see carton.Core.Utilities.InstallStamp): tells the running app it came from
+  # the AUR instead of a .deb/.rpm, which is what the update hint needs. makepkg is the packager
+  # here, so this is the only chance to write it.
+  printf 'aur\n' > "$pkgdir/usr/lib/carton/.carton_package"
+
   install -Dm644 "${srcdir}/carton.desktop" "$pkgdir/usr/share/applications/carton.desktop"
   install -Dm644 "${srcdir}/carton.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/carton.png"
 

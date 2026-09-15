@@ -180,6 +180,17 @@ CI 除 deb/rpm 外还会产出 `-package.tar.gz`（INSTALLER_BUILD 那一份，�
 但编译期常量 `IsPortableDistributionBuild` 修不了，设置页会多出一个在本安装方式下
 不可能生效的"数据存到程序目录"选项。
 
+### 安装包盖章（`.carton_package`）
+
+deb / rpm / AppImage 的打包步骤，以及 AUR 的 `PKGBUILD`，都会在可执行文件旁写一个单行
+`.carton_package`（内容 `deb` / `rpm` / `aur` / `appimage`），运行期由
+`carton.Core.Utilities.InstallStamp` 读取。它只用于两件事：启动日志里的一行
+（`[INFO] install: deb, data: /home/u/.config/Carton (non-portable)`）和更准的更新提示。
+
+盖章**只是辅助信息**：没有它时代码会回退到"程序目录在 /usr/ 下 + 读 /etc/os-release"
+的老推断（也就是盖章之前的行为），所以旧包、以及第三方重打包的包都不会退化。新增发行
+格式时记得在两处保持同步：`InstallStamp.Slug()` 与打包步骤里写入的值。
+
 仓库里已经包含多个运行时目标，现成脚本主要围绕 Windows AOT 构建流程整理。
 
 ## 项目定位

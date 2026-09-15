@@ -132,6 +132,25 @@ fi
 install -Dm644 "$DESKTOP_SOURCE" "${STAGE_DIR}/usr/share/applications/carton.desktop"
 install -Dm644 "$ICON_SOURCE" "${STAGE_DIR}/usr/share/icons/hicolor/256x256/apps/carton.png"
 
+# The packager's stamp (see carton.Core.Utilities.InstallStamp): the deb, the rpm and the AUR
+# package are otherwise indistinguishable at runtime - same directory, same payload. deb and rpm
+# share this staging directory, so the stamp is rewritten between the two nfpm runs.
+STAMP_PATH="${STAGE_DIR}/usr/lib/carton/.carton_package"
+
+write_stamp() {
+  printf '%s\n' "$1" > "$STAMP_PATH"
+}
+
+assert_stamp() {
+  local expected="$1"
+  local actual
+  actual="$(cat "$STAMP_PATH" 2>/dev/null || true)"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "Staged stamp is '${actual:-<missing>}', expected '${expected}'." >&2
+    exit 1
+  fi
+}
+
 resolve_nfpm() {
   if [[ -n "$NFPM_BIN" ]]; then
     if [[ ! -x "$NFPM_BIN" ]]; then
@@ -210,9 +229,13 @@ deb_target="${OUT_DIR}/${APP_NAME}-${VERSION}-${RID}.deb"
 rpm_target="${OUT_DIR}/${APP_NAME}-${VERSION}-${RID}.rpm"
 
 echo "Building ${deb_target}..."
+write_stamp deb
+assert_stamp deb
 "$NFPM_BIN" package --config "$deb_config" --packager deb --target "$deb_target"
 
 echo "Building ${rpm_target}..."
+write_stamp rpm
+assert_stamp rpm
 "$NFPM_BIN" package --config "$rpm_config" --packager rpm --target "$rpm_target"
 
 # The two files below must never reach a package: the first would let the app rewrite
@@ -222,6 +245,15 @@ if command -v dpkg-deb >/dev/null 2>&1; then
     echo "Refusing to ship ${deb_target}: payload still contains self-update files." >&2
     exit 1
   fi
+
+  # The rpm cannot be inspected here (no rpm tool in the build environment), so this is also the
+  # only chance to prove the staged stamp reached the package.
+  deb_stamp="$(dpkg-deb --fsys-tarfile "$deb_target" | tar -xO ./usr/lib/carton/.carton_package 2>/dev/null || true)"
+  if [[ "$deb_stamp" != "deb" ]]; then
+    echo "Refusing to ship ${deb_target}: expected stamp 'deb', found '${deb_stamp:-<missing>}'." >&2
+    exit 1
+  fi
+
   echo "--- dpkg-deb --info"
   dpkg-deb --info "$deb_target"
   echo "--- dpkg-deb --contents"

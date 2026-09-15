@@ -70,4 +70,6 @@ git add PKGBUILD .SRCINFO && git commit -m "upgpkg: carton-bin <ver>-1" && git p
   所以**发版的 tag 必须包含 `packaging/linux/carton.desktop`**（本次改动一起进仓库即可）。
 - 本地验证：`makepkg -si`，然后确认
   `pacman -Ql carton-bin | grep -E 'carton-helper|carton_portable_data'` **没有输出**
-  ——有输出说明自更新文件又混进去了；再打开设置页确认**没有**"数据保存到程序目录"这个选项。
+  ——有输出说明自更新文件又混进去了；再确认 `cat /usr/lib/carton/.carton_package` 输出为
+  `aur`（应用靠这个盖章才知道自己是 AUR 装的），并打开设置页确认**没有**"数据保存到
+  程序目录"这个选项。

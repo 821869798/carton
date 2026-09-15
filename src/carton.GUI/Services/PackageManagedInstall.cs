@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using carton.Core.Utilities;
 
 namespace carton.GUI.Services;
 
@@ -18,13 +19,14 @@ namespace carton.GUI.Services;
 /// (the AUR), so there the concrete upgrade command is correct.
 ///
 /// Kept free of IO and Avalonia types so carton.GUI.Tests can link this file the way
-/// DelayText and TestingTagRefCounts are linked: callers pass the app directory and the
-/// contents of /etc/os-release.
+/// DelayText and TestingTagRefCounts are linked: callers pass the app directory, the contents
+/// of /etc/os-release and the stamped <see cref="InstallKind"/>.
 /// </summary>
 internal static class PackageManagedInstall
 {
     // Packages install the application under /usr (deb/rpm: /usr/lib/carton, with
     // /usr/bin/carton as a symlink). Portable and AppImage builds never live there.
+    // Superseded by the stamp for stamped packages, kept for installs that predate it.
     internal static bool IsSystemInstall(string? appDirectory)
         => !string.IsNullOrWhiteSpace(appDirectory)
            && appDirectory.StartsWith("/usr/", StringComparison.Ordinal);
@@ -66,6 +68,43 @@ internal static class PackageManagedInstall
 
         return null;
     }
+
+    /// <summary>
+    /// Package manager hint for an installed build.
+    ///
+    /// <paramref name="stamp"/> comes from <see cref="InstallStamp.Detect"/> and decides whether
+    /// this is a package-managed install at all; <paramref name="isSystemDirectory"/> keeps the
+    /// pre-stamp behaviour working (a .deb/.rpm/AUR installed before stamping has no file to
+    /// read). The manager itself comes from the distribution, because that is what the user
+    /// actually runs, falling back to the stamped format when /etc/os-release is unreadable.
+    /// </summary>
+    internal static (string Manager, string? UpgradeCommand)? ResolveHint(
+        InstallKind stamp,
+        string? osRelease,
+        bool isSystemDirectory)
+    {
+        var stampedAsPackage = IsPackageManaged(stamp);
+        if (!stampedAsPackage && !(stamp == InstallKind.Unknown && isSystemDirectory))
+        {
+            return null;
+        }
+
+        return ResolveHint(osRelease) ?? (stampedAsPackage ? HintFromStamp(stamp) : null);
+    }
+
+    internal static bool IsPackageManaged(InstallKind kind)
+        => kind is InstallKind.Deb or InstallKind.Rpm or InstallKind.Aur;
+
+    // Only used when the distribution is unknown but the packager stamped a format: picking the
+    // family's default manager beats showing no guidance at all.
+    private static (string Manager, string? UpgradeCommand)? HintFromStamp(InstallKind kind)
+        => kind switch
+        {
+            InstallKind.Deb => ("apt", null),
+            InstallKind.Rpm => ("dnf", null),
+            InstallKind.Aur => ("AUR", "yay -Syu"),
+            _ => null
+        };
 
     // ID_LIKE carries the family for derivatives (Ubuntu -> debian, CachyOS -> arch,
     // Tumbleweed -> opensuse suse), so both keys are collected.

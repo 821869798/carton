@@ -738,27 +738,32 @@ public partial class AppUpdateCoordinator : ObservableObject
 
     /// <summary>
     /// Package manager hint for a package-managed install, or null when this build is not
-    /// managed by one (portable/AppImage/Windows) or the distribution is unknown.
+    /// managed by one (portable/AppImage/Windows). The packager's stamp decides when present;
+    /// for installs that predate it the app directory and /etc/os-release are used as before.
     /// </summary>
     private static (string Manager, string? UpgradeCommand)? ResolvePackageManagedHint()
     {
-        if (!PackageManagedInstall.IsSystemInstall(AppContext.BaseDirectory))
-        {
-            return null;
-        }
+        var appDirectory = AppContext.BaseDirectory;
+        var stamp = InstallStamp.Detect(appDirectory);
 
+        string? osRelease = null;
         try
         {
             const string osReleasePath = "/etc/os-release";
-            return System.IO.File.Exists(osReleasePath)
-                ? PackageManagedInstall.ResolveHint(System.IO.File.ReadAllText(osReleasePath))
-                : null;
+            if (System.IO.File.Exists(osReleasePath))
+            {
+                osRelease = System.IO.File.ReadAllText(osReleasePath);
+            }
         }
         catch (Exception)
         {
-            // Best effort: an unreadable /etc/os-release just means the generic wording.
-            return null;
+            // Best effort: without /etc/os-release the stamp still names the package manager.
         }
+
+        return PackageManagedInstall.ResolveHint(
+            stamp,
+            osRelease,
+            PackageManagedInstall.IsSystemInstall(appDirectory));
     }
 
     private bool TryApplyPendingRestartState()
