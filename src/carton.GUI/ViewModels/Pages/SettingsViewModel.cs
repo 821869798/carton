@@ -1118,7 +1118,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
             GetString("Settings.Kernel.DownloadFailedDialog.Title", "Kernel download failed"),
             GetString(
                 "Settings.Kernel.DownloadFailedDialog.Message",
-                "The kernel download stopped receiving data and was interrupted.\n\n{0}\n\nRetry now?"),
+                "The kernel download failed and was interrupted.\n\n{0}\n\nRetry now?"),
             GetString("Settings.Kernel.DownloadFailedDialog.RetryButton", "Retry"),
             GetString("Settings.Kernel.DownloadFailedDialog.CancelButton", "Cancel"),
             detail,

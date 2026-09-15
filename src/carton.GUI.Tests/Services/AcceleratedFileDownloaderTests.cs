@@ -6,9 +6,9 @@ using Xunit;
 
 namespace carton.GUI.Tests.Services;
 
+[Collection(DownloaderGlobalStateCollection.Name)]
 public sealed class AcceleratedFileDownloaderTests
-{
-    [Fact]
+{    [Fact]
     public async Task DownloadFileAsync_ThrowsWhenNoDataArrivesWithinTimeout()
     {
         await using var server = await TestHttpDownloadServer.StartAsync(
@@ -160,7 +160,57 @@ public sealed class AcceleratedFileDownloaderTests
         }
     }
 
-    private sealed record TestHttpRequest(string Method, long? RangeStart, string? UserAgent);
+    [Fact]
+    public async Task DownloadFileAsync_RoutesThroughTheDefaultProxy()
+    {
+        // Regression: the vendored Downloader builds its own SocketsHttpHandler, whose UseProxy is
+        // (RequestConfiguration.Proxy != null). Without explicit wiring the downloader ignored the
+        // system proxy that a plain HttpClient (every other carton request) honors.
+        const string downloadUrl = "http://proxied-origin.invalid/file.bin";
+        var content = new byte[] { 1, 2, 3, 4 };
+        string? requestTarget = null;
+
+        // This server plays the proxy: it answers absolute-URI request lines itself.
+        await using var proxy = await TestHttpDownloadServer.StartAsync(
+            async (request, stream, token) =>
+            {
+                requestTarget = request.Target;
+                await TestHttpDownloadServer.WriteResponseHeadersAsync(stream, HttpStatusCode.OK, content.Length, token);
+                await stream.WriteAsync(content, token);
+            });
+
+        var proxyAuthority = new Uri(proxy.Url).Authority;
+        var originalProxy = HttpClient.DefaultProxy;
+        HttpClient.DefaultProxy = new WebProxy($"http://{proxyAuthority}");
+
+        var targetFile = Path.Combine(Path.GetTempPath(), $"carton-download-test-{Guid.NewGuid():N}.bin");
+        try
+        {
+            using var httpClient = new HttpClient();
+            var downloader = new AcceleratedFileDownloader(
+                httpClient,
+                options: new FileDownloadOptions
+                {
+                    NoDataTimeout = TimeSpan.FromMilliseconds(500),
+                    MaxRetryAttempts = 0
+                });
+
+            // proxied-origin.invalid cannot resolve, so this only succeeds via the proxy — and the
+            // proxy address is the only place the file can come from.
+            await downloader.DownloadFileAsync(downloadUrl, targetFile);
+
+            Assert.Equal(content, await File.ReadAllBytesAsync(targetFile));
+            Assert.Equal(downloadUrl, requestTarget);
+        }
+        finally
+        {
+            HttpClient.DefaultProxy = originalProxy;
+            TryDelete(targetFile);
+            TryDelete(targetFile + ".download");
+        }
+    }
+
+    private sealed record TestHttpRequest(string Method, long? RangeStart, string? UserAgent, string? Target);
 
     private sealed class TestHttpDownloadServer : IAsyncDisposable
     {
@@ -272,7 +322,7 @@ public sealed class AcceleratedFileDownloaderTests
                 }
             }
 
-            return new TestHttpRequest("GET", null, null);
+            return new TestHttpRequest("GET", null, null, null);
         }
 
         private static TestHttpRequest ParseRequest(string text)
@@ -296,8 +346,11 @@ public sealed class AcceleratedFileDownloaderTests
 
             var userAgentLine = lines.FirstOrDefault(line => line.StartsWith("User-Agent:", StringComparison.OrdinalIgnoreCase));
             var userAgent = userAgentLine?[(userAgentLine.IndexOf(':') + 1)..].Trim();
+            var target = lines.Length == 0
+                ? null
+                : lines[0].Split(' ', StringSplitOptions.RemoveEmptyEntries).Skip(1).FirstOrDefault();
 
-            return new TestHttpRequest(method, rangeStart, userAgent);
+            return new TestHttpRequest(method, rangeStart, userAgent, target);
         }
 
         public async ValueTask DisposeAsync()
@@ -315,4 +368,16 @@ public sealed class AcceleratedFileDownloaderTests
             _shutdown.Dispose();
         }
     }
+}
+
+/// <summary>
+/// <see cref="AcceleratedFileDownloaderTests.DownloadFileAsync_RoutesThroughTheDefaultProxy"/> has to
+/// repoint <c>HttpClient.DefaultProxy</c>, which is process-wide: any test running concurrently would
+/// have its own loopback requests sent to the test proxy. xUnit runs a collection marked with
+/// <c>DisableParallelization</c> in isolation, so nothing else overlaps with that mutation.
+/// </summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class DownloaderGlobalStateCollection
+{
+    public const string Name = "downloader-global-state";
 }

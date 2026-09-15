@@ -569,7 +569,7 @@ public partial class AppUpdateCoordinator : ObservableObject
             GetString("Settings.Update.DownloadFailedDialog.Title", "Download failed"),
             GetString(
                 "Settings.Update.DownloadFailedDialog.Message",
-                "The update download stopped receiving data and was interrupted.\n\n{0}\n\nRetry now?"),
+                "The update download failed and was interrupted.\n\n{0}\n\nRetry now?"),
             GetString("Settings.Update.DownloadFailedDialog.RetryButton", "Retry"),
             GetString("Settings.Update.DownloadFailedDialog.CancelButton", "Cancel"),
             detail,

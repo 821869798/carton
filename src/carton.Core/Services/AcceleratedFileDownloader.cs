@@ -183,7 +183,17 @@ public sealed class AcceleratedFileDownloader
             KeepAlive = true,
             UserAgent = ResolveUserAgent(),
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
-            ConnectTimeout = (int)Math.Clamp(_options.NoDataTimeout.TotalMilliseconds, 1, int.MaxValue)
+            // Downloader's own SocketsHttpHandler computes UseProxy as (Proxy != null), so leaving
+            // this unset means "never use a proxy" — that is NOT the app's behaviour: a plain
+            // HttpClient (what every other carton request uses, and what this downloader used via
+            // CustomHttpClientFactory before the library owned its handler) falls back to
+            // HttpClient.DefaultProxy, i.e. the OS/WinINET proxy. Without this, anyone whose GitHub
+            // access depends on a system proxy cannot download the kernel at all.
+            Proxy = HttpClient.DefaultProxy,
+            // ConnectTimeout is deliberately left at the library default (30s) and must NOT be tied
+            // to NoDataTimeout: 5s covers a *stalled read* on an established connection, not a slow
+            // DNS/TCP/TLS/proxy handshake, and every connect that exceeded 5s surfaced as a bogus
+            // "no data received" failure.
         };
 
         if (_httpClient.DefaultRequestHeaders.Authorization != null)
