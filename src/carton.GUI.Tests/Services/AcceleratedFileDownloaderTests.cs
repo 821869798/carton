@@ -117,7 +117,50 @@ public sealed class AcceleratedFileDownloaderTests
         }
     }
 
-    private sealed record TestHttpRequest(string Method, long? RangeStart);
+    [Fact]
+    public async Task DownloadFileAsync_SendsParsedProductAndCommentUserAgentIntact()
+    {
+        // Regression: the app builds its UA with TryAddWithoutValidation, so reading it back yields
+        // two parsed parts ("carton/x.y" and "(sing-box ...)"). Re-joining those with ", " produced
+        // a value Downloader rejects in HttpHeaders.Add -> FormatException on every kernel download.
+        const string userAgent = "carton/0.6.2 (sing-box 1.14.0; sing-box/1.14.0)";
+        var content = new byte[] { 1, 2, 3, 4 };
+        string? seenUserAgent = null;
+
+        await using var server = await TestHttpDownloadServer.StartAsync(
+            async (request, stream, token) =>
+            {
+                seenUserAgent = request.UserAgent;
+                await TestHttpDownloadServer.WriteResponseHeadersAsync(stream, HttpStatusCode.OK, content.Length, token);
+                await stream.WriteAsync(content, token);
+            });
+
+        var targetFile = Path.Combine(Path.GetTempPath(), $"carton-download-test-{Guid.NewGuid():N}.bin");
+        using var httpClient = new HttpClient();
+        httpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", userAgent);
+        var downloader = new AcceleratedFileDownloader(
+            httpClient,
+            options: new FileDownloadOptions
+            {
+                NoDataTimeout = TimeSpan.FromMilliseconds(500),
+                MaxRetryAttempts = 0
+            });
+
+        try
+        {
+            await downloader.DownloadFileAsync(server.Url, targetFile);
+
+            Assert.Equal(content, await File.ReadAllBytesAsync(targetFile));
+            Assert.Equal(userAgent, seenUserAgent);
+        }
+        finally
+        {
+            TryDelete(targetFile);
+            TryDelete(targetFile + ".download");
+        }
+    }
+
+    private sealed record TestHttpRequest(string Method, long? RangeStart, string? UserAgent);
 
     private sealed class TestHttpDownloadServer : IAsyncDisposable
     {
@@ -229,7 +272,7 @@ public sealed class AcceleratedFileDownloaderTests
                 }
             }
 
-            return new TestHttpRequest("GET", null);
+            return new TestHttpRequest("GET", null, null);
         }
 
         private static TestHttpRequest ParseRequest(string text)
@@ -251,7 +294,10 @@ public sealed class AcceleratedFileDownloaderTests
                 }
             }
 
-            return new TestHttpRequest(method, rangeStart);
+            var userAgentLine = lines.FirstOrDefault(line => line.StartsWith("User-Agent:", StringComparison.OrdinalIgnoreCase));
+            var userAgent = userAgentLine?[(userAgentLine.IndexOf(':') + 1)..].Trim();
+
+            return new TestHttpRequest(method, rangeStart, userAgent);
         }
 
         public async ValueTask DisposeAsync()

@@ -209,15 +209,19 @@ public sealed class AcceleratedFileDownloader
 
     private void AddRequestHeader(RequestConfiguration request, string name, IEnumerable<string> values)
     {
-        var value = string.Join(", ", values);
-        if (string.IsNullOrWhiteSpace(value))
+        // User-Agent is already set from ResolveUserAgent(), which joins the parsed header parts
+        // with spaces. Re-deriving it here would use the comma separator below and produce
+        // "carton/x.y, (sing-box ...)"; Downloader validates the value with HttpHeaders.Add, whose
+        // User-Agent parser rejects a comment after a comma, so every download died immediately
+        // with a FormatException.
+        if (string.Equals(name, "User-Agent", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        if (string.Equals(name, "User-Agent", StringComparison.OrdinalIgnoreCase))
+        var value = string.Join(", ", values);
+        if (string.IsNullOrWhiteSpace(value))
         {
-            request.UserAgent = value;
             return;
         }
 
