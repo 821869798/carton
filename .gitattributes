@@ -13,6 +13,13 @@
 *.yml text
 *.sh text
 
+# Shell scripts and packager metadata must stay LF even on Windows: CRLF turns
+# `set -euo pipefail` into `pipefail\r` and the script dies ("invalid option name").
+# Linux build scripts are routinely run from a Windows checkout through WSL.
+*.sh text eol=lf
+PKGBUILD text eol=lf
+*.desktop text eol=lf
+
 # Windows-specific
 *.bat text eol=crlf
 *.cmd text eol=crlf
