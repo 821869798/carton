@@ -26,7 +26,15 @@ public partial class GroupsViewModel : PageViewModelBase
     private readonly SemaphoreSlim _loadSemaphore = new(1, 1);
     private readonly ProxyModeCacheService _proxyModeCache;
     private readonly ObservableCollection<OutboundItemViewModel> _expandedProxyItems = new();
-    private readonly HashSet<string> _testingOutboundTags = new(StringComparer.OrdinalIgnoreCase);
+    private readonly TestingTagRefCounts _testingOutboundRefCounts = new();
+    // Groups whose test window is still open, so a rebuilt GroupItemViewModel can restore its spinner.
+    private readonly HashSet<string> _groupsWithTestInFlight = new(StringComparer.OrdinalIgnoreCase);
+    // Bumped when the kernel stops so an in-flight wait from the previous run cannot
+    // release tags / restore spinners onto the next session.
+    // Plain int on purpose: every access is on the UI thread (the stop handler goes through
+    // Dispatcher.UIThread.Post, and the captures/compares live in VM methods that run on the UI
+    // thread), so Interlocked/volatile would add nothing. Revisit if any of those move off it.
+    private int _testSession;
     private readonly Dictionary<string, (int Version, IReadOnlyList<OutboundCacheSnapshot> Items)> _collapsedPreviewCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, GroupMenuSnapshot> _trayGroupLookupBuffer = new(StringComparer.OrdinalIgnoreCase);
 
@@ -329,6 +337,14 @@ public partial class GroupsViewModel : PageViewModelBase
             _lastNavigationApiRefreshAt = null;
             Dispatcher.UIThread.Post(() =>
             {
+                _testSession++;
+                _groupsWithTestInFlight.Clear();
+                _testingOutboundRefCounts.Clear();
+                lock (_groupTestGenerations)
+                {
+                    _groupTestGenerations.Clear();
+                }
+
                 ReleaseViewGroups();
                 _expandedGroupName = null;
                 _cachedGroups = Array.Empty<GroupCacheSnapshot>();
@@ -556,7 +572,7 @@ public partial class GroupsViewModel : PageViewModelBase
         // test is in flight the intermediate snapshots would rebuild it dozens of
         // times for values that are about to be replaced anyway; the final refresh
         // after the test completes catches it up.
-        if (_testingOutboundTags.Count == 0)
+        if (_testingOutboundRefCounts.Count == 0)
         {
             UpdateTrayGroupsFromCache();
         }
@@ -1212,7 +1228,7 @@ public partial class GroupsViewModel : PageViewModelBase
         }
 
         // Tray catch-up follows the same suppression rule as the full path.
-        if (_testingOutboundTags.Count == 0)
+        if (_testingOutboundRefCounts.Count == 0)
         {
             UpdateTrayGroupsFromCache();
         }
@@ -1230,27 +1246,43 @@ public partial class GroupsViewModel : PageViewModelBase
             return;
         }
 
+        var session = _testSession;
         SetOutboundTestingState(item.Tag, true);
 
         try
         {
             var delays = await _singBoxManager.RunOutboundDelayTestsAsync(new[] { item.Tag });
+            if (session != _testSession)
+            {
+                return;
+            }
+
             var delay = delays.TryGetValue(item.Tag, out var value) && value > 0 ? value : 0;
             UpdateCachedRawDelay(item.Tag, delay, delay <= 0);
             RecalculateEffectiveDelays();
         }
         catch (Exception ex)
         {
+            if (session != _testSession)
+            {
+                return;
+            }
+
             Debug.WriteLine($"Failed to test {item.Tag}: {ex.Message}");
             UpdateCachedRawDelay(item.Tag, 0);
             RecalculateEffectiveDelays();
         }
         finally
         {
-            SetOutboundTestingState(item.Tag, false);
-            // Delay-test suppression above skipped tray rebuilds while this node was
-            // testing; catch the tray up now that the final value is in cache.
-            UpdateTrayGroupsFromCache();
+            // No `return` from a finally (CS0157): guard the cleanup instead. A kernel stop
+            // already cleared this session's counts, so there is nothing left to release.
+            if (session == _testSession)
+            {
+                SetOutboundTestingState(item.Tag, false);
+                // Delay-test suppression above skipped tray rebuilds while this node was
+                // testing; catch the tray up now that the final value is in cache.
+                UpdateTrayGroupsFromCache();
+            }
         }
     }
 
@@ -1411,15 +1443,21 @@ public partial class GroupsViewModel : PageViewModelBase
 
         // One generation per click: repeated clicks are allowed (the official clients
         // have no guard at all) and each click supersedes the previous test window.
-        int generation;
-        lock (_groupTestGenerations)
-        {
-            generation = _groupTestGenerations[group.Name] = _groupTestGenerations.GetValueOrDefault(group.Name) + 1;
-        }
-
+        // Capture session + bump generation on the same UI turn as Acquire so a kernel
+        // stop in between cannot pair a new-session acquire with an old-session finish.
+        int generation = 0;
+        var session = 0;
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            group.IsTesting = true;
+            session = _testSession;
+            lock (_groupTestGenerations)
+            {
+                generation = _groupTestGenerations[group.Name] = _groupTestGenerations.GetValueOrDefault(group.Name) + 1;
+                _groupsWithTestInFlight.Add(group.Name);
+            }
+
+            var currentGroup = FindGroupByName(group.Name) ?? group;
+            currentGroup.IsTesting = true;
             foreach (var item in targets)
             {
                 SetOutboundTestingState(item.Tag, true);
@@ -1436,7 +1474,7 @@ public partial class GroupsViewModel : PageViewModelBase
         // state at all. Only members that still have no value keep their "..." (see
         // DelayText), and the wait below decides their final "Timeout".
         var waitTask = _singBoxManager.RunGroupDelayTestAsync(group.Name, timeoutMs: waitBudgetMs);
-        _ = FinishGroupTestAsync(group, targets, waitTask, generation);
+        _ = FinishGroupTestAsync(group, targets, waitTask, generation, session);
     }
 
     /// <summary>
@@ -1449,7 +1487,8 @@ public partial class GroupsViewModel : PageViewModelBase
         GroupItemViewModel group,
         List<OutboundItemViewModel> targets,
         Task<Dictionary<string, int>> waitTask,
-        int generation)
+        int generation,
+        int session)
     {
         try
         {
@@ -1463,25 +1502,42 @@ public partial class GroupsViewModel : PageViewModelBase
         {
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                // A newer click on the same group owns the spinner and the dots now:
-                // this older window must not clear them.
+                if (session != _testSession)
+                {
+                    // Kernel stopped (and possibly restarted) while this window was waiting:
+                    // OnServiceStatusChanged already cleared the session's counts.
+                    return;
+                }
+
+                // Release the references THIS window acquired, unconditionally: the ref count is
+                // what decides whether a node may stop showing "..." (another in-flight test may
+                // still own it). Gating the release on the generation below would leak a
+                // reference on every repeated click and leave timed-out nodes stuck on "..."
+                // (and the tray suppressed) forever.
+                foreach (var item in targets)
+                {
+                    SetOutboundTestingState(item.Tag, false);
+                }
+
+                // A newer click on the same group owns the group-level state now: this older
+                // window must not clear its spinner or refresh the tray.
                 lock (_groupTestGenerations)
                 {
                     if (_groupTestGenerations.GetValueOrDefault(group.Name) != generation)
                     {
                         return;
                     }
+
+                    _groupsWithTestInFlight.Remove(group.Name);
                 }
 
-                // Members that never reported (a failing node with no history pushes
-                // nothing at all) stop showing dots here and fall back to the
-                // "Timeout" mark the merge path set for them.
-                foreach (var item in targets)
+                // Resolve the group through the CURRENT view list: a cache refresh/navigation
+                // may have replaced the GroupItemViewModel instance this task started with.
+                var currentGroup = FindGroupByName(group.Name);
+                if (currentGroup != null)
                 {
-                    SetOutboundTestingState(item.Tag, false);
+                    currentGroup.IsTesting = false;
                 }
-
-                group.IsTesting = false;
 
                 // Delay-test suppression above skipped tray rebuilds while members
                 // were testing; catch the tray up now that the final values are in.
@@ -1642,6 +1698,9 @@ public partial class GroupsViewModel : PageViewModelBase
                 Type = cachedGroup.Type,
                 SelectedOutbound = cachedGroup.SelectedOutbound,
                 ItemCount = cachedGroup.Items.Count,
+                // A test window can outlive a cache refresh (1 min expiry vs a multi-minute
+                // budget): keep showing its spinner on the rebuilt card.
+                IsTesting = _groupsWithTestInFlight.Contains(cachedGroup.Name),
                 CollapsedPreviewItems = GetOrCreateCollapsedPreviewItems(cachedGroup.Name, cachedGroup.Items),
                 Items = Array.Empty<OutboundItemViewModel>(),
                 IsExpanded = false
@@ -2262,7 +2321,7 @@ public partial class GroupsViewModel : PageViewModelBase
             viewModel.IsSelected = item.IsSelected;
         }
 
-        var isTesting = _testingOutboundTags.Contains(item.Tag);
+        var isTesting = IsOutboundTesting(item.Tag);
         var testingStateChanged = viewModel.IsTesting != isTesting;
         if (testingStateChanged)
         {
@@ -2333,7 +2392,7 @@ public partial class GroupsViewModel : PageViewModelBase
         // nodes in auto/netflix as timed out just because some group is testing.
         // A tag can appear in several groups; if it is being tested it is being
         // tested everywhere it appears.
-        if (existingItem.RawDelay != 0 || _testingOutboundTags.Contains(existingItem.Tag))
+        if (existingItem.RawDelay != 0 || IsOutboundTesting(existingItem.Tag))
         {
             existingItem.IsDelayTimeout = true;
             SyncExpandedItemTimeout(existingItem.Tag, true);
@@ -2382,6 +2441,18 @@ public partial class GroupsViewModel : PageViewModelBase
         }
     }
 
+    /// <summary>True while any in-flight test owns <paramref name="tag"/>.</summary>
+    private bool IsOutboundTesting(string tag)
+    {
+        return _testingOutboundRefCounts.Contains(tag);
+    }
+
+    /// <summary>
+    /// Adds/removes one owner of the per-node test state. Ref-counted (see TestingTagRefCounts) so
+    /// overlapping tests - two groups sharing a node, or a group test plus that node's own test -
+    /// keep the "..." / IsTesting state until the last one finishes; only the 0 &lt;-&gt; 1
+    /// transitions touch the UI.
+    /// </summary>
     private void SetOutboundTestingState(string tag, bool isTesting)
     {
         if (string.IsNullOrWhiteSpace(tag))
@@ -2389,13 +2460,13 @@ public partial class GroupsViewModel : PageViewModelBase
             return;
         }
 
-        if (isTesting)
+        var visibleStateChanged = isTesting
+            ? _testingOutboundRefCounts.Acquire(tag)
+            : _testingOutboundRefCounts.Release(tag);
+        if (!visibleStateChanged)
         {
-            _testingOutboundTags.Add(tag);
-        }
-        else
-        {
-            _testingOutboundTags.Remove(tag);
+            // Already flagged by another in-flight test, or released something we never owned.
+            return;
         }
 
         for (var i = 0; i < _expandedProxyItems.Count; i++)

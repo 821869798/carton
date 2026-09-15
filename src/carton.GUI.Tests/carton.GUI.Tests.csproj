@@ -27,6 +27,7 @@
     <Compile Include="..\carton.GUI\Controls\JsonSyntax.cs" Link="Controls\JsonSyntax.cs" />
     <Compile Include="..\carton.GUI\Controls\JsonEditHistory.cs" Link="Controls\JsonEditHistory.cs" />
     <Compile Include="..\carton.GUI\ViewModels\Pages\DelayText.cs" Link="ViewModels\Pages\DelayText.cs" />
+    <Compile Include="..\carton.GUI\ViewModels\Pages\TestingTagRefCounts.cs" Link="ViewModels\Pages\TestingTagRefCounts.cs" />
   </ItemGroup>
 
   <ItemGroup>

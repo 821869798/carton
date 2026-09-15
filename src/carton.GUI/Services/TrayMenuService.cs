@@ -149,20 +149,26 @@ public sealed class TrayMenuService : IDisposable
     }
 
     /// <summary>
-    /// Re-registers the tray item with the current host. Called by the Linux watchdog and safe
-    /// to call at any time: it is a no-op unless the icon is actually visible, and never runs
-    /// twice at the same time. Never throws.
+    /// Re-registers the tray item with the current host. Called by the Linux watchdog (on the UI
+    /// thread, via Dispatcher.Post). Must be called on the UI thread: it touches TrayIcon state.
+    /// Never throws; a no-op unless the icon is actually visible, and never runs twice at once.
     /// </summary>
     internal void ReRegisterTrayIcon(string reason)
     {
+        var icon = _trayIcon;
+        if (!_isInitialized || icon is not { IsVisible: true })
+        {
+            return;
+        }
+
+        if (Interlocked.Exchange(ref _trayReRegisterPending, 1) == 1)
+        {
+            // Someone else owns the flag; it will clear it when done.
+            return;
+        }
+
         try
         {
-            var icon = _trayIcon;
-            if (!_isInitialized || icon is not { IsVisible: true } || Interlocked.Exchange(ref _trayReRegisterPending, 1) == 1)
-            {
-                return;
-            }
-
             icon.IsVisible = false;
             icon.IsVisible = true;
             _mainViewModel?.Log($"[INFO] Re-registered tray icon ({reason})");
@@ -186,7 +192,10 @@ public sealed class TrayMenuService : IDisposable
         {
             Icon = new WindowIcon(AssetLoader.Open(iconUri)),
             ToolTipText = _localizationService["App.Name"],
-            Menu = menu
+            Menu = menu,
+            // Explicit rather than inherited from Visual.IsVisible (default true): the Linux
+            // watchdog only re-registers a visible icon, so this must never be false by accident.
+            IsVisible = true
         };
 
         icon.Clicked += OnTrayIconClicked;

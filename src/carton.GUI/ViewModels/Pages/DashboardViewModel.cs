@@ -53,6 +53,10 @@ public partial class DashboardViewModel : PageViewModelBase
     private bool _suppressRuntimeOptionUpdates;
     private bool _suppressSystemProxyApply;
     private DashboardRuntimeOperation _runtimeOperation = DashboardRuntimeOperation.None;
+    // Default true: the dashboard is the startup page, and MainViewModel assigns _currentPage
+    // directly (SelectedPage's initial value is already Dashboard), so OnSelectedPageChanged -
+    // and with it OnNavigatedTo - never fires for the initial page. Keep these true, or
+    // UpdateLiveRefreshState() would stay off until the user navigates away and back.
     private bool _isOnPage = true;
     private bool _isWindowVisible = true;
     private bool _isLiveRefreshActive;
