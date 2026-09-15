@@ -149,7 +149,7 @@ jobs:
           WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WINGET_GITHUB_TOKEN)) {
-            throw "Missing repository secret WINGET_GITHUB_TOKEN. Create a GitHub PAT (classic) with public_repo scope and save it as this secret."
+            throw "Missing repository secret WINGET_GITHUB_TOKEN. Create a GitHub PAT (classic) with 'public_repo' and 'workflow' scopes and save it as this secret."
           }
 
       - name: Sync upstream winget-pkgs fork
@@ -180,7 +180,19 @@ jobs:
             $syncResult = Invoke-RestMethod -Uri $syncUri -Headers $headers -Method Post -Body $body -ContentType "application/json"
             Write-Host "Fork sync result: $($syncResult.message)"
           } catch {
-            Write-Warning "Could not automatically sync fork with upstream: $($_.Exception.Message). Continuing anyway..."
+            $errDetail = $_.Exception.Message
+            if ($_.Exception.Response) {
+              try {
+                $stream = $_.Exception.Response.GetResponseStream()
+                $reader = New-Object System.IO.StreamReader($stream)
+                $errDetail = $reader.ReadToEnd()
+              } catch {}
+            }
+            if ($errDetail -match "422" -or $_.Exception.Message -match "422") {
+              Write-Warning "Could not automatically sync fork with upstream (422 Unprocessable Entity). Upstream likely contains workflow updates which require the 'workflow' scope on WINGET_GITHUB_TOKEN. Detail: $errDetail"
+            } else {
+              Write-Warning "Could not automatically sync fork with upstream: $errDetail. Continuing anyway..."
+            }
           }
 
       - name: Setup .NET runtime
