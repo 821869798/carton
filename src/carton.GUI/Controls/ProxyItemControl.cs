@@ -210,11 +210,15 @@ public sealed class ProxyItemControl : Control
 
         if (item.ShowDelayText)
         {
-            var delayBrush = item.IsTesting
-                ? GetBrush("CartonControlForegroundBaseMediumBrush", Brushes.Gray)
-                : item.IsDelayTimeout
-                    ? TimeoutLatencyBrush
-                : ResolveLatencyBrush(item.Delay);
+            // Colour comes from the SAME state as the text (DelayState), never from an
+            // independent if-chain: IsDelayTimeout is set while a node's own test is
+            // still running, and reading it here used to paint the "..." dots pink.
+            var delayBrush = item.DelayState switch
+            {
+                DelayState.Latency => ResolveLatencyBrush(item.Delay),
+                DelayState.Timeout => TimeoutLatencyBrush,
+                _ => GetBrush("CartonControlForegroundBaseMediumBrush", Brushes.Gray),
+            };
             var layout = _delayText.Get(item.DelayDisplay, DelayTypeface, 11, delayBrush, Math.Max(0, rect.Width - 10));
             var point = new Point(
                 rect.X + Math.Max(0, (rect.Width - layout.Width) / 2),

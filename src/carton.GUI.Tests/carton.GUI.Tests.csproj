@@ -26,6 +26,7 @@
     <Compile Include="..\carton.GUI\Services\KernelCacheCleanupService.cs" Link="Services\KernelCacheCleanupService.cs" />
     <Compile Include="..\carton.GUI\Controls\JsonSyntax.cs" Link="Controls\JsonSyntax.cs" />
     <Compile Include="..\carton.GUI\Controls\JsonEditHistory.cs" Link="Controls\JsonEditHistory.cs" />
+    <Compile Include="..\carton.GUI\ViewModels\Pages\DelayText.cs" Link="ViewModels\Pages\DelayText.cs" />
   </ItemGroup>
 
   <ItemGroup>

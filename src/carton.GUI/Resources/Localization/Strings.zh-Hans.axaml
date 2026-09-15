@@ -34,8 +34,11 @@
   <x:String x:Key="Navigation.Connections">连接</x:String>
   <x:String x:Key="Navigation.Logs">日志</x:String>
   <x:String x:Key="Navigation.Settings">设置</x:String>
-  <x:String x:Key="Groups.Status.WaitingForSingBoxStart">等待 sing-box 启动</x:String>
   <x:String x:Key="Groups.Label.Current">当前：</x:String>
+  <x:String x:Key="Groups.Empty.KernelStopped.Title">未启动内核</x:String>
+  <x:String x:Key="Groups.Empty.KernelStopped.Description">启动内核后，这里会显示节点分组和延迟。</x:String>
+  <x:String x:Key="Groups.Empty.NoGroups.Title">当前配置没有分组</x:String>
+  <x:String x:Key="Groups.Empty.NoGroups.Description">检查配置里的 outbounds，或切换到其他配置。</x:String>
   <x:String x:Key="Connections.Button.CloseAll">关闭全部</x:String>
   <x:String x:Key="Connections.Button.Close">关闭</x:String>
   <x:String x:Key="Connections.Search.Watermark">搜索连接...</x:String>

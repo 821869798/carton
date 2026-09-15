@@ -12,33 +12,27 @@
              x:Class="carton.Views.Pages.GroupsView"
              x:DataType="vm:GroupsViewModel">
 
-  <Grid RowDefinitions="Auto,Auto,*">
+  <Grid RowDefinitions="Auto,*">
     <Border Grid.Row="0"
             Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"
-            Padding="16">
-      <StackPanel Orientation="Horizontal" Spacing="12">
+            BorderBrush="{DynamicResource CartonControlForegroundBaseLowBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="12,10">
+      <StackPanel Orientation="Horizontal" Spacing="8">
         <TextBlock Text="{DynamicResource Navigation.Groups}"
-                   FontSize="24"
-                   FontWeight="SemiBold"/>
+                   FontSize="18"
+                   FontWeight="SemiBold"
+                   VerticalAlignment="Center"/>
         <ProgressBar Width="80"
                      Height="4"
                      IsVisible="{Binding IsLoading}"
                      IsIndeterminate="True"
-                     Margin="12,0,0,0"/>
+                     VerticalAlignment="Center"/>
       </StackPanel>
     </Border>
 
-    <Border Grid.Row="1"
-            IsVisible="{Binding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-            Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"
-            BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
-            BorderThickness="0,0,0,1"
-            Padding="10,6">
-      <TextBlock Text="{Binding StatusMessage}"
-                 VerticalAlignment="Center"/>
-    </Border>
-
-    <ScrollViewer Grid.Row="2"
+    <ScrollViewer Grid.Row="1"
+                  IsVisible="{Binding !ShowEmptyState}"
                   Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}">
       <ItemsControl Margin="16,8,16,12"
                     ItemsSource="{Binding Groups}">
@@ -119,13 +113,40 @@
                     <Grid MinWidth="28"
                           Height="16"
                           VerticalAlignment="Center">
-                      <TextBlock Text="..."
-                                 IsVisible="{Binding IsTesting}"
-                                 VerticalAlignment="Center"
-                                 HorizontalAlignment="Center"
-                                 FontSize="11"
-                                 FontWeight="SemiBold"
-                                 Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
+                      <!-- Spinning arc while this group's test is in flight. The animation is
+                           keyed on the class, not just IsVisible: a style animation runs from
+                           the moment its selector matches, so an always-present animation would
+                           keep the whole page's compositor busy even while idle. -->
+                      <Path Width="13"
+                            Height="13"
+                            IsVisible="{Binding IsTesting}"
+                            Classes.testing="{Binding IsTesting}"
+                            Stretch="Uniform"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            RenderTransformOrigin="50%,50%"
+                            Stroke="{DynamicResource CartonControlForegroundBaseMediumBrush}"
+                            StrokeThickness="2.4"
+                            StrokeLineCap="Round"
+                            Data="M 12 3 A 9 9 0 1 1 3 12">
+                        <Path.RenderTransform>
+                          <RotateTransform/>
+                        </Path.RenderTransform>
+                        <Path.Styles>
+                          <Style Selector="Path.testing">
+                            <Style.Animations>
+                              <Animation Duration="0:0:0.9" IterationCount="INFINITE">
+                                <KeyFrame Cue="0%">
+                                  <Setter Property="RotateTransform.Angle" Value="0"/>
+                                </KeyFrame>
+                                <KeyFrame Cue="100%">
+                                  <Setter Property="RotateTransform.Angle" Value="360"/>
+                                </KeyFrame>
+                              </Animation>
+                            </Style.Animations>
+                          </Style>
+                        </Path.Styles>
+                      </Path>
                       <Path Width="14"
                             Height="14"
                             IsVisible="{Binding !IsTesting}"
@@ -274,6 +295,54 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
     </ScrollViewer>
+
+    <!-- Empty state: the kernel is not up yet (or was stopped), versus up but the
+         loaded profile has no outbound groups. Centred icon + explanation only; the
+         kernel itself is started from the sidebar toggle, so this page owns no
+         second start path. -->
+    <StackPanel Grid.Row="1"
+                IsVisible="{Binding ShowEmptyState}"
+                MaxWidth="320"
+                Spacing="10"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+      <Border Width="56"
+              Height="56"
+              CornerRadius="16"
+              HorizontalAlignment="Center"
+              Background="{DynamicResource CartonControlBackgroundBaseLowBrush}">
+        <PathIcon Width="24"
+                  Height="24"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Foreground="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
+                  Data="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42A6.92 6.92 0 0 1 19 12c0 3.87-3.13 7-7 7A6.995 6.995 0 0 1 7.58 6.58L6.17 5.17A8.932 8.932 0 0 0 3 12a9 9 0 0 0 18 0c0-2.74-1.23-5.18-3.17-6.83z"/>
+      </Border>
+
+      <TextBlock IsVisible="{Binding ShowKernelStoppedState}"
+                 Text="{DynamicResource Groups.Empty.KernelStopped.Title}"
+                 FontSize="15"
+                 FontWeight="SemiBold"
+                 HorizontalAlignment="Center"/>
+      <TextBlock IsVisible="{Binding ShowKernelStoppedState}"
+                 Text="{DynamicResource Groups.Empty.KernelStopped.Description}"
+                 FontSize="12"
+                 TextWrapping="Wrap"
+                 TextAlignment="Center"
+                 Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
+
+      <TextBlock IsVisible="{Binding ShowNoGroupsState}"
+                 Text="{DynamicResource Groups.Empty.NoGroups.Title}"
+                 FontSize="15"
+                 FontWeight="SemiBold"
+                 HorizontalAlignment="Center"/>
+      <TextBlock IsVisible="{Binding ShowNoGroupsState}"
+                 Text="{DynamicResource Groups.Empty.NoGroups.Description}"
+                 FontSize="12"
+                 TextWrapping="Wrap"
+                 TextAlignment="Center"
+                 Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
+    </StackPanel>
   </Grid>
 
 </UserControl>

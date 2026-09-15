@@ -34,8 +34,10 @@
   <x:String x:Key="Navigation.Connections">Connections</x:String>
   <x:String x:Key="Navigation.Logs">Logs</x:String>
   <x:String x:Key="Navigation.Settings">Settings</x:String>
-  <x:String x:Key="Groups.Status.WaitingForSingBoxStart">Waiting for sing-box to start</x:String>
-  <x:String x:Key="Groups.Label.Current">Current: </x:String>
+  <x:String x:Key="Groups.Empty.KernelStopped.Title">Kernel not running</x:String>
+  <x:String x:Key="Groups.Empty.KernelStopped.Description">Start the kernel to see your groups and their latency.</x:String>
+  <x:String x:Key="Groups.Empty.NoGroups.Title">No groups in this profile</x:String>
+  <x:String x:Key="Groups.Empty.NoGroups.Description">Check the profile’s outbounds, or switch to another profile.</x:String>
   <x:String x:Key="Connections.Button.CloseAll">Close All</x:String>
   <x:String x:Key="Connections.Button.Close">Close</x:String>
   <x:String x:Key="Connections.Search.Watermark">Search connections...</x:String>
