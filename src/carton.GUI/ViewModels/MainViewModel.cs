@@ -29,6 +29,12 @@ public partial class MainViewModel : ViewModelBase
     private readonly IThemeService _themeService;
     private readonly IAppUpdateService _appUpdateService;
     private readonly AppUpdateCoordinator _appUpdateCoordinator;
+    /// <summary>Writes a line to the in-app log store (Logs page).</summary>
+    public void Log(string message)
+    {
+        _logStore.AddLog(message);
+    }
+
     private readonly LogStore _logStore;
     private readonly DispatcherTimer _transientPageUnloadTimer;
     private readonly DispatcherTimer _sessionDurationTimer;
