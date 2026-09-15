@@ -211,6 +211,8 @@ main() {
   mkdir -p "${APPDIR}/usr/bin"
 
   cp -a "${PUBLISH_OUTPUT}/." "${APPDIR}/usr/bin/"
+  # Packager stamp next to the executable (see carton.Core.Utilities.InstallStamp).
+  printf 'appimage\n' > "${APPDIR}/usr/bin/.carton_package"
   cp "$ICON_SOURCE" "${APPDIR}/carton.png"
   cp "$ICON_SOURCE" "${APPDIR}/.DirIcon"
 

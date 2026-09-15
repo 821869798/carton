@@ -1,3 +1,4 @@
+using carton.Core.Utilities;
 using carton.GUI.Services;
 using Xunit;
 
@@ -51,4 +52,49 @@ public class PackageManagedInstallTests
     [InlineData("# only comments\nSOMETHING_ELSE=1\n")]
     public void UnknownDistributionsFallBackToTheGenericWording(string? osRelease)
         => Assert.Null(PackageManagedInstall.ResolveHint(osRelease));
+
+    [Theory]
+    // The format comes from the stamp, the manager from the distribution the user actually runs.
+    [InlineData(InstallKind.Deb, "ID=ubuntu\nID_LIKE=debian\n", "apt", null)]
+    [InlineData(InstallKind.Deb, "ID=fedora\n", "dnf", null)]
+    [InlineData(InstallKind.Rpm, "ID=opensuse-leap\n", "zypper", null)]
+    [InlineData(InstallKind.Aur, "ID=arch\n", "AUR", "yay -Syu")]
+    // No readable /etc/os-release: the stamped format names the family's default manager.
+    [InlineData(InstallKind.Deb, null, "apt", null)]
+    [InlineData(InstallKind.Rpm, null, "dnf", null)]
+    [InlineData(InstallKind.Aur, null, "AUR", "yay -Syu")]
+    public void StampedPackagesResolve(
+        InstallKind stamp,
+        string? osRelease,
+        string manager,
+        string? command)
+    {
+        var hint = PackageManagedInstall.ResolveHint(stamp, osRelease, isSystemDirectory: false);
+
+        Assert.NotNull(hint);
+        Assert.Equal(manager, hint!.Value.Manager);
+        Assert.Equal(command, hint.Value.UpgradeCommand);
+    }
+
+    [Theory]
+    // Installs that predate the stamp: same /usr/ + os-release detection as before, so nothing
+    // regresses for packages already out in the wild.
+    [InlineData(InstallKind.Unknown, true, "ID=ubuntu\n", "apt")]
+    [InlineData(InstallKind.Unknown, true, null, null)]
+    [InlineData(InstallKind.Unknown, false, "ID=ubuntu\n", null)]
+    // A stamp saying "not package-managed" wins over the directory heuristic: an AppImage
+    // unpacked somewhere under /usr must not be told to run apt.
+    [InlineData(InstallKind.AppImage, true, "ID=ubuntu\n", null)]
+    [InlineData(InstallKind.PortableTar, true, "ID=arch\n", null)]
+    [InlineData(InstallKind.WindowsSetup, true, "ID=ubuntu\n", null)]
+    public void StampWinsOverTheDirectoryHeuristic(
+        InstallKind stamp,
+        bool isSystemDirectory,
+        string? osRelease,
+        string? expectedManager)
+    {
+        var hint = PackageManagedInstall.ResolveHint(stamp, osRelease, isSystemDirectory);
+
+        Assert.Equal(expectedManager, hint?.Manager);
+    }
 }
