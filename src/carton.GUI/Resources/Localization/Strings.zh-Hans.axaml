@@ -42,7 +42,6 @@
   <x:String x:Key="Connections.Button.CloseAll">关闭全部</x:String>
   <x:String x:Key="Connections.Button.Close">关闭</x:String>
   <x:String x:Key="Connections.Search.Watermark">搜索连接...</x:String>
-  <x:String x:Key="Connections.Label.CountPrefix">连接数： </x:String>
   <x:String x:Key="Connections.Status.Active">活动</x:String>
   <x:String x:Key="Connections.Status.Closed">已关闭</x:String>
   <x:String x:Key="Connections.Metric.Up">上行</x:String>
@@ -113,8 +112,6 @@
   <x:String x:Key="Profiles.Form.OpenExternal">通过外部编辑器打开</x:String>
   <x:String x:Key="Profiles.Form.CopyAsLocal">复制为本地配置</x:String>
   <x:String x:Key="Profiles.Editor.Search">搜索</x:String>
-  <x:String x:Key="Profiles.Editor.Undo">撤销</x:String>
-  <x:String x:Key="Profiles.Editor.Redo">重做</x:String>
   <x:String x:Key="Profiles.Toast.JsonFormatSuccess">JSON 已格式化</x:String>
   <x:String x:Key="Profiles.Toast.SaveSuccess">配置已保存</x:String>
   <x:String x:Key="Profiles.Toast.JsonValid">json配置正确</x:String>
@@ -133,15 +130,12 @@
   <x:String x:Key="Profiles.UnsavedDialog.Message">当前有未保存的修改，返回前是否保存？</x:String>
   <x:String x:Key="Profiles.UnsavedDialog.SaveButton">保存</x:String>
   <x:String x:Key="Profiles.UnsavedDialog.DiscardButton">不保存</x:String>
-  <x:String x:Key="Toast.GitHubFallback.Kernel">GitHub API 不可用，已切换到 releases 页面继续查询 sing-box 发布信息。</x:String>
-  <x:String x:Key="Toast.GitHubFallback.AppUpdate">GitHub API 不可用，已切换到 releases 页面继续查询 Carton 更新。</x:String>
 
   <x:String x:Key="Dashboard.Section.Configuration">覆写配置</x:String>
   <x:String x:Key="Dashboard.Section.Switches">开关</x:String>
   <x:String x:Key="Dashboard.Section.StartupProfile">启动配置</x:String>
 	<x:String x:Key="Dashboard.Field.Port">Mixed 端口</x:String>
   <x:String x:Key="Dashboard.Field.LogLevel">日志等级</x:String>
-	<x:String x:Key="Dashboard.Option.AllowLan">允许局域网连接</x:String>
 	<x:String x:Key="Dashboard.Option.SystemProxy">系统代理</x:String>
 	<x:String x:Key="Dashboard.Option.Tun">虚拟网卡</x:String>
 	<x:String x:Key="Dashboard.Button.ResetToConfig">重置为配置值</x:String>
@@ -189,8 +183,6 @@
 	<x:String x:Key="Status.RemoteProfileUrlEmpty">远程配置 URL 为空</x:String>
 	<x:String x:Key="Status.RemoteConfigDownloading">远程配置缺失，正在下载...</x:String>
 	<x:String x:Key="Status.RemoteConfigRefreshing">远程配置已到更新间隔，正在刷新...</x:String>
-	<x:String x:Key="Status.RemoteConfigEmpty">远程配置内容为空</x:String>
-	<x:String x:Key="Status.RemoteConfigFileMissing">已获取远程配置，但本地文件不存在</x:String>
 	<x:String x:Key="Status.RemoteConfigDownloaded">远程配置下载完成</x:String>
 	<x:String x:Key="Status.RemoteConfigRefreshed">远程配置刷新完成</x:String>
 	<x:String x:Key="Status.RemoteConfigDownloadFailed">获取远程配置失败</x:String>
@@ -283,7 +275,6 @@
   <x:String x:Key="Settings.Update.DownloadFailedDialog.RetryButton">重试</x:String>
   <x:String x:Key="Settings.Update.DownloadFailedDialog.CancelButton">取消</x:String>
 
-	<x:String x:Key="Settings.Section.Appearance">外观</x:String>
 	<x:String x:Key="Settings.Appearance.Theme">主题</x:String>
 	<x:String x:Key="Settings.Appearance.Theme.System">跟随系统</x:String>
 	<x:String x:Key="Settings.Appearance.Theme.Light">亮色</x:String>
@@ -307,7 +298,6 @@
 	<x:String x:Key="Settings.Data.StoreInAppDir.ConfirmButton">确认</x:String>
 	<x:String x:Key="Settings.Data.StoreInAppDir.CancelButton">取消</x:String>
 	<x:String x:Key="Settings.Data.StoreInAppDir.Failed">更改数据目录失败</x:String>
-	<x:String x:Key="Settings.Data.StorageSpace">存储空间</x:String>
 	<x:String x:Key="Settings.Data.Directory">数据目录</x:String>
 	<x:String x:Key="Settings.Data.OpenFolder">打开数据目录</x:String>
 	<x:String x:Key="Settings.Data.Cleanup">清理</x:String>
@@ -342,7 +332,6 @@
 	<x:String x:Key="Settings.Data.ClearAll.Failed">清除数据失败</x:String>
 	<x:String x:Key="Settings.Data.ClearAll.Restart.Title">需要重启</x:String>
 	<x:String x:Key="Settings.Data.ClearAll.Restart.Message">数据已经清除，应用需要重启以重新创建默认数据。</x:String>
-	<x:String x:Key="Settings.Data.ClearAll.PortableNotSupported">便携模式将数据存储在应用目录中，请关闭应用后手动清理。</x:String>
 	<x:String x:Key="Settings.Data.Reset">重置设置</x:String>
 	<x:String x:Key="Settings.Data.Reset.ConfirmTitle">重置设置</x:String>
 	<x:String x:Key="Settings.Data.Reset.ConfirmMessage">确定要将所有设置恢复为默认值吗？此操作无法撤销。</x:String>
@@ -391,7 +380,6 @@
 	<x:String x:Key="Dashboard.Connections.Inbound">入站</x:String>
 	<x:String x:Key="Dashboard.Connections.Outbound">出站</x:String>
 	<x:String x:Key="Dashboard.Connectivity.TitleShort">连通</x:String>
-	<x:String x:Key="Dashboard.KernelMemory.KernelVersion">内核版本</x:String>
 	<x:String x:Key="Dashboard.KernelMemory.MemoryUsage">内存使用</x:String>
 	<x:String x:Key="Status.RemoteConfigRefreshDeferred">远程配置已到更新间隔，先使用本地缓存配置启动，sing-box 启动后再刷新。</x:String>
 	<x:String x:Key="Status.RemoteConfigRefreshingViaProxy">正在通过本地 mixed 代理刷新远程配置...</x:String>

@@ -342,6 +342,10 @@ public partial class GroupsViewModel : PageViewModelBase
                 _testingOutboundRefCounts.Clear();
                 lock (_groupTestGenerations)
                 {
+                    // Generation numbers restart at 1, so a window from the previous kernel session
+                    // can hold the same number as a fresh click. That is safe only because every
+                    // finish/leaf path compares _testSession FIRST and drops cross-session windows
+                    // before looking at the generation - keep that order if this ever changes.
                     _groupTestGenerations.Clear();
                 }
 
