@@ -371,7 +371,8 @@ public abstract class AbstractDownloadService : IDownloadService, IDisposable, I
 
     /// <summary>
     /// Recreates <see cref="GlobalCancellationTokenSource"/> (re-linked to the original caller's
-    /// cancellation token) after it has been cancelled, so the download can make a fresh attempt â€?    /// for example the single-connection fallback after a failed parallel attempt (issue #231).
+    /// cancellation token) after it has been cancelled, so the download can make a fresh attempt â€”
+    /// for example the single-connection fallback after a failed parallel attempt (issue #231).
     /// </summary>
     protected void RenewGlobalCancellationTokenSource()
     {

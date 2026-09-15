@@ -27,7 +27,7 @@ internal static class ExceptionHelper
 
         internal bool IsMomentumError()
         {
-            // Classify retry-ability by exception type and HTTP status code only ¡ª never by
+            // Classify retry-ability by exception type and HTTP status code only â€” never by
             // Exception.Source. Source is derived from stack/reflection metadata that is empty
             // under AOT/trimming, which previously made identical errors fatal only in AOT builds
             // (issue #226). Type/status classification is deterministic across JIT and AOT.
@@ -40,11 +40,11 @@ internal static class ExceptionHelper
                 WebException { Status: WebExceptionStatus.Timeout } => true,
 
                 // HTTP responses: retry only transient / overload / redirect statuses.
-                HttpRequestException { StatusCode: null } => true, // no response received ¡ú transport failure
+                HttpRequestException { StatusCode: null } => true, // no response received â†’ transport failure
                 HttpRequestException {
                     StatusCode:
                         HttpStatusCode.RequestTimeout or       // 408
-                        HttpStatusCode.PreconditionRequired or // 428 ¡ª some CDNs (e.g. BunnyCDN) use it as a concurrency throttle (#226)
+                        HttpStatusCode.PreconditionRequired or // 428 â€” some CDNs (e.g. BunnyCDN) use it as a concurrency throttle (#226)
                         HttpStatusCode.TooManyRequests or      // 429
                         HttpStatusCode.ServiceUnavailable or   // 503
                         HttpStatusCode.GatewayTimeout or       // 504

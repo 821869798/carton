@@ -11,8 +11,8 @@ namespace Downloader;
 /// <remarks>
 /// This is the same information the downloader resolves internally before it starts a download
 /// (filename from <c>Content-Disposition</c> then the URL path, size from <c>Content-Range</c>
-/// then <c>Content-Length</c>), exposed so callers can preview a file's name and size â€?e.g. for
-/// queued items waiting on a slot â€?without spinning up and tearing down a download.
+/// then <c>Content-Length</c>), exposed so callers can preview a file's name and size â€” e.g. for
+/// queued items waiting on a slot â€” without spinning up and tearing down a download.
 /// </remarks>
 public class RemoteFileInfo
 {

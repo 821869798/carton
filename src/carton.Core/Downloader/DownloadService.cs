@@ -12,8 +12,8 @@ namespace Downloader;
 public class DownloadService : AbstractDownloadService
 {
     // The first genuine (non-cancellation) chunk error of the current attempt. Captured by
-    // DownloadChunk so StartDownload can decide the terminal state â€?and whether to attempt a
-    // single-connection fallback â€?instead of the chunk committing "Failed" immediately (issue #231).
+    // DownloadChunk so StartDownload can decide the terminal state â€” and whether to attempt a
+    // single-connection fallback â€” instead of the chunk committing "Failed" immediately (issue #231).
     private Exception _chunkError;
 
     // Guards against looping: the single-connection fallback is attempted at most once per download.
@@ -136,7 +136,7 @@ public class DownloadService : AbstractDownloadService
             }
             else
             {
-                // Unknown/unexpected terminal state â€?log a warning instead of breaking into the
+                // Unknown/unexpected terminal state â€” log a warning instead of breaking into the
                 // debugger (Debugger.Break() must never ship in a library: it would halt the
                 // consumer's app under a debugger).
                 Logger?.LogWarning("Download finished in an unexpected state: {Status}", Status);
@@ -217,7 +217,7 @@ public class DownloadService : AbstractDownloadService
             if (metadataSize < 1 || metadataSize > int.MaxValue)
                 return false;
 
-            // Rent a buffer from the pool â€?avoids GC allocation
+            // Rent a buffer from the pool â€” avoids GC allocation
             byte[] rented = ArrayPool<byte>.Shared.Rent((int)metadataSize);
 
             try
@@ -302,7 +302,7 @@ public class DownloadService : AbstractDownloadService
         catch (Exception) when (_chunkError is not null)
         {
             // A chunk captured the originating error and cancelled its siblings; that cancellation
-            // surfaces here as the same error or an OperationCanceledException. Swallow it â€?the
+            // surfaces here as the same error or an OperationCanceledException. Swallow it â€” the
             // terminal state is decided from _chunkError by the caller.
         }
     }
@@ -315,7 +315,7 @@ public class DownloadService : AbstractDownloadService
     {
         // Never trade already-downloaded, resumable bytes for a blind single-connection restart:
         // the fallback rebuilds a fresh whole-file chunk (position 0), so with progress in the
-        // package it would wipe the resume state â€?a transient timeout mid-download or on a resume
+        // package it would wipe the resume state â€” a transient timeout mid-download or on a resume
         // attempt must leave the package resumable from its last position, not restart at 0%.
         return _chunkError is not null
                && !_triedSingleConnectionFallback
@@ -518,7 +518,7 @@ public class DownloadService : AbstractDownloadService
         {
             Logger?.LogError(exp, "Error during download: {ErrorMessage}", exp.Message);
             // Capture the first genuine chunk error and stop the sibling chunks. The terminal state
-            // (and any single-connection fallback) is decided in StartDownload â€?not here â€?so the
+            // (and any single-connection fallback) is decided in StartDownload â€” not here â€” so the
             // download is not prematurely marked Failed before a fallback can run (issue #231).
             Interlocked.CompareExchange(ref _chunkError, exp, null);
             cancellationTokenSource.Cancel(false); // stop sibling chunks

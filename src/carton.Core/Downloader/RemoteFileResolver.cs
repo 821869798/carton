@@ -18,8 +18,8 @@ namespace Downloader;
 /// </para>
 ///
 /// <para>
-/// Use this to preview a file's name/size â€?for example for queued downloads that are waiting on a
-/// slot â€?instead of starting and immediately stopping a real download just to learn its name.
+/// Use this to preview a file's name/size â€” for example for queued downloads that are waiting on a
+/// slot â€” instead of starting and immediately stopping a real download just to learn its name.
 /// Each call owns and disposes its own <see cref="SocketClient"/>; callers that resolve many URLs
 /// should add their own concurrency limiting / timeouts around these calls.
 /// </para>
@@ -43,7 +43,7 @@ public static class RemoteFileResolver
 
     /// <summary>
     /// Resolves the file name for <paramref name="url"/> using the supplied configuration
-    /// (headers, proxy, credentials, redirect policy, cookies, â€?.
+    /// (headers, proxy, credentials, redirect policy, cookies, â€¦).
     /// </summary>
     /// <param name="url">The file URL to probe.</param>
     /// <param name="configuration">
@@ -112,7 +112,7 @@ public static class RemoteFileResolver
             // Only propagate when the caller's own token asked for cancellation. Internal
             // timeouts (e.g. HttpClient's ConnectTimeout on an unreachable host) also surface as
             // OperationCanceledException/TaskCanceledException even though cancelToken was never
-            // signaled â€?those are network errors and must fall through to the best-effort
+            // signaled â€” those are network errors and must fall through to the best-effort
             // fallback below, not bubble up as a cancellation. (mirrors issue #225's rule: check
             // the cancellation flag, not just the exception type)
             throw;
@@ -120,7 +120,7 @@ public static class RemoteFileResolver
         catch
         {
             // Best-effort preview: a server that won't reveal its size/range (network error, blocked
-            // Range, â€? still yields a usable file name (resolved during the call above and cached
+            // Range, â€¦) still yields a usable file name (resolved during the call above and cached
             // on the request, else re-derived here from the URL).
             string fileName = await client.SetRequestFileNameAsync(request, cancelToken).ConfigureAwait(false);
             return new RemoteFileInfo {

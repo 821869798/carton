@@ -110,7 +110,7 @@ public class Chunk
     public bool IsDownloadCompleted()
     {
         // A chunk spans Start..End inclusive (Length bytes) and Position counts the bytes received,
-        // so completion is Position >= Length ¡ª i.e. Start + Position > End, not >= End. The old
+        // so completion is Position >= Length â€” i.e. Start + Position > End, not >= End. The old
         // `Start + Position >= End` reported "complete" one byte early, disagreeing with
         // IsChunkIncomplete (Position < Length) and CanWrite: a chunk left exactly one byte short
         // was skipped by DownloadChunk as complete while the incomplete-guard kept failing it,

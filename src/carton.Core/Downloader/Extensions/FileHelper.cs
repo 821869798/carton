@@ -10,8 +10,8 @@ internal static class FileHelper
 {
     /// <summary>
     /// Deletes a file, retrying with exponential backoff on a transient sharing violation (e.g.
-    /// an antivirus real-time scan of a freshly-written executable ¡ª which can take several
-    /// seconds on a large file ¡ª or a handle not yet released by the OS) instead of surfacing it
+    /// an antivirus real-time scan of a freshly-written executable â€” which can take several
+    /// seconds on a large file â€” or a handle not yet released by the OS) instead of surfacing it
     /// as a fatal download failure. Default budget is ~3.1s across 6 attempts (100ms, 200ms,
     /// 400ms, 800ms, 1600ms between tries) before giving up and letting the IOException through.
     /// (issue #239)
@@ -34,7 +34,7 @@ internal static class FileHelper
             catch (IOException exp)
             {
                 // The lock outlived the whole retry budget, so it is not a transient scan/handle
-                // race. Surface a message that points at the external holder ¡ª the condition is
+                // race. Surface a message that points at the external holder â€” the condition is
                 // an OS-level file lock owned by another process, not a downloader defect.
                 throw new IOException(
                     $"The file `{filename}` remained locked by another process after " +

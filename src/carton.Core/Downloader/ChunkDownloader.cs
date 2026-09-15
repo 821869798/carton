@@ -15,7 +15,7 @@ internal class ChunkDownloader
     // Each retry widens the per-block read deadline so a borderline-slow/throttled server gets
     // progressively more headroom instead of tripping the same tight deadline every attempt. A flat
     // +10ms was effectively a no-op against a multi-second BlockTimeout; add a full BlockTimeout per
-    // retry so attempt N tolerates roughly N¡Á the original stall.
+    // retry so attempt N tolerates roughly NÃ— the original stall.
     private readonly int _timeoutIncrement;
     private const int MaxBackoffMs = 10_000; // upper bound for a single retry delay
     private ThrottledStream _sourceStream;
@@ -56,7 +56,7 @@ internal class ChunkDownloader
             // issue #231: the server may end the response stream before the whole chunk has been
             // received (premature EOF / dropped connection) without raising a transport error.
             // ReadStream returns normally in that case, so without this guard the partial chunk
-            // would be silently accepted as complete ¡ª leaving an unfinished .download file with
+            // would be silently accepted as complete â€” leaving an unfinished .download file with
             // no error and no retry. Treat it like a retryable failure instead.
             if (!cancelToken.IsCancellationRequested && IsChunkIncomplete())
             {
@@ -159,7 +159,7 @@ internal class ChunkDownloader
         // has limited range
         // Use <= (not <): when exactly one byte remains, startOffset == Chunk.End and that final
         // byte (index End) still must be range-requested. With <, the request fell through to a
-        // full GET from offset 0 and wrote byte 0's value at the chunk's end offset ¡ª corrupting
+        // full GET from offset 0 and wrote byte 0's value at the chunk's end offset â€” corrupting
         // the last byte of a resumed chunk.
         if (Chunk.End > 0 && startOffset <= Chunk.End &&
             (_configuration.ChunkCount > 1 || Chunk.Position > 0 || _configuration.RangeDownload))

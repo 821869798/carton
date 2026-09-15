@@ -7,7 +7,7 @@ namespace Downloader.Extensions;
 /// <summary>
 /// Normalizes URL strings before they reach <see cref="Uri"/> or the HTTP stack.
 /// Motivating case (issue #223): download URLs whose path contains characters
-/// that are illegal there per RFC 3986 â€?most commonly square brackets and
+/// that are illegal there per RFC 3986 â€” most commonly square brackets and
 /// unencoded spaces in release-group filenames such as
 /// "[SubGroup] Show - 01 [1080p].mkv". Windows' URI parser is permissive and
 /// tends to hide the problem; Linux' parser is stricter and rejects or
@@ -36,7 +36,7 @@ internal static class UrlHelper
     /// valid pchar per RFC 3986 percent-encoded as UTF-8. Idempotent: existing
     /// valid <c>%XX</c> triplets are passed through unchanged (with hex
     /// normalized to uppercase), so encoding an already-encoded URL yields the
-    /// same string. Only the path is modified â€?scheme, userinfo, host
+    /// same string. Only the path is modified â€” scheme, userinfo, host
     /// (including IPv6 literal brackets like <c>[::1]</c>), port, query, and
     /// fragment are preserved byte-for-byte. Relative URLs (no scheme),
     /// <c>null</c>, and empty input are returned unchanged.
@@ -51,7 +51,7 @@ internal static class UrlHelper
         if (string.IsNullOrEmpty(address))
             return address;
 
-        // Locate component boundaries manually. We can't use Uri here â€?Uri is
+        // Locate component boundaries manually. We can't use Uri here â€” Uri is
         // exactly what rejects these URLs on Linux.
         int schemeEnd = address.IndexOf("://", StringComparison.Ordinal);
         if (schemeEnd < 0)

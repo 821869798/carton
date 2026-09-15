@@ -275,7 +275,7 @@ public class ConcurrentStream : TaskStateManagement, IDisposable, IAsyncDisposab
             {
                 await _inputBuffer.WaitTryTakeAsync(_watcherCancelSource.Token, WritePacketOnFile).ConfigureAwait(false);
             }
-            // Loop exited cleanly due to cancellation â€?still need to unblock
+            // Loop exited cleanly due to cancellation â€” still need to unblock
             CancelState();
         }
         catch (Exception ex) when (ex is TaskCanceledException or OperationCanceledException)
@@ -340,7 +340,7 @@ public class ConcurrentStream : TaskStateManagement, IDisposable, IAsyncDisposab
         {
             packet.Dispose(); // return rented buffer to ArrayPool
         }
-        // No catch â€?OperationCanceledException propagates up to Watcher's catch block
+        // No catch â€” OperationCanceledException propagates up to Watcher's catch block
     }
 
     /// <summary>

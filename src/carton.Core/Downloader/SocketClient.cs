@@ -145,7 +145,8 @@ public partial class SocketClient : IDisposable
 
         // Add optional headers
         if (!string.IsNullOrWhiteSpace(requestConfig.Referer))
-            // issue #223: normalize before new Uri(). Preserve this wrapper â€?            // removing it re-exposes the bracket/space URL-parse failure on
+            // issue #223: normalize before new Uri(). Preserve this wrapper â€”
+            // removing it re-exposes the bracket/space URL-parse failure on
             // Linux and also allows control-char injection via Referer.
             client.DefaultRequestHeaders.Referrer = new Uri(UrlHelper.EnsurePathEncoded(requestConfig.Referer));
 
@@ -215,7 +216,7 @@ public partial class SocketClient : IDisposable
         }
         catch (HttpRequestException exp)
         {
-            // issue #225: If the user cancelled, don't retry â€?surface the cancellation immediately.
+            // issue #225: If the user cancelled, don't retry â€” surface the cancellation immediately.
             cancelToken.ThrowIfCancellationRequested();
 
             // issue #220: Some servers don't like the Range header and respond with errors like
@@ -232,7 +233,7 @@ public partial class SocketClient : IDisposable
                      _redirectAttempts++ < request.Configuration.MaximumAutomaticRedirections)
             {
                 // issue #223: normalize server-supplied redirect targets
-                // before new Uri(). Preserve this wrapper â€?the Location
+                // before new Uri(). Preserve this wrapper â€” the Location
                 // header is attacker-influenceable and may contain illegal
                 // path characters that would otherwise break Uri parsing on
                 // Linux or enable control-char injection.
@@ -242,7 +243,7 @@ public partial class SocketClient : IDisposable
                 // re-probes the redirect target instead of early-returning on the
                 // "ResponseHeaders already populated" guard at the top of this method.
                 // This also lets us follow "challenge" redirects whose Location points
-                // back to the same URL â€?e.g. ArvanCloud/Cloudflare cookie challenges
+                // back to the same URL â€” e.g. ArvanCloud/Cloudflare cookie challenges
                 // that answer with a 307 to self and expect the retry to carry the
                 // Set-Cookie they just issued (captured by the default CookieContainer).
                 // The MaximumAutomaticRedirections bound prevents an infinite loop when
@@ -306,7 +307,7 @@ public partial class SocketClient : IDisposable
         // HttpMessageHandler configurations (including ones supplied via CustomHttpClientFactory)
         // decompress transparently without adjusting these headers. Trusting either here would
         // size chunks/ranges off the wrong total and silently truncate the file once the chunk's
-        // (too-small) declared length is reached. Treat the size as unknown instead â€?the existing
+        // (too-small) declared length is reached. Treat the size as unknown instead â€” the existing
         // unknown-Content-Length path (issue #230) already downloads such files correctly as a
         // single connection read to EOF.
         if (HasContentEncoding())
@@ -342,7 +343,7 @@ public partial class SocketClient : IDisposable
     /// metadata without starting a download.
     /// </summary>
     /// <remarks>
-    /// The file name is always resolved (<c>Content-Disposition</c> â†?URL path â†?GUID). Size and
+    /// The file name is always resolved (<c>Content-Disposition</c> â†’ URL path â†’ GUID). Size and
     /// range support are read from the same probe; any network/server error while determining them
     /// propagates to the caller, so the download pipeline can fail or stop appropriately. Callers
     /// that only want a best-effort preview should use <see cref="RemoteFileResolver"/>, which
@@ -404,7 +405,7 @@ public partial class SocketClient : IDisposable
 
         await FetchResponseHeaders(request, addRange: true, cancelToken).ConfigureAwait(false);
 
-        // issue #236: don't chunk/range-split a compressed representation â€?a Range request
+        // issue #236: don't chunk/range-split a compressed representation â€” a Range request
         // addresses byte offsets in the compressed stream, which don't correspond to offsets in
         // the decompressed bytes an automatic-decompression HttpClient ultimately delivers.
         // Falling back to a single, non-ranged request keeps decompression (if any) consistent.
