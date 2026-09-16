@@ -1,8 +1,29 @@
-[English](./README.en.md) | 简体中文
+<div align="center">
+  <p><img src="src/carton.GUI/Assets/carton_icon.png" alt="carton logo" width="100" /></p>
+  <h1>carton</h1>
+  <p><strong>基于 sing-box 的轻量、原生高性能跨平台桌面客户端</strong></p>
+  <p>基于 Avalonia 与 .NET 10 构建 · 原生渲染 · 无 Electron / WebView · 极低内存开销</p>
 
-# carton
+  <p>
+    <a href="https://github.com/821869798/carton/releases/latest"><img src="https://img.shields.io/github/v/release/821869798/carton?style=for-the-badge&color=blue" alt="Latest Release" /></a>
+    <a href="https://github.com/821869798/carton/releases"><img src="https://img.shields.io/github/downloads/821869798/carton/total?style=for-the-badge&color=2ea44f" alt="Downloads" /></a>
+    <a href="https://t.me/+fwutL7igOTk3ZmFl"><img src="https://img.shields.io/badge/Telegram-%E4%BA%A4%E6%B5%81%E7%BE%A4-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue?style=for-the-badge" alt="License: GPL-3.0" /></a>
+  </p>
 
-[![Telegram Group](https://img.shields.io/badge/Telegram-%E4%BA%A4%E6%B5%81%E7%BE%A4-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/+fwutL7igOTk3ZmFl)
+  <p>
+    <a href="./README.en.md">English</a> ·
+    <a href="./README.md">简体中文</a> ·
+    <a href="#安装与下载">安装与下载</a> ·
+    <a href="#界面预览">界面预览</a> ·
+    <a href="#主要特性">主要特性</a> ·
+    <a href="#技术栈">技术栈</a> ·
+    <a href="#开发与构建">开发与构建</a> ·
+    <a href="https://github.com/821869798/carton/releases/latest">最新版本</a>
+  </p>
+
+  <p><img src="docs/imgs/banner.png" alt="carton 概览" width="860" /></p>
+</div>
 
 `carton` 是一个基于 `sing-box` 的桌面客户端，交互和信息组织尽量贴近官方 SFM，同时更看重性能、响应速度，以及一些更实用的增强功能。
 
@@ -15,6 +36,26 @@
 - 直接使用你自己的配置和规则启动 `sing-box`，只额外提供少量开关式选项
 - 在不打乱主流程的前提下补上一些实用能力
 - 使用非 Electron / Tauri / Web 技术栈的桌面实现，内存占用更低、性能更好
+
+## 安装与下载
+
+> [!IMPORTANT]
+> **官方渠道安全提示**：请**务必只通过官方渠道下载或安装**。请勿轻信任何未经授权的第三方分发渠道、非官方打包或未知来源的安装文件，以防安全风险。
+> 目前**尚未提供 Linux 在线安装源**（如 APT / DNF / AUR / PPA / Flatpak / Snap 等），任何宣称包含 carton 的非官方 Linux 在线源均非官方维护。
+
+### Windows
+
+- **通过 WinGet 安装（推荐）**：
+  ```powershell
+  winget install Unifan.Carton
+  ```
+- **通过 GitHub Releases 安装包或便携版**：
+  前往 [GitHub Releases 最新发布页](https://github.com/821869798/carton/releases/latest) 下载最新的安装包（`Setup.exe`）或便携版压缩包。
+
+### Linux
+
+- 目前**尚未提供 Linux 在线包管理器安装源**。
+- 请前往官方 [GitHub Releases 最新发布页](https://github.com/821869798/carton/releases/latest) 下载预编译的二进制压缩包（`carton-*-linux-*.tar.gz`），解压即可使用；或参考下方说明自行编译构建。
 
 ## 配置复写说明
 

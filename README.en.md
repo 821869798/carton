@@ -1,12 +1,33 @@
-[简体中文](./README.md) | English
+<div align="center">
+  <p><img src="src/carton.GUI/Assets/carton_icon.png" alt="carton logo" width="100" /></p>
+  <h1>carton</h1>
+  <p><strong>A lightweight, native, high-performance cross-platform desktop client for sing-box</strong></p>
+  <p>Built with Avalonia &amp; .NET 10 · Native Rendering · No Electron / WebView · Ultra-low Memory</p>
 
-# carton
+  <p>
+    <a href="https://github.com/821869798/carton/releases/latest"><img src="https://img.shields.io/github/v/release/821869798/carton?style=for-the-badge&color=blue" alt="Latest Release" /></a>
+    <a href="https://github.com/821869798/carton/releases"><img src="https://img.shields.io/github/downloads/821869798/carton/total?style=for-the-badge&color=2ea44f" alt="Downloads" /></a>
+    <a href="https://t.me/+fwutL7igOTk3ZmFl"><img src="https://img.shields.io/badge/Telegram-Group-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue?style=for-the-badge" alt="License: GPL-3.0" /></a>
+  </p>
 
-[![Telegram Group](https://img.shields.io/badge/Telegram-Group-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/+fwutL7igOTk3ZmFl)
+  <p>
+    <a href="./README.md">简体中文</a> ·
+    <a href="./README.en.md">English</a> ·
+    <a href="#installation--download">Installation</a> ·
+    <a href="#screenshots">Screenshots</a> ·
+    <a href="#highlights">Highlights</a> ·
+    <a href="#technology-stack">Tech Stack</a> ·
+    <a href="#building-and-development">Development</a> ·
+    <a href="https://github.com/821869798/carton/releases/latest">Latest Release</a>
+  </p>
+
+  <p><img src="docs/imgs/banner.png" alt="carton overview" width="860" /></p>
+</div>
 
 `carton` is a desktop client powered by `sing-box`. It aims to stay close to the official SFM experience in interaction flow and information layout, while putting more weight on performance, responsiveness, and a few practical enhancements.
 
-The project currently targets `Windows` and `Linux`. There are no plans to publish a `macOS` version, because SFM already exists on macOS.
+Currently supports `Windows` and `Linux`. There are no plans to publish a `macOS` version, because SFM already exists on macOS.
 
 Current focus:
 
@@ -15,6 +36,26 @@ Current focus:
 - Start `sing-box` with your own config and rules, only taking over a small set of toggle-style options
 - Add useful enhancements without disrupting the main workflow
 - Use a non-Electron / non-Tauri / non-web-tech desktop stack with lower memory usage and higher performance
+
+## Installation & Download
+
+> [!IMPORTANT]
+> **Official Distribution Notice**: Please **only download or install carton from official channels**. Do NOT trust or use any unauthorized third-party mirrors, re-packagers, or unverified sources to avoid security risks.
+> Currently, **no online Linux package repositories are provided** (e.g. APT, DNF, AUR, PPA, Flatpak, Snap). Any online Linux repository claiming to host carton is unofficial and not maintained by this project.
+
+### Windows
+
+- **Install via WinGet (Recommended)**:
+  ```powershell
+  winget install Unifan.Carton
+  ```
+- **Download via GitHub Releases**:
+  Visit the [GitHub Releases Page](https://github.com/821869798/carton/releases/latest) to download the latest setup installer (`Setup.exe`) or portable package.
+
+### Linux
+
+- **No online package repository is currently available.**
+- Please download official pre-built binaries (`carton-*-linux-*.tar.gz`) directly from the [GitHub Releases Page](https://github.com/821869798/carton/releases/latest), unpack and run; or build from source using the instructions below.
 
 ## Config Override Behavior
 
