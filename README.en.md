@@ -29,13 +29,12 @@
 
 Currently supports `Windows` and `Linux`. There are no plans to publish a `macOS` version, because SFM already exists on macOS.
 
-Current focus:
+Design goals:
 
 - Keep the experience close to official SFM to reduce migration cost
-- Prioritize UI responsiveness, startup speed, and long-running resource usage
-- Start `sing-box` with your own config and rules, only taking over a small set of toggle-style options
+- Prioritize native performance, rapid responsiveness, and low resident memory
+- Start `sing-box` with your own config and rules, without unnecessary overwrites
 - Add useful enhancements without disrupting the main workflow
-- Use a non-Electron / non-Tauri / non-web-tech desktop stack with lower memory usage and higher performance
 
 ## Installation & Download
 
@@ -88,11 +87,9 @@ This is intentional because many users strongly dislike third-party GUIs overwri
 
 ### Performance-oriented
 
-- Built with `Avalonia` and `.NET 10`
-- Non-Electron, non-Tauri, and non-web-tech desktop framework approach
-- One direct motivation is that many real-world apps built on those stacks can easily land at `200MB+` memory usage after startup
-- Includes `NativeAOT` publish scripts for faster startup and lower runtime overhead
-- Uses on-demand page loading and background page release/refresh control to reduce long-running resource usage
+- Native desktop rendering with fast startup and smooth UI responsiveness
+- Minimal memory footprint, significantly lower than Web/Electron-based alternatives
+- Optimized for long-running background operation with minimal resource overhead
 
 ### Config and subscription management
 
@@ -188,16 +185,6 @@ In practice:
 This script writes output to `artifacts/publish/<rid>`.
 
 The repository already contains multiple runtime targets, while the current ready-to-use scripts are mainly organized around the Windows AOT build flow.
-
-## Positioning
-
-If you care about:
-
-- an experience that stays close to official SFM
-- a more performance-oriented implementation
-- a few practical additions beyond the official client without turning the app into something else
-
-then `carton` is being built in that direction.
 
 ## License
 
