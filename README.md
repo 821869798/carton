@@ -8,7 +8,7 @@
     <a href="https://github.com/821869798/carton/releases/latest"><img src="https://img.shields.io/github/v/release/821869798/carton?style=for-the-badge&color=blue" alt="Latest Release" /></a>
     <a href="https://github.com/821869798/carton/releases"><img src="https://img.shields.io/github/downloads/821869798/carton/total?style=for-the-badge&color=2ea44f" alt="Downloads" /></a>
     <a href="https://t.me/+fwutL7igOTk3ZmFl"><img src="https://img.shields.io/badge/Telegram-%E4%BA%A4%E6%B5%81%E7%BE%A4-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram" /></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue?style=for-the-badge" alt="License: GPL-3.0" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=for-the-badge" alt="License: GPL-3.0-or-later" /></a>
   </p>
 
   <p>
@@ -188,7 +188,7 @@ scripts\build\build-release-win-x64.bat
 
 ## License
 
-本项目基于 GNU General Public License v3.0（GPL-3.0）开源，详见 [LICENSE](./LICENSE)。
+本项目基于 GNU General Public License v3.0 或更高版本（GPL-3.0-or-later）开源，详见 [LICENSE](./LICENSE)。
 
 ### 第三方代码
 

@@ -11,7 +11,7 @@ This directory contains a **vendored and trimmed copy** of the
 | Copyright | Copyright (c) 2021 Behzad Khosravifar |
 | Vendored on | 2026-09-14 |
 
-`carton` itself is GPL-3.0 (see the repository root `LICENSE`). The MIT licence is
+`carton` itself is GPL-3.0-or-later (see the repository root `LICENSE`). The MIT licence is
 GPL-compatible, but it requires that the copyright notice and permission notice be
 retained in all copies or substantial portions of the software — which is why
 `LICENSE` sits next to the sources here and must not be deleted.
