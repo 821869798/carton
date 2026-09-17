@@ -70,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: metadata
     steps:
-      - name: Create or update GitHub release
+      - name: Verify or create GitHub release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -82,38 +82,22 @@ jobs:
         run: |
           set -euo pipefail
 
-          args=("$TAG" "--repo" "$REPO" "--title" "$RELEASE_NAME")
-          if [[ "$IS_PRERELEASE" == "true" ]]; then
-            args+=("--prerelease")
-          fi
-
-          target_ref="$TARGET_SHA"
-          if gh api "repos/$REPO/git/ref/heads/$TAG" >/dev/null 2>&1; then
-            target_ref="$TAG"
-          fi
-
           if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-            gh release edit "${args[@]}"
+            echo "Release $TAG exists. Existing assets and release notes will be preserved."
           else
+            args=("$TAG" "--repo" "$REPO" "--title" "$RELEASE_NAME")
+            if [[ "$IS_PRERELEASE" == "true" ]]; then
+              args+=("--prerelease")
+            fi
+            target_ref="$TARGET_SHA"
+            if gh api "repos/$REPO/git/ref/heads/$TAG" >/dev/null 2>&1; then
+              target_ref="$TAG"
+            fi
             gh release create "${args[@]}" --target "$target_ref" --notes ""
           fi
 
-      - name: Clear existing release assets
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.metadata.outputs.tag }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-
-          gh api "repos/$REPO/releases/tags/$TAG" --jq '.assets[].id' | while read -r asset_id; do
-            [[ -n "$asset_id" ]] || continue
-            gh api "repos/$REPO/releases/assets/$asset_id" --method DELETE
-          done
-
   build:
-    name: Build ${{ matrix.rid }}
+    name: Build ${{ matrix.rid }} packages
     needs:
       - metadata
       - prepare_release
@@ -122,14 +106,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            rid: win-x64
-            mainExe: carton.exe
-            icon: src/carton.GUI/Assets/carton_icon.ico
-          - os: windows-latest
-            rid: win-arm64
-            mainExe: carton.exe
-            icon: src/carton.GUI/Assets/carton_icon.ico
           - os: ubuntu-22.04
             rid: linux-x64
             mainExe: carton
@@ -143,6 +119,8 @@ jobs:
       CHANNEL: ${{ needs.metadata.outputs.channel }}
       TAG: ${{ needs.metadata.outputs.tag }}
       REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
 
@@ -159,8 +137,6 @@ jobs:
         run: |
           set -euo pipefail
           case "${{ matrix.rid }}" in
-            win-x64) rust_target="x86_64-pc-windows-msvc" ;;
-            win-arm64) rust_target="aarch64-pc-windows-msvc" ;;
             linux-x64) rust_target="x86_64-unknown-linux-gnu" ;;
             linux-arm64) rust_target="aarch64-unknown-linux-gnu" ;;
             *) echo "Unsupported RID: ${{ matrix.rid }}" >&2; exit 1 ;;
@@ -168,111 +144,21 @@ jobs:
           rustup target add "$rust_target"
 
       - name: Install native dependencies (Linux)
-        if: runner.os == 'Linux'
         shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y clang lld binutils-aarch64-linux-gnu gcc-aarch64-linux-gnu libc6-dev-arm64-cross zlib1g-dev libkrb5-dev pkg-config
 
-      - name: Install Velopack CLI (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Publish (Linux AOT)
         shell: bash
         run: |
-          dotnet tool update --global vpk --version 0.0.1298
-          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
-
-      - name: Install NSIS (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          choco install nsis -y --no-progress
-
-      - name: Publish (Linux)
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          publish_dir_portable="$GITHUB_WORKSPACE/artifacts/publish/${{ matrix.rid }}-portable"
           publish_dir_appimage="$GITHUB_WORKSPACE/artifacts/publish/${{ matrix.rid }}-appimage"
-          mkdir -p "$publish_dir_portable" "$publish_dir_appimage"
-          bash scripts/build/test-publish-linux-aot.sh "${{ matrix.rid }}" Release "$publish_dir_portable"
+          mkdir -p "$publish_dir_appimage"
           bash scripts/build/test-publish-linux-aot.sh "${{ matrix.rid }}" Release "$publish_dir_appimage" INSTALLER_BUILD
 
-          echo "PUBLISH_DIR_PORTABLE=$publish_dir_portable" >> "$GITHUB_ENV"
           echo "PUBLISH_DIR_APPIMAGE=$publish_dir_appimage" >> "$GITHUB_ENV"
 
-      - name: Publish (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $publishDirPortable = "$env:GITHUB_WORKSPACE\artifacts\publish\${{ matrix.rid }}-portable"
-          $publishDirInstaller = "$env:GITHUB_WORKSPACE\artifacts\publish\${{ matrix.rid }}-installer"
-          $publishDirHelper = "$env:GITHUB_WORKSPACE\artifacts\publish\${{ matrix.rid }}-helper"
-          $kernelStageDir = Join-Path $env:RUNNER_TEMP "singbox-runtime-${{ matrix.rid }}"
-          New-Item -ItemType Directory -Path $publishDirPortable -Force | Out-Null
-          New-Item -ItemType Directory -Path $publishDirInstaller -Force | Out-Null
-          New-Item -ItemType Directory -Path $publishDirHelper -Force | Out-Null
-          if (Test-Path $kernelStageDir) {
-            Remove-Item -Recurse -Force $kernelStageDir
-          }
-          New-Item -ItemType Directory -Path $kernelStageDir -Force | Out-Null
-          dotnet publish src\carton.GUI\carton.GUI.csproj `
-            -c Release `
-            -r ${{ matrix.rid }} `
-            -o $publishDirPortable `
-            /p:PublishAot=true `
-            /p:SelfContained=true `
-            /p:StripSymbols=true `
-            /p:DebugSymbols=false `
-            /p:DebugType=None `
-            /p:InvariantGlobalization=true `
-            /p:IncludeNativeLibrariesForSelfExtract=true `
-            /p:EnableCompressionInSingleFile=true
-          & "$env:GITHUB_WORKSPACE\scripts\build\include-singbox-kernel.ps1" -Rid '${{ matrix.rid }}' -Destination $kernelStageDir
-          Copy-Item -Path (Join-Path $kernelStageDir '*') -Destination $publishDirPortable -Recurse -Force
-          switch ('${{ matrix.rid }}') {
-            'win-x64' { $cargoTarget = 'x86_64-pc-windows-msvc' }
-            'win-arm64' { $cargoTarget = 'aarch64-pc-windows-msvc' }
-            default { throw "Unsupported helper RID: ${{ matrix.rid }}" }
-          }
-          cargo build --manifest-path src\carton.Helper\Cargo.toml --release --target $cargoTarget
-          Copy-Item -LiteralPath "src\carton.Helper\target\$cargoTarget\release\carton-helper.exe" -Destination $publishDirHelper -Force
-          Copy-Item -LiteralPath (Join-Path $publishDirHelper 'carton-helper.exe') -Destination $publishDirPortable -Force
-          dotnet publish src\carton.GUI\carton.GUI.csproj `
-            -c Release `
-            -r ${{ matrix.rid }} `
-            -o $publishDirInstaller `
-            /p:CartonBuildMacro=INSTALLER_BUILD `
-            /p:PublishAot=true `
-            /p:SelfContained=true `
-            /p:StripSymbols=true `
-            /p:DebugSymbols=false `
-            /p:DebugType=None `
-            /p:InvariantGlobalization=true `
-            /p:IncludeNativeLibrariesForSelfExtract=true `
-            /p:EnableCompressionInSingleFile=true
-          Copy-Item -Path (Join-Path $kernelStageDir '*') -Destination $publishDirInstaller -Recurse -Force
-          Copy-Item -LiteralPath (Join-Path $publishDirHelper 'carton-helper.exe') -Destination $publishDirInstaller -Force
-          "PUBLISH_DIR_PORTABLE=$publishDirPortable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "PUBLISH_DIR_INSTALLER=$publishDirInstaller" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Create portable archive (Linux)
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          pack_dir="$GITHUB_WORKSPACE/artifacts/pack/${{ matrix.rid }}-$CHANNEL"
-          mkdir -p "$pack_dir"
-          find "$PUBLISH_DIR_PORTABLE" -name '*.pdb' -delete
-          portable_stage="$RUNNER_TEMP/portable-stage-${{ matrix.rid }}"
-          rm -rf "$portable_stage"
-          mkdir -p "$portable_stage"
-          cp -a "$PUBLISH_DIR_PORTABLE"/. "$portable_stage"/
-          touch "$portable_stage/.carton_portable_data"
-          portable_name="${APP_NAME}-${VERSION}-${{ matrix.rid }}-portable.tar.gz"
-          tar -C "$portable_stage" -czf "$pack_dir/$portable_name" .
-          echo "PACK_DIR=$pack_dir" >> "$GITHUB_ENV"
-
       - name: Create package-manager archive (Linux)
-        if: runner.os == 'Linux'
         shell: bash
         run: |
           pack_dir="$GITHUB_WORKSPACE/artifacts/pack/${{ matrix.rid }}-$CHANNEL"
@@ -289,72 +175,14 @@ jobs:
             --exclude='.carton_portable_data' \
             --exclude='*.pdb' \
             -czf "$pack_dir/$package_name" .
-
-      - name: Create portable archive (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $packDir = "$env:GITHUB_WORKSPACE\artifacts\pack\${{ matrix.rid }}-$env:CHANNEL"
-          New-Item -ItemType Directory -Path $packDir -Force | Out-Null
-          Get-ChildItem -Path $env:PUBLISH_DIR_PORTABLE -Filter '*.pdb' -Recurse | Remove-Item -Force
-          $portableStage = Join-Path $env:RUNNER_TEMP "portable-stage-${{ matrix.rid }}"
-          if (Test-Path $portableStage) {
-            Remove-Item -Recurse -Force $portableStage
-          }
-          New-Item -ItemType Directory -Path $portableStage -Force | Out-Null
-          Copy-Item -Path (Join-Path $env:PUBLISH_DIR_PORTABLE '*') -Destination $portableStage -Recurse -Force
-          New-Item -ItemType File -Path (Join-Path $portableStage '.carton_portable_data') -Force | Out-Null
-          $portableName = "$env:APP_NAME-$env:VERSION-${{ matrix.rid }}-portable.zip"
-          $portableItems = Get-ChildItem -Path $portableStage -Force | Select-Object -ExpandProperty FullName
-          if (-not $portableItems) {
-            Write-Error "Portable staging directory is empty: $portableStage"
-          }
-          Compress-Archive -LiteralPath $portableItems -DestinationPath "$packDir\$portableName" -Force
-          "PACK_DIR=$packDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Package with Velopack (Linux)
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          icon_path=$(realpath '${{ matrix.icon }}')
-          package_channel='${{ matrix.rid }}-'$CHANNEL
-          vpk pack \
-            --packId "$APP_NAME" \
-            --packVersion "$VERSION" \
-            --channel "$package_channel" \
-            --runtime ${{ matrix.rid }} \
-            --packDir "$PUBLISH_DIR_APPIMAGE" \
-            --mainExe '${{ matrix.mainExe }}' \
-            --packTitle "$APP_NAME" \
-            --icon "$icon_path" \
-            --outputDir "$PACK_DIR"
+          echo "PACK_DIR=$pack_dir" >> "$GITHUB_ENV"
 
       - name: Package .deb and .rpm (Linux)
-        if: runner.os == 'Linux'
         shell: bash
         run: |
           bash scripts/build/build-linux-packages.sh "${{ matrix.rid }}" "$VERSION" "$PUBLISH_DIR_APPIMAGE" "$PACK_DIR"
 
-      - name: Package with NSIS (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Get-ChildItem -Path $env:PUBLISH_DIR_INSTALLER -Filter '*.pdb' -Recurse | Remove-Item -Force
-          & "$env:GITHUB_WORKSPACE\scripts\build\build-nsis-installer.ps1" `
-            -AppName "$env:APP_NAME" `
-            -AppId "unifan.$env:APP_NAME" `
-            -Version "$env:VERSION" `
-            -MainExe '${{ matrix.mainExe }}' `
-            -PublishDir "$env:PUBLISH_DIR_INSTALLER" `
-            -OutputDir "$env:PACK_DIR" `
-            -OutputFileName "$env:APP_NAME-$env:VERSION-${{ matrix.rid }}-Setup.exe" `
-            -AppDataDirName "Carton" `
-            -Publisher "Unifan" `
-            -ProductRegKey "Software\Unifan\Carton" `
-            -IconPath "${{ matrix.icon }}"
-
       - name: Prepare release assets (Linux)
-        if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euo pipefail
@@ -364,17 +192,7 @@ jobs:
           rm -rf "$release_dir"
           mkdir -p "$release_dir"
 
-          for setup in "$PACK_DIR"/*setup.exe; do
-            [[ -f "$setup" ]] || continue
-            cp -f "$setup" "$release_dir/${APP_NAME}-${VERSION}-${{ matrix.rid }}-Setup.exe"
-          done
-
-          for appimage in "$PACK_DIR"/*.AppImage; do
-            [[ -f "$appimage" ]] || continue
-            cp -f "$appimage" "$release_dir/${APP_NAME}-${VERSION}-${{ matrix.rid }}.AppImage"
-          done
-
-          for pattern in '*-portable.zip' '*-portable.tar.gz' '*-package.tar.gz' '*.deb' '*.rpm' '*.nupkg' 'releases*.json'; do
+          for pattern in '*-package.tar.gz' '*.deb' '*.rpm'; do
             for f in "$PACK_DIR"/$pattern; do
               [[ -f "$f" ]] || continue
               cp -f "$f" "$release_dir/$(basename "$f")"
@@ -388,44 +206,7 @@ jobs:
 
           echo "RELEASE_ASSETS_DIR=$release_dir" >> "$GITHUB_ENV"
 
-      - name: Prepare release assets (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $releaseDir = Join-Path $env:RUNNER_TEMP "release-assets-${{ matrix.rid }}"
-          if (Test-Path $releaseDir) {
-            Remove-Item -Recurse -Force $releaseDir
-          }
-          New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
-
-          $setup = Get-ChildItem -Path $env:PACK_DIR -Filter '*setup.exe' -File | Select-Object -First 1
-          if ($setup) {
-            Copy-Item $setup.FullName (Join-Path $releaseDir "$env:APP_NAME-$env:VERSION-${{ matrix.rid }}-Setup.exe") -Force
-          }
-
-          $appImage = Get-ChildItem -Path $env:PACK_DIR -Filter '*.AppImage' -File | Select-Object -First 1
-          if ($appImage) {
-            Copy-Item $appImage.FullName (Join-Path $releaseDir "$env:APP_NAME-$env:VERSION-${{ matrix.rid }}.AppImage") -Force
-          }
-
-          Get-ChildItem -Path $env:PACK_DIR -File | Where-Object {
-            $_.Name -clike '*-portable.zip' -or
-            $_.Name -clike '*-portable.tar.gz' -or
-            $_.Name -like '*.nupkg' -or
-            $_.Name -like 'releases*.json'
-          } | ForEach-Object {
-            Copy-Item $_.FullName (Join-Path $releaseDir $_.Name) -Force
-          }
-
-          $prepared = Get-ChildItem -Path $releaseDir -File
-          if (-not $prepared) {
-            Write-Error 'No release assets were prepared.'
-          }
-
-          "RELEASE_ASSETS_DIR=$releaseDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
       - name: Upload release assets (Linux)
-        if: runner.os == 'Linux'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -440,84 +221,3 @@ jobs:
           fi
 
           gh release upload "$TAG" "${uploads[@]}" --repo "$REPO" --clobber
-
-      - name: Upload release assets (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $uploads = Get-ChildItem -Path $env:RELEASE_ASSETS_DIR -File | Sort-Object Name | Select-Object -ExpandProperty FullName
-          if (-not $uploads) {
-            Write-Error 'No files to upload.'
-          }
-
-          & gh release upload $env:TAG $uploads --repo $env:REPO --clobber
-
-  finalize_release:
-    name: Update release notes
-    runs-on: ubuntu-latest
-    needs:
-      - metadata
-      - build
-    if: ${{ needs.build.result == 'success' }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          sparse-checkout: |
-            .github/release-template.md
-
-      - name: Build commit changelog
-        id: changelog
-        uses: mikepenz/release-changelog-builder-action@v6.2.3
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          mode: COMMIT
-          toTag: ${{ needs.metadata.outputs.tag }}
-          failOnError: false
-
-      - name: Update release notes
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.metadata.outputs.tag }}
-          REPO: ${{ github.repository }}
-          VERSION: ${{ needs.metadata.outputs.version }}
-          CHANNEL: ${{ needs.metadata.outputs.channel }}
-          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
-        run: |
-          set -euo pipefail
-
-          app_name="${APP_NAME:-carton}"
-          base_url="https://github.com/$REPO/releases/download/$TAG"
-          notes_file="$RUNNER_TEMP/release-notes.md"
-          template_file=".github/release-template.md"
-          singbox_tag="$(gh api repos/SagerNet/sing-box/releases/latest --jq .tag_name 2>/dev/null || true)"
-          if [[ -n "$singbox_tag" ]]; then
-            singbox_version="${singbox_tag#v}"
-          else
-            singbox_version="unknown"
-          fi
-
-          sed \
-            -e "s|__APP_NAME__|$app_name|g" \
-            -e "s|__VERSION__|$VERSION|g" \
-            -e "s|__TAG__|$TAG|g" \
-            -e "s|__REPO__|$REPO|g" \
-            -e "s|__BASE_URL__|$base_url|g" \
-            -e "s|__CHANNEL__|$CHANNEL|g" \
-            -e "s|__SINGBOX_VERSION__|$singbox_version|g" \
-            "$template_file" > "$notes_file"
-
-          if [[ -n "${CHANGELOG//[[:space:]]/}" ]]; then
-            {
-              echo ""
-              echo "**Commit Logs**"
-              echo ""
-              printf '%s\n' "$CHANGELOG"
-            } >> "$notes_file"
-          fi
-
-          gh release edit "$TAG" --repo "$REPO" --notes-file "$notes_file"

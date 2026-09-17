@@ -307,7 +307,24 @@ jobs:
             --mainExe '${{ matrix.mainExe }}' \
             --packTitle "$APP_NAME" \
             --icon "$icon_path" \
-            --outputDir "$PACK_DIR"
+      - name: Create package-manager archive (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          pack_dir="$GITHUB_WORKSPACE/artifacts/pack/${{ matrix.rid }}-$CHANNEL"
+          mkdir -p "$pack_dir"
+          package_name="${APP_NAME}-${VERSION}-${{ matrix.rid }}-package.tar.gz"
+          tar -C "$PUBLISH_DIR_APPIMAGE" \
+            --exclude='carton-helper' \
+            --exclude='.carton_portable_data' \
+            --exclude='*.pdb' \
+            -czf "$pack_dir/$package_name" .
+
+      - name: Package .deb and .rpm (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          bash scripts/build/build-linux-packages.sh "${{ matrix.rid }}" "$VERSION" "$PUBLISH_DIR_APPIMAGE" "$PACK_DIR"
 
       - name: Package with NSIS (Windows)
         if: runner.os == 'Windows'
@@ -381,6 +398,18 @@ jobs:
               cp -f "$portable" "$release_dir/$(basename "$portable")"
             done < <(find "$artifact" -maxdepth 1 -type f \( -name '*-portable.zip' -o -name '*-portable.tar.gz' \) -print0)
 
+            while IFS= read -r -d '' deb; do
+              cp -f "$deb" "$release_dir/$(basename "$deb")"
+            done < <(find "$artifact" -maxdepth 1 -type f -name '*.deb' -print0)
+
+            while IFS= read -r -d '' rpm; do
+              cp -f "$rpm" "$release_dir/$(basename "$rpm")"
+            done < <(find "$artifact" -maxdepth 1 -type f -name '*.rpm' -print0)
+
+            while IFS= read -r -d '' pkg_tar; do
+              cp -f "$pkg_tar" "$release_dir/$(basename "$pkg_tar")"
+            done < <(find "$artifact" -maxdepth 1 -type f -name '*-package.tar.gz' -print0)
+
             while IFS= read -r -d '' nupkg; do
               cp -f "$nupkg" "$release_dir/$(basename "$nupkg")"
             done < <(find "$artifact" -maxdepth 1 -type f -name '*.nupkg' -print0)
@@ -429,9 +458,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          gh api "repos/$REPO/releases/tags/$TAG" --jq '.assets[].id' | while read -r asset_id; do
+          gh api "repos/$REPO/releases/tags/$TAG" --jq '.assets[].id' 2>/dev/null | while read -r asset_id; do
             [[ -n "$asset_id" ]] || continue
-            gh api "repos/$REPO/releases/assets/$asset_id" --method DELETE
+            gh api "repos/$REPO/releases/assets/$asset_id" --method DELETE 2>/dev/null || true
           done
 
       - name: Upload release assets
@@ -445,7 +474,7 @@ jobs:
           shopt -s nullglob
 
           uploads=()
-          for pattern in '*-Setup.exe' '*.AppImage' '*-portable.zip' '*-portable.tar.gz' '*.nupkg' 'releases*.json'; do
+          for pattern in '*-Setup.exe' '*.AppImage' '*-portable.zip' '*-portable.tar.gz' '*-package.tar.gz' '*.deb' '*.rpm' '*.nupkg' 'releases*.json'; do
             for f in "$RELEASE_ASSETS_DIR"/$pattern; do
               [[ -f "$f" ]] || continue
               uploads+=("$f")
@@ -457,7 +486,7 @@ jobs:
             exit 1
           fi
 
-          gh release upload "$TAG" "${uploads[@]}" --repo "$REPO"
+          gh release upload "$TAG" "${uploads[@]}" --repo "$REPO" --clobber
 
       - name: Build commit changelog
         id: changelog
