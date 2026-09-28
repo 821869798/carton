@@ -133,7 +133,7 @@
 
   </UserControl.Styles>
 
-  <ScrollViewer>
+  <ScrollViewer Classes="smooth">
     <StackPanel Margin="20" Spacing="16">
       <!-- 左右两张配置卡片，样式与上传/下载状态卡片一致；不再有内嵌的画线框。
            列宽沿用原先的 *,180，右侧开关卡片不需要更多空间；

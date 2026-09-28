@@ -4,6 +4,7 @@
              xmlns:local="using:carton"
              xmlns:sty="using:FluentAvalonia.Styling"
              xmlns:vm="using:carton.ViewModels"
+             xmlns:helpers="using:carton.GUI.Helpers"
              RequestedThemeVariant="Default">
 
   <Application.DataTemplates>
@@ -28,6 +29,10 @@
                              PreferUserAccentColor="False"
                              CustomAccentColor="#FF0078D7"/>
     <StyleInclude Source="/Resources/CartonThemeResources.axaml" />
+
+    <Style Selector="ScrollViewer.smooth">
+      <Setter Property="helpers:SmoothScrollBehavior.IsEnabled" Value="True"/>
+    </Style>
 
     <Style Selector="Border.card">
       <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundChromeMediumBrush}"/>

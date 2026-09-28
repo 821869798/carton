@@ -260,7 +260,7 @@
       <TabStripItem Content="{DynamicResource Settings.Section.About}" Tag="SectionAbout"/>
     </TabStrip>
 
-    <ScrollViewer Grid.Row="1" Name="SettingsScrollViewer">
+    <ScrollViewer Grid.Row="1" Name="SettingsScrollViewer" Classes="smooth">
     <StackPanel Margin="20" Spacing="8">
       <StackPanel x:Name="SectionKernel">
       <TextBlock Classes="settingsSectionTitle" Text="{DynamicResource Settings.Section.Kernel}"/>

@@ -32,6 +32,7 @@
     </Border>
 
     <ScrollViewer Grid.Row="1"
+                  Classes="smooth"
                   IsVisible="{Binding !ShowEmptyState}"
                   Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}">
       <ItemsControl Margin="16,8,16,12"

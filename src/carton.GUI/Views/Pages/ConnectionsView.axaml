@@ -187,7 +187,7 @@
                   </Grid>
                 </Border>
 
-                <ScrollViewer Grid.Row="1">
+                <ScrollViewer Grid.Row="1" Classes="smooth">
                   <StackPanel Margin="16,0,16,16" Spacing="10">
                     <StackPanel Spacing="8">
                       <TextBlock Classes="detailSectionTitle" Text="{DynamicResource Connections.Detail.Section.Traffic}"/>
