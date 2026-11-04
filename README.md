@@ -54,7 +54,7 @@
 ### Linux
 
 - 目前**尚未提供 Linux 在线包管理器安装源**。
-- 请前往官方 [GitHub Releases 最新发布页](https://github.com/821869798/carton/releases/latest) 下载预编译的二进制压缩包（`carton-*-linux-*.tar.gz`），解压即可使用；或参考下方说明自行编译构建。
+- 请前往官方 [GitHub Releases 最新发布页](https://github.com/821869798/carton/releases/latest) 下载适合发行版和处理器架构的 `.deb`、`.rpm`、AppImage 或便携压缩包；也可以参考下方说明自行编译构建。
 
 ## 安装
 
@@ -66,13 +66,11 @@
 | Windows | `-win-x64-portable.zip` | 免安装，数据保存在程序目录 |
 | Ubuntu / Debian | `-linux-x64.deb` | `sudo apt install ./carton-<版本>-linux-x64.deb` |
 | Fedora / openSUSE | `-linux-x64.rpm` | `sudo dnf install ./carton-<版本>-linux-x64.rpm` |
-| Arch / CachyOS / EndeavourOS | AUR `carton-bin` | `yay -S carton-bin` |
+| Arch / CachyOS / EndeavourOS | `-linux-x64.AppImage` 或 `-linux-x64-portable.tar.gz` | 从官方 Releases 下载，直接运行 AppImage 或解包使用 |
 | 其他发行版 | `-linux-x64.AppImage` | 免安装；Ubuntu 24.04+ 需要额外装 `libfuse2` |
 | 其他发行版 | `-linux-x64-portable.tar.gz` | 解包即用，支持应用内自动更新 |
 
-用 `.deb` / `.rpm` / AUR 安装时，应用**不会自更新**（避免覆盖 `/usr` 下的文件、避免与包管理器数据库脱节）：
-应用内的"检查更新"仍然可用，检测到新版本时不再引导你去下载自更新，而是提示对应的升级方式
-（AUR 直接给出 `yay -Syu`，deb/rpm 提示下载新版安装包覆盖安装）。
+从官方 Releases 下载并安装 `.deb` / `.rpm` 时，应用**不会自更新**（避免覆盖 `/usr` 下的文件、避免与包管理器数据库脱节）。应用内的“检查更新”仍然可用；检测到新版本后，请从官方 Releases 下载新版安装包覆盖安装。
 
 ## 配置复写说明
 
@@ -211,7 +209,7 @@ scripts\build\build-release-win-x64.bat
 ./scripts/build/build-linux-packages.sh linux-x64 1.2.3 artifacts/publish/linux-x64-appimage
 ```
 
-`linux-arm64` 同理，把 rid 换掉即可。AUR 包见 [`packaging/aur/`](./packaging/aur/README.md)。
+`linux-arm64` 同理，把 rid 换掉即可。
 
 CI 除 deb/rpm 外还会产出 `-package.tar.gz`（INSTALLER_BUILD 那一份，去掉 `carton-helper`
 与便携标记），AUR 的 `carton-bin` 就是用它重打包的：portable 变体虽然也能删文件绕过，

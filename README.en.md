@@ -54,7 +54,9 @@ Design goals:
 ### Linux
 
 - **No online package repository is currently available.**
-- Please download official pre-built binaries (`carton-*-linux-*.tar.gz`) directly from the [GitHub Releases Page](https://github.com/821869798/carton/releases/latest), unpack and run; or build from source using the instructions below.
+- Download a `.deb`, `.rpm`, AppImage, or portable archive for your distribution and CPU architecture directly from the official [GitHub Releases page](https://github.com/821869798/carton/releases/latest). You can also build from source using the instructions below.
+- On Arch, CachyOS, and EndeavourOS, use the official AppImage or portable archive from GitHub Releases.
+- Install downloaded `.deb` / `.rpm` packages with `sudo apt install ./carton-<version>-linux-x64.deb` or `sudo dnf install ./carton-<version>-linux-x64.rpm`. These are local package files, not online carton repositories. App self-updates are disabled for these installations; download and install the newer official package when an update is available.
 
 ## Config Override Behavior
 
