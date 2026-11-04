@@ -106,7 +106,7 @@
                 Padding="12,6"/>
         <TextBox Grid.Column="1"
                  Text="{Binding SearchText}"
-                 Watermark="{DynamicResource Connections.Search.Watermark}"
+                 PlaceholderText="{DynamicResource Connections.Search.Watermark}"
                  HorizontalAlignment="Stretch"/>
         <Border Grid.Column="2"
                 Classes="fluentBadge"

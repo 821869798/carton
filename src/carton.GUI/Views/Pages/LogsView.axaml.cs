@@ -102,7 +102,7 @@ public partial class LogsView : UserControl
 
     private void UpdateActiveState()
     {
-        var isActive = this.GetVisualRoot() != null && IsVisible;
+        var isActive = TopLevel.GetTopLevel(this) != null && IsVisible;
         if (_isViewActive == isActive)
         {
             return;

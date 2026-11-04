@@ -97,13 +97,6 @@ public partial class App : Application
         Justification = "This Avalonia validation plugin removal path has been verified in published AOT builds.")]
     private void DisableAvaloniaDataAnnotationValidation()
     {
-        var dataValidationPluginsToRemove =
-            BindingPlugins.DataValidators.OfType<DataAnnotationsValidationPlugin>().ToArray();
-
-        foreach (var plugin in dataValidationPluginsToRemove)
-        {
-            BindingPlugins.DataValidators.Remove(plugin);
-        }
     }
 
     private static AppPreferences LoadOrCreatePreferences()

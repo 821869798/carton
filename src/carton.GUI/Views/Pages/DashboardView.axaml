@@ -58,7 +58,7 @@
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
       <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="Padding" Value="14,8"/>
+      <Setter Property="Padding" Value="10,8"/>
       <Setter Property="MinHeight" Value="32"/>
       <Setter Property="MinWidth" Value="64"/>
       <Setter Property="FontSize" Value="12"/>
@@ -135,15 +135,16 @@
 
   <ScrollViewer Classes="smooth">
     <StackPanel Margin="20" Spacing="16">
-      <!-- 左右两张配置卡片，样式与上传/下载状态卡片一致；不再有内嵌的画线框。
-           列宽沿用原先的 *,180，右侧开关卡片不需要更多空间；
-           两张卡片 VerticalAlignment=Top，各撑各的高度，不被拉平成一样高。 -->
-      <Grid ColumnDefinitions="*,180" ColumnSpacing="16"
+      <!-- Let the switches card fit localized labels and the theme's toggle size. -->
+      <Grid x:Name="RuntimeOptionsGrid"
+            ColumnDefinitions="*,Auto" RowDefinitions="Auto"
+            ColumnSpacing="16"
+            SizeChanged="OnRuntimeOptionsSizeChanged"
             IsEnabled="{Binding CanUseDashboardControls}">
         <Border Grid.Column="0"
                 Classes="card sfmCard"
                 Padding="14"
-                VerticalAlignment="Top">
+                VerticalAlignment="Stretch">
           <StackPanel Spacing="8">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
               <StackPanel Grid.Column="0"
@@ -172,8 +173,8 @@
 
             <WrapPanel Orientation="Horizontal">
               <StackPanel Orientation="Horizontal"
-                          Spacing="10"
-                          Margin="0,0,10,6">
+                          Spacing="6"
+                          Margin="0,0,6,6">
                 <TextBlock Text="{DynamicResource Dashboard.Field.Port}"
                            Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}"
                            VerticalAlignment="Center"/>
@@ -192,7 +193,7 @@
               </StackPanel>
 
               <Border Classes="portScopeTrack"
-                      Margin="0,0,10,6">
+                      Margin="0,0,6,6">
                 <Grid ColumnDefinitions="Auto,Auto"
                       ColumnSpacing="3">
                   <RadioButton Grid.Column="0"
@@ -215,7 +216,7 @@
               </Border>
 
               <StackPanel Orientation="Horizontal"
-                          Spacing="10"
+                          Spacing="6"
                           Margin="0,0,0,6">
                 <Button Classes="iconButton"
                         IsEnabled="{Binding ShowDashboardMetrics}"
@@ -277,10 +278,12 @@
           </StackPanel>
         </Border>
 
-        <Border Grid.Column="1"
+        <Border x:Name="RuntimeSwitchesCard"
+                Grid.Column="1"
                 Classes="card sfmCard"
                 Padding="14"
-                VerticalAlignment="Top">
+                MinWidth="180"
+                VerticalAlignment="Stretch">
           <StackPanel Spacing="8">
             <StackPanel Orientation="Horizontal" Spacing="10">
               <PathIcon Width="16"

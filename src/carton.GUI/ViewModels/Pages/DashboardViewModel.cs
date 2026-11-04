@@ -1322,7 +1322,7 @@ public partial class DashboardViewModel : PageViewModelBase
         var passwordBox = new Avalonia.Controls.TextBox
         {
             PasswordChar = '\u2022',
-            Watermark = "Password",
+            PlaceholderText = "Password",
             Margin = new Avalonia.Thickness(0, 0, 0, 16)
         };
 
@@ -1388,7 +1388,7 @@ public partial class DashboardViewModel : PageViewModelBase
         var portBox = new Avalonia.Controls.TextBox
         {
             Text = InboundPortText,
-            Watermark = GetString("Dashboard.Field.Port", "Mixed Port"),
+            PlaceholderText = GetString("Dashboard.Field.Port", "Mixed Port"),
             Margin = new Avalonia.Thickness(0, 0, 0, 16)
         };
 

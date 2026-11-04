@@ -168,7 +168,7 @@
         <TextBox x:Name="ConfigSearchInput"
                  Grid.Column="0"
                  VerticalAlignment="Center"
-                 Watermark="{DynamicResource Profiles.Editor.Search}"/>
+                 PlaceholderText="{DynamicResource Profiles.Editor.Search}"/>
         <TextBlock x:Name="ConfigSearchStatus"
                    Grid.Column="1"
                    Width="56"
@@ -335,7 +335,7 @@
                          VerticalAlignment="Center"/>
               <TextBox Grid.Column="1"
                        Text="{Binding NewProfileName}"
-                       Watermark="{DynamicResource Profiles.Form.NameWatermark}"/>
+                       PlaceholderText="{DynamicResource Profiles.Form.NameWatermark}"/>
             </Grid>
           </Border>
 
@@ -378,7 +378,7 @@
               <TextBox Grid.Column="1"
                        Text="{Binding NewLocalFilePath}"
                        IsReadOnly="True"
-                       Watermark="{DynamicResource Profiles.Form.FileWatermark}"/>
+                       PlaceholderText="{DynamicResource Profiles.Form.FileWatermark}"/>
               <Button Grid.Column="2"
                       Content="{DynamicResource Profiles.Form.BrowseButton}"
                       Command="{Binding BrowseLocalFileCommand}"
@@ -395,30 +395,33 @@
                          VerticalAlignment="Center"/>
               <TextBox Grid.Column="1"
                        Text="{Binding NewProfileUrl}"
-                       Watermark="{DynamicResource Profiles.Form.UrlWatermark}"/>
+                       PlaceholderText="{DynamicResource Profiles.Form.UrlWatermark}"/>
             </Grid>
           </Border>
 
           <!-- Auto Update / Interval (remote only) -->
           <Border Classes="settingsItem"
                   IsVisible="{Binding IsRemoteProfile}">
-            <Grid ColumnDefinitions="120,Auto,*,Auto,120" ColumnSpacing="12">
-              <TextBlock Classes="settingsTitle"
-                          Text="{DynamicResource Profiles.Form.AutoUpdateLabel}"
-                          VerticalAlignment="Center"/>
-              <ToggleSwitch Grid.Column="1"
-                            IsChecked="{Binding NewAutoUpdate}"
-                            VerticalAlignment="Center"/>
-              <TextBlock Grid.Column="3"
-                         Classes="settingsTitle"
-                         Text="{DynamicResource Profiles.Form.IntervalLabel}"
-                         VerticalAlignment="Center"/>
-              <TextBox Grid.Column="4"
-                       Text="{Binding NewUpdateIntervalMinutes}"
-                       Watermark="{DynamicResource Profiles.Form.IntervalWatermark}"
-                       VerticalAlignment="Center"
-                       VerticalContentAlignment="Center"/>
-            </Grid>
+            <WrapPanel Orientation="Horizontal">
+              <Grid ColumnDefinitions="120,Auto" ColumnSpacing="12" Margin="0,0,12,4">
+                <TextBlock Classes="settingsTitle"
+                           Text="{DynamicResource Profiles.Form.AutoUpdateLabel}"
+                           VerticalAlignment="Center"/>
+                <ToggleSwitch Grid.Column="1"
+                              IsChecked="{Binding NewAutoUpdate}"
+                              VerticalAlignment="Center"/>
+              </Grid>
+              <Grid ColumnDefinitions="Auto,100" ColumnSpacing="12" Margin="0,0,0,4">
+                <TextBlock Classes="settingsTitle"
+                           Text="{DynamicResource Profiles.Form.IntervalLabel}"
+                           VerticalAlignment="Center"/>
+                <TextBox Grid.Column="1"
+                         Text="{Binding NewUpdateIntervalMinutes}"
+                         PlaceholderText="{DynamicResource Profiles.Form.IntervalWatermark}"
+                         VerticalAlignment="Center"
+                         VerticalContentAlignment="Center"/>
+              </Grid>
+            </WrapPanel>
           </Border>
 
           <!-- Last Updated (edit mode) -->
@@ -466,7 +469,7 @@
               <TextBlock Classes="settingsTitle"
                          Text="{DynamicResource Profiles.Form.ContentLabel}"/>
               <TextBox Text="{Binding ConfigContent}"
-                       Watermark="{DynamicResource Profiles.Form.ContentWatermark}"
+                       PlaceholderText="{DynamicResource Profiles.Form.ContentWatermark}"
                        AcceptsReturn="True"
                        TextWrapping="NoWrap"
                        Height="260"

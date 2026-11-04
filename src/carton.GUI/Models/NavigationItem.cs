@@ -1,6 +1,5 @@
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FluentAvalonia.UI.Controls;
 
 namespace carton.GUI.Models;
 
@@ -12,11 +11,7 @@ public sealed partial class NavigationItem : ObservableObject
         TitleResourceKey = titleResourceKey;
         FallbackTitle = fallbackTitle;
         _title = fallbackTitle;
-        IconSource = new PathIconSource
-        {
-            Data = Geometry.Parse(iconData),
-            Stretch = Stretch.Uniform
-        };
+        IconGeometry = Geometry.Parse(iconData);
     }
 
     public NavigationPage Page { get; }
@@ -25,7 +20,7 @@ public sealed partial class NavigationItem : ObservableObject
 
     public string FallbackTitle { get; }
 
-    public IconSource IconSource { get; }
+    public Geometry IconGeometry { get; }
 
     [ObservableProperty]
     private string _title;

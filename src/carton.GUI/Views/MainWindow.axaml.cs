@@ -6,7 +6,6 @@ using carton.Core.Utilities;
 using carton.GUI.Models;
 using carton.GUI.Services;
 using carton.ViewModels;
-using FluentAvalonia.UI.Controls;
 using System;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
@@ -32,9 +31,6 @@ public partial class MainWindow : Window
     private readonly IWindowStateService _windowStateService = new WindowStateService();
     private long _windowPlacementSaveSequence;
     private bool _syncingNavigationSelection;
-    private int _navigationRailAnimationVersion;
-    private const double NavigationRailLeft = 10;
-    private const double NavigationRailHeight = 18;
 
     public MainWindow()
     {
@@ -109,7 +105,7 @@ public partial class MainWindow : Window
         SyncNavigationSelection(force: true);
     }
 
-    private void OnRootNavigationViewLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private void OnNavListBoxLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         SyncNavigationSelection(force: true);
     }
@@ -453,44 +449,16 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnNavigationViewItemInvoked(object? sender, NavigationViewItemInvokedEventArgs e)
+    private void OnNavListBoxSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (_syncingNavigationSelection || DataContext is not MainViewModel viewModel)
         {
             return;
         }
 
-        var navigationItem = GetNavigationItemFromInvokedEvent(e);
-        if (navigationItem == null)
-        {
-            return;
-        }
-
-        if (viewModel.SelectedPage != navigationItem.Page)
+        if (NavListBox.SelectedItem is NavigationItem navigationItem && viewModel.SelectedPage != navigationItem.Page)
         {
             viewModel.SelectedPage = navigationItem.Page;
-        }
-
-        RootNavigationView.SelectedItem = navigationItem;
-        SetNavigationItemSelectionStates(navigationItem);
-    }
-
-    private void OnNavigationViewSelectionChanged(object? sender, NavigationViewSelectionChangedEventArgs e)
-    {
-        if (_syncingNavigationSelection || DataContext is not MainViewModel viewModel)
-        {
-            return;
-        }
-
-        var navigationItem = GetNavigationItemFromSelectionEvent(e);
-        if (navigationItem != null && viewModel.SelectedPage != navigationItem.Page)
-        {
-            viewModel.SelectedPage = navigationItem.Page;
-        }
-
-        if (navigationItem != null)
-        {
-            SetNavigationItemSelectionStates(navigationItem);
         }
     }
 
@@ -523,222 +491,21 @@ public partial class MainWindow : Window
 
         var item = FindNavigationItem(_viewModel.SelectedPage);
 
-        if (item == null || (!force && ReferenceEquals(RootNavigationView.SelectedItem, item)))
+        if (item == null || (!force && ReferenceEquals(NavListBox.SelectedItem, item)))
         {
-            if (item != null && !NavigationSelectionRail.IsVisible)
-            {
-                SetNavigationItemSelectionStates(item);
-            }
-
             return;
         }
 
         _syncingNavigationSelection = true;
         try
         {
-            if (force)
-            {
-                RootNavigationView.SelectedItem = null;
-            }
-
-            RootNavigationView.SelectedItem = item;
-            SetNavigationItemSelectionStates(item);
+            NavListBox.SelectedItem = item;
         }
         finally
         {
             _syncingNavigationSelection = false;
         }
     }
-
-    private void SetNavigationItemSelectionStates(NavigationItem selectedItem)
-    {
-        UpdateNavigationItemSelectionStates(RootNavigationView, selectedItem);
-
-        MoveNavigationSelectionRail(selectedItem);
-        Dispatcher.UIThread.Post(
-            () => MoveNavigationSelectionRail(selectedItem, retryIfMissing: true),
-            DispatcherPriority.Render);
-    }
-
-    private void MoveNavigationSelectionRail(NavigationItem selectedItem, bool retryIfMissing = false)
-    {
-        // Prefer the exact position of the selected item's own container.
-        var measuredTop = TryMeasureNavigationRailTop(selectedItem);
-        if (measuredTop != null)
-        {
-            SetNavigationSelectionRailTop(measuredTop.Value);
-            return;
-        }
-
-        // Its container is not laid out yet. Derive the position from a container that IS,
-        // or leave the rail where it is and retry - never place it at a guessed offset.
-        if (GetDerivedNavigationRailTop(selectedItem) is { } derivedTop)
-        {
-            SetNavigationSelectionRailTop(derivedTop);
-        }
-
-        if (retryIfMissing)
-        {
-            Dispatcher.UIThread.Post(
-                () => MoveNavigationSelectionRail(selectedItem),
-                DispatcherPriority.Loaded);
-        }
-    }
-
-    /// <summary>
-    /// Rail top for the selected item measured from its own container, or
-    /// <see langword="null"/> when that container is not realised/laid out yet.
-    /// </summary>
-    private double? TryMeasureNavigationRailTop(NavigationItem selectedItem)
-    {
-        var container = FindNavigationItemContainer(selectedItem);
-        if (container == null || container.Bounds.Height <= 0)
-        {
-            return null;
-        }
-
-        var center = container.TranslatePoint(
-            new Point(0, container.Bounds.Height / 2), RootNavigationView);
-
-        // A centre at or above the pane's origin means layout has not run yet; treating
-        // that as "not measurable" is what the old `measuredTop > 80` heuristic was
-        // approximating, but without the magic number.
-        if (center == null || center.Value.Y <= 0)
-        {
-            return null;
-        }
-
-        return center.Value.Y - NavigationRailHeight / 2;
-    }
-
-    /// <summary>
-    /// Approximate rail top used while the selected item's container is not realised.
-    /// </summary>
-    /// <remarks>
-    /// This used to be a hardcoded header offset and row pitch (<c>188 + index * 46</c>),
-    /// which would silently misplace the rail the moment the pane's metrics changed. It is
-    /// now derived from a container that is actually laid out: the pane's real row height
-    /// supplies the pitch and that container's real position supplies the origin.
-    /// Returns <see langword="null"/> when nothing is laid out yet, and the caller simply
-    /// retries rather than drawing the rail in a guessed spot.
-    /// </remarks>
-    private double? GetDerivedNavigationRailTop(NavigationItem selectedItem)
-    {
-        if (_viewModel == null ||
-            FindFirstNavigationItemContainer() is not { } reference ||
-            reference.DataContext is not NavigationItem referenceItem ||
-            reference.Bounds.Height <= 0)
-        {
-            return null;
-        }
-
-        var targetIndex = _viewModel.NavigationItems.IndexOf(selectedItem);
-        var referenceIndex = _viewModel.NavigationItems.IndexOf(referenceItem);
-        if (targetIndex < 0 || referenceIndex < 0)
-        {
-            return null;
-        }
-
-        var referenceCenter = reference.TranslatePoint(
-            new Point(0, reference.Bounds.Height / 2), RootNavigationView);
-        if (referenceCenter == null)
-        {
-            return null;
-        }
-
-        var pitch = reference.Bounds.Height;
-        return referenceCenter.Value.Y - NavigationRailHeight / 2 + (targetIndex - referenceIndex) * pitch;
-    }
-
-    private void SetNavigationSelectionRailTop(double top)
-    {
-        AnimateNavigationSelectionRailToTop(Math.Max(0, top));
-    }
-
-    private async void AnimateNavigationSelectionRailToTop(double targetTop)
-    {
-        var version = ++_navigationRailAnimationVersion;
-        var currentTop = NavigationSelectionRail.Margin.Top;
-
-        if (!NavigationSelectionRail.IsVisible || Math.Abs(currentTop - targetTop) < 0.5)
-        {
-            NavigationSelectionRail.Height = NavigationRailHeight;
-            NavigationSelectionRail.Margin = new Thickness(NavigationRailLeft, targetTop, 0, 0);
-            NavigationSelectionRail.IsVisible = true;
-            return;
-        }
-
-        var stretchTop = Math.Min(currentTop, targetTop);
-        var stretchHeight = Math.Abs(targetTop - currentTop) + NavigationRailHeight;
-
-        NavigationSelectionRail.Margin = new Thickness(NavigationRailLeft, stretchTop, 0, 0);
-        NavigationSelectionRail.Height = stretchHeight;
-        NavigationSelectionRail.IsVisible = true;
-
-        await Task.Delay(140);
-
-        if (version != _navigationRailAnimationVersion)
-        {
-            return;
-        }
-
-        await Dispatcher.UIThread.InvokeAsync(() =>
-        {
-            if (version != _navigationRailAnimationVersion)
-            {
-                return;
-            }
-
-            NavigationSelectionRail.Margin = new Thickness(NavigationRailLeft, targetTop, 0, 0);
-            NavigationSelectionRail.Height = NavigationRailHeight;
-        });
-    }
-
-    private NavigationItem? GetNavigationItemFromInvokedEvent(NavigationViewItemInvokedEventArgs e)
-    {
-        if (e.InvokedItemContainer is Control { DataContext: NavigationItem containerItem })
-        {
-            return containerItem;
-        }
-
-        if (e.InvokedItem is NavigationItem invokedItem)
-        {
-            return invokedItem;
-        }
-
-        if (e.InvokedItemContainer is NavigationViewItem { Tag: NavigationPage pageFromTag })
-        {
-            return FindNavigationItem(pageFromTag);
-        }
-
-        return null;
-    }
-
-    private NavigationItem? GetNavigationItemFromSelectionEvent(NavigationViewSelectionChangedEventArgs e)
-    {
-        if (e.SelectedItem is NavigationItem selectedItem)
-        {
-            return selectedItem;
-        }
-
-        if (e.SelectedItemContainer is Control { DataContext: NavigationItem containerItem })
-        {
-            return containerItem;
-        }
-
-        if (e.SelectedItemContainer is NavigationViewItem { Tag: NavigationPage pageFromContainer })
-        {
-            return FindNavigationItem(pageFromContainer);
-        }
-
-        if (e.SelectedItem is NavigationViewItem { Tag: NavigationPage pageFromItem })
-        {
-            return FindNavigationItem(pageFromItem);
-        }
-
-        return null;
-    }
-
     private NavigationItem? FindNavigationItem(NavigationPage page)
     {
         if (_viewModel == null)
@@ -756,80 +523,6 @@ public partial class MainWindow : Window
         }
 
         return null;
-    }
-
-    private NavigationViewItem? FindNavigationItemContainer(NavigationItem item)
-    {
-        return FindNavigationItemContainer(RootNavigationView, item);
-    }
-
-    /// <summary>
-    /// First navigation item container that is already in the visual tree, used purely as a
-    /// layout reference (its position and row height) when the selected item's own container
-    /// is not realised yet.
-    /// </summary>
-    private NavigationViewItem? FindFirstNavigationItemContainer()
-    {
-        return FindFirstNavigationItemContainer(RootNavigationView);
-    }
-
-    private static NavigationViewItem? FindFirstNavigationItemContainer(Visual visual)
-    {
-        if (visual is NavigationViewItem container && container.DataContext is NavigationItem)
-        {
-            return container;
-        }
-
-        foreach (var child in visual.GetVisualChildren())
-        {
-            var match = FindFirstNavigationItemContainer(child);
-            if (match != null)
-            {
-                return match;
-            }
-        }
-
-        return null;
-    }
-
-    private static NavigationViewItem? FindNavigationItemContainer(Visual visual, NavigationItem item)
-    {
-        if (visual is NavigationViewItem container && IsContainerForNavigationItem(container, item))
-        {
-            return container;
-        }
-
-        foreach (var child in visual.GetVisualChildren())
-        {
-            var match = FindNavigationItemContainer(child, item);
-            if (match != null)
-            {
-                return match;
-            }
-        }
-
-        return null;
-    }
-
-    private static void UpdateNavigationItemSelectionStates(Visual visual, NavigationItem selectedItem)
-    {
-        if (visual is NavigationViewItem container &&
-            (container.DataContext is NavigationItem || container.Content is NavigationItem || container.Tag is NavigationPage))
-        {
-            container.IsSelected = IsContainerForNavigationItem(container, selectedItem);
-        }
-
-        foreach (var child in visual.GetVisualChildren())
-        {
-            UpdateNavigationItemSelectionStates(child, selectedItem);
-        }
-    }
-
-    private static bool IsContainerForNavigationItem(NavigationViewItem container, NavigationItem item)
-    {
-        return ReferenceEquals(container.DataContext, item)
-            || ReferenceEquals(container.Content, item)
-            || (container.Tag is NavigationPage page && page == item.Page);
     }
 
     private void HideOnFirstOpen()

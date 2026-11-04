@@ -2,10 +2,11 @@ using System;
 using System.Linq;
 using Avalonia;
 using Avalonia.Media;
+using Avalonia.Platform;
 using Avalonia.Styling;
+using Avalonia.Themes.Fluent2;
 using Avalonia.Threading;
 using carton.Core.Models;
-using FluentAvalonia.Styling;
 
 namespace carton.GUI.Services;
 
@@ -26,6 +27,7 @@ public sealed class ThemeService : IThemeService
     public static ThemeService Instance => _instance.Value;
 
     private bool _initialized;
+    private bool _platformSettingsHooked;
     private int _accentUpdateVersion;
 
     public AppTheme CurrentTheme { get; private set; } = AppTheme.System;
@@ -75,28 +77,21 @@ public sealed class ThemeService : IThemeService
         ThemeAccent = normalizedAccent;
 
         var app = Application.Current ?? throw new InvalidOperationException("Application is not ready");
-        var fluentTheme = app.Styles.OfType<FluentAvaloniaTheme>().FirstOrDefault();
+        EnsurePlatformSettingsHooked(app);
+
+        var fluent2Theme = app.Styles.OfType<Fluent2Theme>().FirstOrDefault();
         var accentUpdateVersion = ++_accentUpdateVersion;
-        if (fluentTheme != null)
-        {
-            if (useSystemThemeAccent)
-            {
-                fluentTheme.CustomAccentColor = null;
-                fluentTheme.PreferUserAccentColor = true;
-            }
-            else
-            {
-                fluentTheme.CustomAccentColor = Color.Parse(normalizedAccent);
-                fluentTheme.PreferUserAccentColor = false;
-            }
-        }
 
         if (useSystemThemeAccent)
         {
-            // 跟随系统色:FluentAvalonia 设置 PreferUserAccentColor 后,SystemAccentColor
-            // 资源要到下一渲染周期才刷新回真实系统色,此刻同步读取会拿到旧的自定义色。
-            // 先用当前能拿到的值更新一次避免空窗,再在下一周期读到真实系统色后二次更新。
-            UpdateCartonAccentBrush(app, ResolveCurrentAccentColor(app, fluentTheme, normalizedAccent));
+            if (fluent2Theme != null)
+            {
+                fluent2Theme.Palettes.Remove(ThemeVariant.Light);
+                fluent2Theme.Palettes.Remove(ThemeVariant.Dark);
+            }
+
+            // 跟随系统色:系统 AccentColor 变化时可能稍后就绪，读取当前并排队一次后台刷新。
+            UpdateCartonAccentBrush(app, ResolveCurrentAccentColor(app, normalizedAccent));
             Dispatcher.UIThread.Post(
                 () =>
                 {
@@ -105,15 +100,60 @@ public sealed class ThemeService : IThemeService
                         return;
                     }
 
-                    UpdateCartonAccentBrush(app, ResolveCurrentAccentColor(app, fluentTheme, normalizedAccent));
+                    UpdateCartonAccentBrush(app, ResolveCurrentAccentColor(app, normalizedAccent));
                 },
                 DispatcherPriority.Background);
         }
         else
         {
-            // 自定义色:目标色已知,直接更新即可即时生效,无需读取尚未刷新的 SystemAccentColor。
-            UpdateCartonAccentBrush(app, Color.Parse(normalizedAccent));
+            var customColor = Color.Parse(normalizedAccent);
+            if (fluent2Theme != null)
+            {
+                if (!fluent2Theme.Palettes.TryGetValue(ThemeVariant.Light, out var lightPalette) || lightPalette is not CartonAccentPalette)
+                {
+                    lightPalette = new CartonAccentPalette();
+                    fluent2Theme.Palettes[ThemeVariant.Light] = lightPalette;
+                }
+                lightPalette.Accent = customColor;
+
+                if (!fluent2Theme.Palettes.TryGetValue(ThemeVariant.Dark, out var darkPalette) || darkPalette is not CartonAccentPalette)
+                {
+                    darkPalette = new CartonAccentPalette();
+                    fluent2Theme.Palettes[ThemeVariant.Dark] = darkPalette;
+                }
+                darkPalette.Accent = customColor;
+            }
+
+            // 自定义色:目标色已知,更新 Fluent2Theme.Palettes 及应用级画刷即可即时生效。
+            UpdateCartonAccentBrush(app, customColor);
         }
+    }
+
+    private void EnsurePlatformSettingsHooked(Application app)
+    {
+        if (_platformSettingsHooked || app.PlatformSettings == null)
+        {
+            return;
+        }
+
+        app.PlatformSettings.ColorValuesChanged += OnPlatformColorValuesChanged;
+        _platformSettingsHooked = true;
+    }
+
+    private void OnPlatformColorValuesChanged(object? sender, PlatformColorValues e)
+    {
+        if (!UseSystemThemeAccent)
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (Application.Current is { } app && UseSystemThemeAccent)
+            {
+                UpdateCartonAccentBrush(app, ResolveCurrentAccentColor(app, ThemeAccent));
+            }
+        });
     }
 
     private static string NormalizeAccent(string? themeAccent)
@@ -128,43 +168,48 @@ public sealed class ThemeService : IThemeService
 
     private static void UpdateCartonAccentBrush(Application app, Color color)
     {
-        if (app.Resources.TryGetResource("CartonAccentBrush", null, out var resource) &&
+        SetOrUpdateBrush(app, "CartonAccentBrush", color);
+
+        // 选中/展开态边框用弱化的强调色(70% alpha),需跟随当前强调色一起更新
+        var borderColor = new Color(0xB3, color.R, color.G, color.B);
+        SetOrUpdateBrush(app, "CartonAccentBorderBrush", borderColor);
+
+        // 同步更新色阶画刷,使 Settings 预览色条即时生效
+        var shades = CartonAccentPalette.CalculateShades(color);
+        Color ResolveShade(string key, Color fallback) =>
+            app.TryGetResource(key, app.ActualThemeVariant, out var resource) && TryConvertColor(resource, out var shade)
+                ? shade
+                : fallback;
+        SetOrUpdateBrush(app, "CartonAccentLight1Brush", ResolveShade("SystemAccentColorLight1", shades.l1));
+        SetOrUpdateBrush(app, "CartonAccentLight2Brush", ResolveShade("SystemAccentColorLight2", shades.l2));
+        SetOrUpdateBrush(app, "CartonAccentLight3Brush", ResolveShade("SystemAccentColorLight3", shades.l3));
+        SetOrUpdateBrush(app, "CartonAccentDark1Brush", ResolveShade("SystemAccentColorDark1", shades.d1));
+        SetOrUpdateBrush(app, "CartonAccentDark2Brush", ResolveShade("SystemAccentColorDark2", shades.d2));
+        SetOrUpdateBrush(app, "CartonAccentDark3Brush", ResolveShade("SystemAccentColorDark3", shades.d3));
+    }
+
+    private static void SetOrUpdateBrush(Application app, string key, Color color)
+    {
+        if (app.Resources.TryGetResource(key, null, out var resource) &&
             resource is SolidColorBrush brush)
         {
             brush.Color = color;
         }
         else
         {
-            app.Resources["CartonAccentBrush"] = new SolidColorBrush(color);
-        }
-
-        // 选中/展开态边框用弱化的强调色(70% alpha),需跟随当前强调色一起更新
-        var borderColor = new Color(0xB3, color.R, color.G, color.B);
-        if (app.Resources.TryGetResource("CartonAccentBorderBrush", null, out var borderResource) &&
-            borderResource is SolidColorBrush borderBrush)
-        {
-            borderBrush.Color = borderColor;
-        }
-        else
-        {
-            app.Resources["CartonAccentBorderBrush"] = new SolidColorBrush(borderColor);
+            app.Resources[key] = new SolidColorBrush(color);
         }
     }
 
-    private static Color ResolveCurrentAccentColor(Application app, FluentAvaloniaTheme? fluentTheme, string fallbackAccent)
+    private static Color ResolveCurrentAccentColor(Application app, string fallbackAccent)
     {
-        // SystemAccentColor 由 FluentAvaloniaTheme 存放在它自身的资源里(app.Styles 中),
-        // app.Resources.TryGetResource 只查 Resources 不查 Styles,因此要先从 FA 实例查,
-        // 再退回 app.Resources,最后才用 fallback。
-        var variant = app.ActualThemeVariant;
-        if (fluentTheme is Avalonia.Controls.IResourceNode faNode &&
-            faNode.TryGetResource("SystemAccentColor", variant, out var faResource) &&
-            TryConvertColor(faResource, out var faColor))
+        if (app.PlatformSettings?.GetColorValues().AccentColor1 is { } platformAccent)
         {
-            return faColor;
+            return platformAccent;
         }
 
-        if (app.Resources.TryGetResource("SystemAccentColor", variant, out var accentResource) &&
+        var variant = app.ActualThemeVariant;
+        if (app.TryGetResource("SystemAccentColor", variant, out var accentResource) &&
             TryConvertColor(accentResource, out var resColor))
         {
             return resColor;

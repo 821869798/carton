@@ -2,11 +2,16 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <Styles.Resources>
     <ResourceDictionary>
-      <FontFamily x:Key="SymbolThemeFontFamily">avares://FluentAvalonia/Fonts#Symbols</FontFamily>
       <SolidColorBrush x:Key="CartonAccentBrush" Color="#0078D7" />
       <SolidColorBrush x:Key="CartonAccentForegroundBrush" Color="White" />
       <!-- 选中/展开态边框用的弱化强调色(70% alpha)。运行时由 ThemeService 跟随当前强调色更新,此处为首帧初值(默认强调色 #0078D7 的 70%) -->
       <SolidColorBrush x:Key="CartonAccentBorderBrush" Color="#B30078D7" />
+      <SolidColorBrush x:Key="CartonAccentLight1Brush" Color="#429CE3" />
+      <SolidColorBrush x:Key="CartonAccentLight2Brush" Color="#76B9ED" />
+      <SolidColorBrush x:Key="CartonAccentLight3Brush" Color="#A6D8FF" />
+      <SolidColorBrush x:Key="CartonAccentDark1Brush" Color="#005A9E" />
+      <SolidColorBrush x:Key="CartonAccentDark2Brush" Color="#004275" />
+      <SolidColorBrush x:Key="CartonAccentDark3Brush" Color="#002642" />
 
       <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">

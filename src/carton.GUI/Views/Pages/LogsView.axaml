@@ -67,7 +67,7 @@
           </ComboBox>
           <TextBox Grid.Column="2"
                    Text="{Binding SearchText}"
-                   Watermark="{DynamicResource Logs.Search.Watermark}"
+                   PlaceholderText="{DynamicResource Logs.Search.Watermark}"
                    HorizontalAlignment="Stretch"/>
           <Border Grid.Column="3"
                   Classes="fluentBadge"
