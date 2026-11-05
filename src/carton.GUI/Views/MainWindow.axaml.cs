@@ -35,6 +35,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        InitializeMaterial();
         Closing += OnClosing;
         Opened += OnOpened;
         PositionChanged += OnPositionChanged;

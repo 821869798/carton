@@ -32,6 +32,7 @@ public class AppPreferences
     public GitHubUpdateCheckStrategy GitHubUpdateCheckStrategy { get; set; } = GitHubUpdateCheckStrategy.ApiThenAtom;
     public KernelCacheCleanupPolicy KernelCacheCleanupPolicy { get; set; } = KernelCacheCleanupPolicy.ClearOnChannelChange;
     public KernelInstallChannel? LastInstalledKernelChannel { get; set; }
+    public WindowMaterial WindowMaterial { get; set; } = WindowMaterial.Solid;
     public AppTheme Theme { get; set; } = AppTheme.System;
     public bool UseSystemThemeAccent { get; set; } = true;
     public string ThemeAccent { get; set; } = "#FF0078D7";
@@ -80,6 +81,12 @@ public enum DownloadMirror
     Ref1ndTest = 3,
     GitHubPreRelease = 4,
     GhProxyPreRelease = 5
+}
+
+public enum WindowMaterial
+{
+    Solid = 0,
+    Mica = 1
 }
 
 public enum AppTheme

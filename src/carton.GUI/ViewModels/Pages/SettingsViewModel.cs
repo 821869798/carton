@@ -325,6 +325,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
     public SettingsViewModel()
     {
         InitializePageMetadata("Settings", "Navigation.Settings", "Settings");
+        WindowMaterialService.Instance.AvailabilityChanged += OnMaterialAvailabilityChanged;
         InitializeThemes();
         InitializeUpdateChannels();
     }
@@ -474,6 +475,8 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
 
     public void Dispose()
     {
+        DisposeMaterialSettings();
+        WindowMaterialService.Instance.AvailabilityChanged -= OnMaterialAvailabilityChanged;
         if (_kernelManager != null)
         {
             _kernelManager.DownloadProgressChanged -= OnDownloadProgress;
@@ -499,6 +502,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         ShowPortableDataOption = IsPortableDistributionBuild;
 
         _suppressPreferenceUpdates = true;
+        LoadMaterialPreferences();
         StartAtLogin = _currentPreferences.StartAtLogin;
         StartHiddenAtLogin = _currentPreferences.StartHiddenAtLogin;
         AutoStartOnLaunch = _currentPreferences.AutoStartOnLaunch;
@@ -1470,6 +1474,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
 
         _currentPreferences = new AppPreferences();
         _suppressPreferenceUpdates = true;
+        LoadMaterialPreferences();
         StartAtLogin = _currentPreferences.StartAtLogin;
         StartHiddenAtLogin = _currentPreferences.StartHiddenAtLogin;
         AutoStartOnLaunch = _currentPreferences.AutoStartOnLaunch;
@@ -1551,6 +1556,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
         }
 
         _preferencesService.Save(_currentPreferences);
+        WindowMaterialService.Instance.Apply(_currentPreferences);
     }
 
     private void OnLanguageOptionChanged(LanguageOptionViewModel? value)

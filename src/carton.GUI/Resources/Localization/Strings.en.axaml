@@ -74,7 +74,6 @@
   <x:String x:Key="Logs.Source.SingBox">sing-box</x:String>
 
   <x:String x:Key="Profiles.Button.Back">Back</x:String>
-  <x:String x:Key="Profiles.Header.Title">Profiles</x:String>
   <x:String x:Key="Profiles.Button.NewProfile">Create Profile &gt;</x:String>
   <x:String x:Key="Profiles.List.LastUpdatedLabel">Last updated: </x:String>
   <x:String x:Key="Profiles.List.Never">Never</x:String>
@@ -407,4 +406,11 @@ This action cannot be undone. Continue?</x:String>
   <x:String x:Key="Kernel.Unsupported.Title">Unsupported sing-box Version</x:String>
   <x:String x:Key="Settings.Kernel.BlockedDialog.Title">Unsupported sing-box Version</x:String>
   <x:String x:Key="Common.Ok">OK</x:String>
+  <x:String x:Key="Settings.Material.Title">Window background</x:String>
+  <x:String x:Key="Settings.Material.Solid">Solid</x:String>
+  <x:String x:Key="Settings.Material.Mica">Mica</x:String>
+  <x:String x:Key="Settings.Material.Reset">Reset background</x:String>
+  <x:String x:Key="Settings.Material.Fallback">This material is currently unavailable. Using a solid background.</x:String>
+  <x:String x:Key="Settings.Material.SaveFailed">Preview applied, but settings could not be saved. Check the configuration file permissions or whether another program is using it.</x:String>
+  <x:String x:Key="Settings.Material.RetrySave">Retry saving</x:String>
 </ResourceDictionary>

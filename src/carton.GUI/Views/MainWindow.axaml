@@ -38,7 +38,7 @@
   </Design.DataContext>
 
   <Grid RowDefinitions="Auto,*">
-    <Border Grid.Row="0" Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}">
+    <Border x:Name="ShellHeader" Grid.Row="0" Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}">
       <Grid Margin="12,6">
         <Grid.ColumnDefinitions>
           <!-- Equal star columns on both sides keep the centred page title dead-centre no
@@ -75,7 +75,7 @@
     </Border>
 
     <Grid Grid.Row="1" ColumnDefinitions="200,*">
-      <Border Grid.Column="0" Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}">
+      <Border x:Name="ShellSidebar" Grid.Column="0" Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}">
         <Grid RowDefinitions="Auto,*">
           <StackPanel Grid.Row="0"
                       Margin="0,28,0,24"

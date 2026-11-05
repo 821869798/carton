@@ -101,12 +101,10 @@
   </UserControl.Styles>
 
   <Grid RowDefinitions="Auto,Auto,Auto,*">
-    <!-- Header -->
+    <!-- Back, title and editor actions share one unboxed header. -->
     <Border Grid.Row="0"
-            Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"
-            BorderBrush="{DynamicResource CartonControlForegroundBaseLowBrush}"
-            BorderThickness="0,0,0,1"
-            Padding="12,10">
+            IsVisible="{Binding IsProfileFormMode}"
+            Margin="20,20,20,0">
       <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
         <Button Grid.Column="0"
                 Classes="iconButton"
@@ -116,11 +114,12 @@
           <PathIcon Width="14" Height="14"
                     Data="M14.71 6.71L13.29 5.29L6.59 12L13.29 18.71L14.71 17.29L9.41 12L14.71 6.71Z"/>
         </Button>
-        <TextBlock Grid.Column="1"
-                   Text="{DynamicResource Profiles.Header.Title}"
-                   FontSize="18"
-                   FontWeight="SemiBold"
-                   VerticalAlignment="Center"/>
+        <Grid Grid.Column="1" VerticalAlignment="Center">
+          <TextBlock Text="{Binding ProfileFormTitle}" FontSize="16" FontWeight="SemiBold"
+                     TextTrimming="CharacterEllipsis" IsVisible="{Binding !ShowConfigFullscreenView}"/>
+          <TextBlock Text="{DynamicResource Profiles.Form.Content.Show}" FontSize="16" FontWeight="SemiBold"
+                     TextTrimming="CharacterEllipsis" IsVisible="{Binding ShowConfigFullscreenView}"/>
+        </Grid>
         <StackPanel Grid.Column="2"
                     Orientation="Horizontal"
                     Spacing="6"
@@ -230,7 +229,7 @@
     <Grid Grid.Row="3">
       <!-- Profile List View -->
       <ScrollViewer Classes="smooth" IsVisible="{Binding !IsProfileFormMode}">
-        <StackPanel Margin="20" Spacing="6" MaxWidth="560">
+        <StackPanel Margin="20" Spacing="6">
           <Grid ColumnDefinitions="*,Auto">
             <Button Grid.Column="1"
                     Classes="accent"
@@ -324,8 +323,7 @@
 
       <!-- Profile Form View -->
       <ScrollViewer Classes="smooth" IsVisible="{Binding IsProfileFormMode}">
-        <StackPanel Margin="20" Spacing="8" MaxWidth="560">
-          <TextBlock Classes="sectionTitle" Text="{Binding ProfileFormTitle}"/>
+        <StackPanel Margin="20" Spacing="8">
 
           <!-- Name -->
           <Border Classes="settingsItem">

@@ -24,6 +24,7 @@
     <!-- KernelLogCleaner is NOT linked here: it is public in the referenced carton.Core
          assembly, and linking it as source too made every use site ambiguous (CS0436,
          "type conflicts with the imported type"). Use the project reference instead. -->
+    <Compile Include="..\carton.GUI\Services\WindowMaterialService.cs" Link="Production\WindowMaterialService.cs" />
     <Compile Include="..\carton.GUI\Services\CartonAccentPalette.cs" Link="Services\CartonAccentPalette.cs" />
     <Compile Include="..\carton.GUI\ViewModels\Pages\ConnectionsViewModel.cs" Link="Production\ConnectionsViewModel.cs" />
     <Compile Include="..\carton.GUI\ViewModels\ViewModelBase.cs" Link="Production\ViewModelBase.cs" />

@@ -36,8 +36,35 @@
       <Setter Property="helpers:SmoothScrollBehavior.IsEnabled" Value="True"/>
     </Style>
 
+    <Style Selector="Button.pageAction">
+      <Setter Property="Width" Value="36"/>
+      <Setter Property="Height" Value="36"/>
+      <Setter Property="MinWidth" Value="0"/>
+      <Setter Property="Padding" Value="8"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="Button.pageAction:pointerover">
+      <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundBaseLowBrush}"/>
+    </Style>
+    <Style Selector="TextBox.pageSearch">
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="MinHeight" Value="36"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Padding" Value="8,0"/>
+      <Setter Property="Background" Value="{DynamicResource CartonSettingsItemBackgroundBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource CartonSettingsItemBorderBrush}"/>
+    </Style>
+    <Style Selector="PathIcon.searchGlyph">
+      <Setter Property="Width" Value="14"/>
+      <Setter Property="Height" Value="14"/>
+      <Setter Property="Margin" Value="12,0,4,0"/>
+      <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
+    </Style>
+
     <Style Selector="Border.card">
-      <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundChromeMediumBrush}"/>
+      <Setter Property="Background" Value="{DynamicResource CartonSettingsItemBackgroundBrush}"/>
       <Setter Property="CornerRadius" Value="8"/>
       <Setter Property="BoxShadow" Value="0 2 8 0 #10000000"/>
     </Style>

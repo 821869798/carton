@@ -13,29 +13,14 @@
              x:DataType="vm:GroupsViewModel">
 
   <Grid RowDefinitions="Auto,*">
-    <Border Grid.Row="0"
-            Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"
-            BorderBrush="{DynamicResource CartonControlForegroundBaseLowBrush}"
-            BorderThickness="0,0,0,1"
-            Padding="12,10">
-      <StackPanel Orientation="Horizontal" Spacing="8">
-        <TextBlock Text="{DynamicResource Navigation.Groups}"
-                   FontSize="18"
-                   FontWeight="SemiBold"
-                   VerticalAlignment="Center"/>
-        <ProgressBar Width="80"
-                     Height="4"
-                     IsVisible="{Binding IsLoading}"
-                     IsIndeterminate="True"
-                     VerticalAlignment="Center"/>
-      </StackPanel>
-    </Border>
+    <ProgressBar Grid.Row="0" Margin="20,8,20,0" Height="3"
+                 IsVisible="{Binding IsLoading}" IsIndeterminate="True"/>
 
     <ScrollViewer Grid.Row="1"
                   Classes="smooth"
                   IsVisible="{Binding !ShowEmptyState}"
-                  Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}">
-      <ItemsControl Margin="16,8,16,12"
+                  Background="Transparent">
+      <ItemsControl Margin="20"
                     ItemsSource="{Binding Groups}">
         <ItemsControl.ItemTemplate>
           <DataTemplate DataType="vm:GroupItemViewModel">
@@ -48,11 +33,11 @@
                     Classes.expanded="{Binding IsExpanded}">
               <Border.Styles>
                 <Style Selector="Border">
-                  <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundAltHighBrush}"/>
+                  <Setter Property="Background" Value="{DynamicResource CartonSettingsItemBackgroundBrush}"/>
                   <Setter Property="BorderBrush" Value="{DynamicResource CartonSettingsItemBorderBrush}"/>
                 </Style>
                 <Style Selector="Border.expanded">
-                  <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundChromeHighBrush}"/>
+                  <Setter Property="Background" Value="{DynamicResource CartonSettingsItemBackgroundBrush}"/>
                   <Setter Property="BorderBrush" Value="{DynamicResource CartonAccentBorderBrush}"/>
                 </Style>
               </Border.Styles>

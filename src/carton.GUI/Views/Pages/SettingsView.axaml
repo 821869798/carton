@@ -411,6 +411,25 @@
             </ComboBox>
           </Grid>
         </Border>
+        <Border Classes="settingsItem">
+          <StackPanel Spacing="10">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+              <TextBlock Classes="settingsTitle" Text="{DynamicResource Settings.Material.Title}"/>
+              <ComboBox Grid.Column="1" Width="160" SelectedIndex="{Binding SelectedWindowMaterial}">
+                <ComboBoxItem Content="{DynamicResource Settings.Material.Solid}"/>
+                <ComboBoxItem Content="{DynamicResource Settings.Material.Mica}"/>
+              </ComboBox>
+            </Grid>
+            <TextBlock Text="{DynamicResource Settings.Material.Fallback}" TextWrapping="Wrap" IsVisible="{Binding IsMaterialFallback}"/>
+            <StackPanel IsVisible="{Binding HasMaterialSaveError}" Spacing="6">
+              <TextBlock Text="{DynamicResource Settings.Material.SaveFailed}" TextWrapping="Wrap"/>
+              <TextBlock Text="{Binding MaterialSaveError}" TextWrapping="Wrap" FontSize="12"/>
+              <Button Content="{DynamicResource Settings.Material.RetrySave}" Command="{Binding SaveWindowMaterialCommand}" HorizontalAlignment="Right"/>
+            </StackPanel>
+            <Button Content="{DynamicResource Settings.Material.Reset}" Command="{Binding ResetWindowMaterialCommand}" HorizontalAlignment="Right"/>
+          </StackPanel>
+        </Border>
+
         <Expander IsExpanded="{Binding IsThemeAccentExpanded, Mode=TwoWay}"
                   HorizontalAlignment="Stretch">
           <Expander.Header>

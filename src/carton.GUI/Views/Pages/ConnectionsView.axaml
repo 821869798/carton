@@ -11,9 +11,9 @@
 
   <UserControl.Styles>
     <Style Selector="ListBox.connectionList">
-      <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"/>
+      <Setter Property="Background" Value="Transparent"/>
       <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="Padding" Value="8"/>
+      <Setter Property="Padding" Value="0"/>
     </Style>
 
     <Style Selector="ListBox.connectionList ListBoxItem">
@@ -93,33 +93,25 @@
     </Style>
   </UserControl.Styles>
 
-  <Grid RowDefinitions="Auto,*">
-    <Border Grid.Row="0"
-            Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"
-            BorderBrush="{DynamicResource CartonControlForegroundBaseLowBrush}"
-            BorderThickness="0,0,0,1"
-            Padding="16,10">
-      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-        <Button Grid.Column="0"
-                Content="{DynamicResource Connections.Button.CloseAll}"
-                Command="{Binding CloseAllCommand}"
-                Padding="12,6"/>
-        <TextBox Grid.Column="1"
-                 Text="{Binding SearchText}"
-                 PlaceholderText="{DynamicResource Connections.Search.Watermark}"
-                 HorizontalAlignment="Stretch"/>
-        <Border Grid.Column="2"
-                Classes="fluentBadge"
-                VerticalAlignment="Center"
-                Padding="10,4">
-          <TextBlock Classes="fluentBadgeText" FontSize="12">
-            <Run Text="{Binding VisibleConnectionCount}"/>
-            <Run Text=" / "/>
-            <Run Text="{Binding ConnectionCount}"/>
-          </TextBlock>
-        </Border>
-      </Grid>
-    </Border>
+  <Grid RowDefinitions="Auto,*" Margin="20">
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12" Margin="0,0,0,12">
+      <TextBox Classes="pageSearch" Text="{Binding SearchText}"
+               PlaceholderText="{DynamicResource Connections.Search.Watermark}"
+               AutomationProperties.Name="{DynamicResource Connections.Search.Watermark}">
+        <TextBox.InnerLeftContent>
+          <PathIcon Classes="searchGlyph" Data="M10 2A8 8 0 1 0 15 16.25L20.75 22L22 20.75L16.25 15A8 8 0 0 0 10 2Z M10 4A6 6 0 1 1 10 16A6 6 0 1 1 10 4Z"/>
+        </TextBox.InnerLeftContent>
+      </TextBox>
+      <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="12"
+                 Foreground="{DynamicResource CartonControlForegroundBaseMediumBrush}">
+        <Run Text="{Binding VisibleConnectionCount}"/><Run Text=" / "/><Run Text="{Binding ConnectionCount}"/>
+      </TextBlock>
+      <Button Grid.Column="2" Classes="pageAction" Command="{Binding CloseAllCommand}"
+              ToolTip.Tip="{DynamicResource Connections.Button.CloseAll}"
+              AutomationProperties.Name="{DynamicResource Connections.Button.CloseAll}">
+        <PathIcon Width="16" Height="16" Data="M4 5H20V7H4Z M4 11H14V13H4Z M4 17H12V19H4Z M17 13L22 18L20.6 19.4L15.6 14.4Z M20.6 13L22 14.4L17 19.4L15.6 18Z"/>
+      </Button>
+    </Grid>
 
     <Grid Grid.Row="1">
       <ListBox x:Name="ConnectionsListBox"

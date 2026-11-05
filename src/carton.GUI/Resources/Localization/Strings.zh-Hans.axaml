@@ -74,7 +74,6 @@
   <x:String x:Key="Logs.Source.SingBox">sing-box</x:String>
 
   <x:String x:Key="Profiles.Button.Back">返回</x:String>
-  <x:String x:Key="Profiles.Header.Title">配置管理</x:String>
   <x:String x:Key="Profiles.Button.NewProfile">新建配置 &gt;</x:String>
   <x:String x:Key="Profiles.List.LastUpdatedLabel">上次同步：</x:String>
   <x:String x:Key="Profiles.List.Never">从未</x:String>
@@ -405,4 +404,11 @@
 	<x:String x:Key="Settings.General.ElevatedTask.Action">修复任务</x:String>
 	<x:String x:Key="Settings.General.ElevatedTask.Repaired">管理员启动任务已修复。</x:String>
 	<x:String x:Key="Settings.General.ElevatedTask.Cancelled">已取消修复管理员启动任务。</x:String>
-	<x:String x:Key="Settings.General.ElevatedTask.Failed">修复管理员启动任务失败</x:String></ResourceDictionary>
+	<x:String x:Key="Settings.General.ElevatedTask.Failed">修复管理员启动任务失败</x:String>  <x:String x:Key="Settings.Material.Title">窗口背景</x:String>
+  <x:String x:Key="Settings.Material.Solid">纯色</x:String>
+  <x:String x:Key="Settings.Material.Mica">云母（Mica）</x:String>
+  <x:String x:Key="Settings.Material.Reset">重置背景</x:String>
+  <x:String x:Key="Settings.Material.Fallback">当前无法使用此材质，已使用纯色背景。</x:String>
+  <x:String x:Key="Settings.Material.SaveFailed">预览已生效，但设置未能保存。请检查配置文件权限或是否被其他程序占用。</x:String>
+  <x:String x:Key="Settings.Material.RetrySave">重试保存</x:String>
+</ResourceDictionary>
