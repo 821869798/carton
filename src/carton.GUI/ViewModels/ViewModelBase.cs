@@ -43,6 +43,15 @@ public abstract partial class PageViewModelBase : ViewModelBase
         UpdateLocalizedTitle();
     }
 
+    protected void ReleasePageMetadata()
+    {
+        if (_isLocalizedTitleInitialized)
+        {
+            LocalizationService.Instance.LanguageChanged -= OnPageLanguageChanged;
+            _isLocalizedTitleInitialized = false;
+        }
+    }
+
     protected void UpdateLocalizedTitle()
     {
         if (string.IsNullOrWhiteSpace(_titleResourceKey))

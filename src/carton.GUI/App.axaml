@@ -32,6 +32,10 @@
       <Setter Property="helpers:SmoothScrollBehavior.IsEnabled" Value="True"/>
     </Style>
 
+    <Style Selector="ListBox /template/ ScrollViewer#PART_ScrollViewer">
+      <Setter Property="helpers:SmoothScrollBehavior.IsEnabled" Value="True"/>
+    </Style>
+
     <Style Selector="Border.card">
       <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundChromeMediumBrush}"/>
       <Setter Property="CornerRadius" Value="8"/>

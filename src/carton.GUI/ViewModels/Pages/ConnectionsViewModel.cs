@@ -17,7 +17,13 @@ namespace carton.ViewModels;
 public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
 {
     private readonly ISingBoxManager? _singBoxManager;
-    private readonly List<ConnectionSnapshot> _allConnections = new();
+    private IReadOnlyList<ConnectionInfo> _allConnections = Array.Empty<ConnectionInfo>();
+    private readonly object _refreshGate = new();
+    private ConnectionsSnapshot? _pendingSnapshot;
+    private EventHandler<ConnectionsSnapshot>? _streamHandler;
+    private long _refreshGeneration;
+    private bool _refreshQueued;
+    private bool _disposed;
     private readonly Dictionary<string, ConnectionItemViewModel> _connectionItemCache = new(StringComparer.Ordinal);
     private readonly HashSet<string> _activeConnectionIds = new(StringComparer.Ordinal);
     private readonly List<string> _staleConnectionIds = new();
@@ -64,61 +70,50 @@ public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
         RequestApplyFilters();
     }
 
-    private void OnConnectionsUpdated(object? sender, ConnectionsSnapshot snapshot)
+    private void QueueConnections(ConnectionsSnapshot snapshot, long generation)
     {
-        if (!_isOnPage || !_isWindowVisible)
+        lock (_refreshGate)
         {
-            return;
-        }
-
-        ApplyConnections(snapshot);
-    }
-
-    private void ApplyConnections(ConnectionsSnapshot snapshot)
-    {
-        var connections = snapshot.ActiveConnections;
-        var snapshots = new List<ConnectionSnapshot>(connections.Count);
-        foreach (var conn in connections)
-        {
-            var process = FormatText(conn.Process, conn.Inbound);
-            var source = FormatText(conn.Source, conn.Ip);
-            var destination = FormatText(conn.Destination, conn.Domain);
-            var outbound = FormatText(conn.Outbound);
-
-            snapshots.Add(new ConnectionSnapshot(
-                conn.Id,
-                process,
-                source,
-                destination,
-                conn.Network,
-                conn.Protocol,
-                outbound,
-                FormatBytes(conn.Upload),
-                FormatBytes(conn.Download),
-                conn.StartTime,
-                conn.Inbound,
-                conn.InboundType,
-                conn.Process,
-                conn.Ip,
-                conn.Source,
-                conn.Domain,
-                conn.Destination,
-                conn.Chains));
-        }
-
-        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-        {
-            if (!_isOnPage || !_isWindowVisible)
+            if (_disposed || !_subscribedToStreams || generation != _refreshGeneration)
             {
                 return;
             }
 
-            _allConnections.Clear();
-            _allConnections.AddRange(snapshots);
-            ConnectionCount = snapshots.Count;
-            PruneConnectionItemCache();
-            RequestApplyFilters();
-        }, Avalonia.Threading.DispatcherPriority.Background);
+            // Complete, copy-on-write manager snapshots, never incremental events.
+            _pendingSnapshot = snapshot;
+            if (_refreshQueued)
+            {
+                return;
+            }
+            _refreshQueued = true;
+        }
+
+        Dispatcher.UIThread.Post(() => FlushConnections(generation), DispatcherPriority.Background);
+    }
+
+    private void FlushConnections(long generation)
+    {
+        ConnectionsSnapshot? snapshot;
+        lock (_refreshGate)
+        {
+            if (_disposed || !_subscribedToStreams || generation != _refreshGeneration)
+            {
+                return;
+            }
+            snapshot = _pendingSnapshot;
+            _pendingSnapshot = null;
+            _refreshQueued = false;
+        }
+
+        if (snapshot == null || !_isOnPage || !_isWindowVisible)
+        {
+            return;
+        }
+
+        _allConnections = snapshot.ActiveConnections;
+        ConnectionCount = _allConnections.Count;
+        PruneConnectionItemCache();
+        ApplyFilters();
     }
 
     public void SetWindowVisible(bool isVisible)
@@ -129,24 +124,43 @@ public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
 
     private void UpdateRefreshState()
     {
-        if (_singBoxManager is { IsRunning: true } && _isOnPage && _isWindowVisible)
+        if (!_disposed && _singBoxManager is { IsRunning: true } && _isOnPage && _isWindowVisible)
         {
-            if (!_subscribedToStreams)
+            lock (_refreshGate)
             {
-                _singBoxManager.ConnectionsUpdated += OnConnectionsUpdated;
-                _subscribedToStreams = true;
-            }
+                if (!_subscribedToStreams)
+                {
+                    var generation = ++_refreshGeneration;
+                    _streamHandler = (_, snapshot) => QueueConnections(snapshot, generation);
+                    _subscribedToStreams = true;
+                    _singBoxManager.ConnectionsUpdated += _streamHandler;
+                }
 
-            // Snapshot refresh comes from the kernel's incremental stream now;
-            // just render the latest merged state when (re)activated.
-            ApplyConnections(_singBoxManager.CurrentConnections);
+                // Seed while holding the gate so a newer arriving snapshot cannot be
+                // replaced by this initial read. Manager events are raised outside its lock.
+                QueueConnections(_singBoxManager.CurrentConnections, _refreshGeneration);
+            }
             return;
         }
 
-        if (_subscribedToStreams && _singBoxManager != null)
+        StopRefresh();
+    }
+
+    private void StopRefresh()
+    {
+        EventHandler<ConnectionsSnapshot>? handler;
+        lock (_refreshGate)
         {
-            _singBoxManager.ConnectionsUpdated -= OnConnectionsUpdated;
+            ++_refreshGeneration;
+            _pendingSnapshot = null;
+            _refreshQueued = false;
             _subscribedToStreams = false;
+            handler = _streamHandler;
+            _streamHandler = null;
+        }
+        if (handler != null && _singBoxManager != null)
+        {
+            _singBoxManager.ConnectionsUpdated -= handler;
         }
     }
 
@@ -171,14 +185,17 @@ public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
             return;
         }
 
-        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-        {
-            _allConnections.Clear();
-            Connections.Clear();
-            SelectedConnection = null;
-            ConnectionCount = 0;
-            VisibleConnectionCount = 0;
-        });
+        // MainViewModel forwards status changes on the UI thread. Invalidate queued
+        // work before clearing, so an old stream cannot repopulate a stopped session.
+        StopRefresh();
+        _allConnections = Array.Empty<ConnectionInfo>();
+        _connectionItemCache.Clear();
+        _activeConnectionIds.Clear();
+        _staleConnectionIds.Clear();
+        Connections.Clear();
+        SelectedConnection = null;
+        ConnectionCount = 0;
+        VisibleConnectionCount = 0;
     }
 
     partial void OnSearchTextChanged(string value)
@@ -242,8 +259,6 @@ public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
         SelectedConnection = null;
     }
 
-    private static string FormatBytes(long bytes) => FormatHelper.FormatBytes(bytes);
-
     private static string FormatText(string? value, string? fallback = null)
     {
         if (!string.IsNullOrWhiteSpace(value))
@@ -286,7 +301,7 @@ public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
 
     private void ApplyFilters()
     {
-        if (!Dispatcher.UIThread.CheckAccess())
+        if (_disposed || !_isOnPage || !_isWindowVisible || !Dispatcher.UIThread.CheckAccess())
         {
             return;
         }
@@ -350,6 +365,7 @@ public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
         }
 
         VisibleConnectionCount = writeIndex;
+
     }
 
     partial void OnSelectedConnectionChanged(ConnectionItemViewModel? oldValue, ConnectionItemViewModel? newValue)
@@ -365,22 +381,22 @@ public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
         }
     }
 
-    private static bool MatchesSearch(ConnectionSnapshot connection, string searchText)
+    private static bool MatchesSearch(ConnectionInfo connection, string searchText)
     {
         return string.IsNullOrWhiteSpace(searchText) ||
-               connection.Process.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
-               connection.Source.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
-               connection.Destination.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+               FormatText(connection.Process, connection.Inbound).Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+               FormatText(connection.Source, connection.Ip).Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+               FormatText(connection.Destination, connection.Domain).Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
                connection.Network.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
                connection.Protocol.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
-               connection.Outbound.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+               FormatText(connection.Outbound).Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
                connection.Inbound.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
                connection.InboundType.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
-               connection.RawProcess.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+               connection.Process.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
                connection.Ip.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
-               connection.RawSource.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+               connection.Source.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
                connection.Domain.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
-               connection.RawDestination.Contains(searchText, StringComparison.OrdinalIgnoreCase);
+               connection.Destination.Contains(searchText, StringComparison.OrdinalIgnoreCase);
     }
 
     private void PruneConnectionItemCache()
@@ -408,58 +424,97 @@ public partial class ConnectionsViewModel : PageViewModelBase, IDisposable
 
     public void Dispose()
     {
-        if (_subscribedToStreams && _singBoxManager != null)
+        lock (_refreshGate)
         {
-            _singBoxManager.ConnectionsUpdated -= OnConnectionsUpdated;
-            _subscribedToStreams = false;
+            _disposed = true;
         }
+        StopRefresh();
+        ReleasePageMetadata();
 
-        _allConnections.Clear();
+        _allConnections = Array.Empty<ConnectionInfo>();
         _connectionItemCache.Clear();
         _activeConnectionIds.Clear();
         _staleConnectionIds.Clear();
         Connections.Clear();
         SelectedConnection = null;
+        ConnectionCount = 0;
         VisibleConnectionCount = 0;
     }
 }
 
 public partial class ConnectionItemViewModel : ObservableObject
 {
-    internal static ConnectionItemViewModel FromSnapshot(ConnectionSnapshot snapshot)
+    private ConnectionInfo? _lastSnapshot;
+    private CultureInfo? _lastCulture;
+
+    internal static ConnectionItemViewModel FromSnapshot(ConnectionInfo snapshot)
     {
         var item = new ConnectionItemViewModel();
         item.Update(snapshot);
         return item;
     }
 
-    internal void Update(ConnectionSnapshot snapshot)
+    internal void Update(ConnectionInfo snapshot)
     {
+        var previous = _lastSnapshot;
+        var culture = CultureInfo.CurrentCulture;
+        var cultureChanged = !ReferenceEquals(_lastCulture, culture);
         Id = snapshot.Id;
-        Process = snapshot.Process;
-        Source = snapshot.Source;
-        Destination = snapshot.Destination;
+        Process = FormatTextWithFallback(snapshot.Process, snapshot.Inbound);
+        Source = FormatTextWithFallback(snapshot.Source, snapshot.Ip);
+        Destination = FormatTextWithFallback(snapshot.Destination, snapshot.Domain);
+        if (previous == null || previous.Network != snapshot.Network)
+        {
+            NetworkDisplay = FormatNetworkDisplay(snapshot.Network);
+        }
         Network = snapshot.Network;
-        NetworkDisplay = FormatNetworkDisplay(snapshot.Network);
         Protocol = snapshot.Protocol;
-        Outbound = snapshot.Outbound;
-        Upload = snapshot.Upload;
-        Download = snapshot.Download;
-        UploadTotal = snapshot.Upload;
-        DownloadTotal = snapshot.Download;
-        Inbound = FormatInbound(snapshot.InboundType, snapshot.Inbound);
-        RawProcess = FormatText(snapshot.RawProcess);
+        Outbound = FormatText(snapshot.Outbound);
+        if (previous == null || previous.Upload != snapshot.Upload || cultureChanged)
+        {
+            Upload = UploadTotal = FormatHelper.FormatBytes(snapshot.Upload);
+        }
+        if (previous == null || previous.Download != snapshot.Download || cultureChanged)
+        {
+            Download = DownloadTotal = FormatHelper.FormatBytes(snapshot.Download);
+        }
+        if (previous == null || previous.Inbound != snapshot.Inbound || previous.InboundType != snapshot.InboundType)
+        {
+            Inbound = FormatInbound(snapshot.InboundType, snapshot.Inbound);
+            InboundSummary = Inbound;
+        }
+        RawProcess = FormatText(snapshot.Process);
         Ip = FormatText(snapshot.Ip);
-        RawSource = FormatText(snapshot.RawSource);
+        RawSource = FormatText(snapshot.Source);
         Domain = FormatText(snapshot.Domain);
-        RawDestination = FormatText(snapshot.RawDestination);
-        StartedAt = snapshot.StartTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.CurrentCulture);
-        Chain = FormatChain(snapshot.Chains, Outbound);
-        Route = FormatActiveRoute(snapshot.Chains, Outbound);
-        InboundSummary = Inbound;
+        RawDestination = FormatText(snapshot.Destination);
+        if (previous == null || previous.StartTime != snapshot.StartTime || cultureChanged)
+        {
+            StartedAt = snapshot.StartTime.ToString("yyyy-MM-dd HH:mm:ss", culture);
+        }
+        if (previous == null || previous.Outbound != snapshot.Outbound || !SameChain(previous.Chains, snapshot.Chains))
+        {
+            Chain = FormatChain(snapshot.Chains, Outbound);
+            Route = FormatActiveRoute(snapshot.Chains, Outbound);
+        }
         Status = "Active";
-        ProcessDisplay = string.IsNullOrWhiteSpace(snapshot.RawProcess) ? string.Empty : snapshot.RawProcess;
+        ProcessDisplay = string.IsNullOrWhiteSpace(snapshot.Process) ? string.Empty : snapshot.Process;
         IsClosed = false;
+        _lastSnapshot = snapshot;
+        _lastCulture = culture;
+    }
+
+    private static string FormatTextWithFallback(string value, string fallback)
+        => !string.IsNullOrWhiteSpace(value) ? value : FormatText(fallback);
+
+    private static bool SameChain(IReadOnlyList<string> left, IReadOnlyList<string> right)
+    {
+        if (left.Count != right.Count) return false;
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (!string.Equals(left[i], right[i], StringComparison.Ordinal)) return false;
+        }
+        return true;
     }
 
     internal void MarkClosed()
@@ -609,83 +664,4 @@ public partial class ConnectionItemViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isClosed;
-}
-
-internal sealed class ConnectionSnapshot
-{
-    public ConnectionSnapshot(
-        string id,
-        string process,
-        string source,
-        string destination,
-        string network,
-        string protocol,
-        string outbound,
-        string upload,
-        string download,
-        DateTime startTime,
-        string inbound,
-        string inboundType,
-        string rawProcess,
-        string ip,
-        string rawSource,
-        string domain,
-        string rawDestination,
-        IReadOnlyList<string> chains)
-    {
-        Id = id;
-        Process = process;
-        Source = source;
-        Destination = destination;
-        Network = network;
-        Protocol = protocol;
-        Outbound = outbound;
-        Upload = upload;
-        Download = download;
-        StartTime = startTime;
-        Inbound = inbound;
-        InboundType = inboundType;
-        RawProcess = rawProcess;
-        Ip = ip;
-        RawSource = rawSource;
-        Domain = domain;
-        RawDestination = rawDestination;
-        Chains = chains;
-    }
-
-    public string Id { get; }
-
-    public string Process { get; }
-
-    public string Source { get; }
-
-    public string Destination { get; }
-
-    public string Network { get; }
-
-    public string Protocol { get; }
-
-    public string Outbound { get; }
-
-    public string Upload { get; }
-
-    public string Download { get; }
-
-    public DateTime StartTime { get; }
-
-    public string Inbound { get; }
-
-    public string InboundType { get; }
-
-    public string RawProcess { get; }
-
-    public string Ip { get; }
-
-    public string RawSource { get; }
-
-    public string Domain { get; }
-
-    public string RawDestination { get; }
-
-    public IReadOnlyList<string> Chains { get; }
 }

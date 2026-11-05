@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 
 namespace carton.GUI.Helpers;
 
@@ -83,12 +84,34 @@ public static class SmoothScrollBehavior
         if (sv.GetValue(AnimationStateProperty) is { } state)
         {
             state.IsRunning = false;
+            state.Generation++;
+            state.LastFrameTime = null;
         }
+    }
+
+    private static bool CanMove(ScrollViewer viewer, Vector delta)
+    {
+        var offset = viewer.GetValue(AnimationStateProperty) is { IsRunning: true } animation
+            ? animation.TargetOffset : viewer.Offset;
+        var maxX = Math.Max(0, viewer.Extent.Width - viewer.Viewport.Width);
+        var maxY = Math.Max(0, viewer.Extent.Height - viewer.Viewport.Height);
+        return (delta.Y < 0 && offset.Y < maxY - 0.01) ||
+               (delta.Y > 0 && offset.Y > 0.01) ||
+               (delta.X < 0 && offset.X < maxX - 0.01) ||
+               (delta.X > 0 && offset.X > 0.01);
     }
 
     private static void OnPointerWheel(object? sender, PointerWheelEventArgs e)
     {
-        if (sender is not ScrollViewer sv) return;
+        if (sender is not ScrollViewer sv || e.Handled) return;
+
+        // Tunnel events reach outer viewers first. Let the nearest scrollable
+        // descendant consume the wheel, including native text-editor viewers.
+        for (var visual = e.Source as Visual; visual != null && visual != sv; visual = visual.GetVisualParent())
+        {
+            if (visual is ScrollViewer inner && CanMove(inner, e.Delta)) return;
+        }
+        if (!CanMove(sv, e.Delta)) return;
 
         // 如果按下了 Ctrl 键（通常是缩放界面或字体快捷键），不拦截
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
@@ -150,6 +173,7 @@ public static class SmoothScrollBehavior
         if (!state.IsRunning)
         {
             state.IsRunning = true;
+            state.Generation++;
             RequestNextFrame(sv, state);
         }
     }
@@ -164,9 +188,10 @@ public static class SmoothScrollBehavior
             return;
         }
 
+        var generation = state.Generation;
         topLevel.RequestAnimationFrame(time =>
         {
-            if (!state.IsRunning) return;
+            if (!state.IsRunning || generation != state.Generation) return;
 
             // 计算与上一帧的时间差 dt
             double dt = 1.0 / 60.0;
@@ -179,6 +204,10 @@ public static class SmoothScrollBehavior
             state.LastFrameTime = time;
 
             var current = sv.Offset;
+            // Filtering/removing rows can shrink the extent while a wheel animation runs.
+            state.TargetOffset = new Vector(
+                Math.Clamp(state.TargetOffset.X, 0, Math.Max(0, sv.Extent.Width - sv.Viewport.Width)),
+                Math.Clamp(state.TargetOffset.Y, 0, Math.Max(0, sv.Extent.Height - sv.Viewport.Height)));
             var target = state.TargetOffset;
             var diff = target - current;
 
@@ -209,5 +238,6 @@ public static class SmoothScrollBehavior
         public Vector TargetOffset;
         public TimeSpan? LastFrameTime;
         public bool IsRunning;
+        public long Generation;
     }
 }

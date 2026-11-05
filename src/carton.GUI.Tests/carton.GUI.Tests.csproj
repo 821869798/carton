@@ -8,6 +8,8 @@
 
   <ItemGroup>
     <PackageReference Include="Avalonia.Themes.Fluent2" Version="12.2.999-cibuild0101023-alpha" />
+    <PackageReference Include="Avalonia.Headless" Version="12.2.999-cibuild0101023-alpha" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
@@ -23,6 +25,13 @@
          assembly, and linking it as source too made every use site ambiguous (CS0436,
          "type conflicts with the imported type"). Use the project reference instead. -->
     <Compile Include="..\carton.GUI\Services\CartonAccentPalette.cs" Link="Services\CartonAccentPalette.cs" />
+    <Compile Include="..\carton.GUI\ViewModels\Pages\ConnectionsViewModel.cs" Link="Production\ConnectionsViewModel.cs" />
+    <Compile Include="..\carton.GUI\ViewModels\ViewModelBase.cs" Link="Production\ViewModelBase.cs" />
+    <Compile Include="..\carton.GUI\Models\NavigationPage.cs" Link="Production\NavigationPage.cs" />
+    <Compile Include="..\carton.GUI\Resources\Localization\*.axaml.cs" Link="Production\%(Filename)%(Extension)" />
+    <AvaloniaResource Include="..\carton.GUI\Resources\Localization\*.axaml" Link="Resources\Localization\%(Filename)%(Extension)" />
+    <Compile Include="..\carton.GUI\Helpers\SmoothScrollBehavior.cs" Link="Production\SmoothScrollBehavior.cs" />
+    <Compile Include="..\carton.GUI\Services\LocalizationService.cs" Link="Production\LocalizationService.cs" />
     <Compile Include="..\carton.GUI\Services\LogParser.cs" Link="Services\LogParser.cs" />
     <Compile Include="..\carton.GUI\Services\PackageManagedInstall.cs" Link="Services\PackageManagedInstall.cs" />
     <Compile Include="..\carton.GUI\Services\AppLaunchOptions.cs" Link="Services\AppLaunchOptions.cs" />
