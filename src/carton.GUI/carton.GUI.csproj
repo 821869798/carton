@@ -26,21 +26,6 @@
 		<DefineConstants>$(DefineConstants);$(CartonBuildMacro)</DefineConstants>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="'$(PublishAot)' == 'true'">
-		<OptimizationPreference>Size</OptimizationPreference>
-		<TrimMode>full</TrimMode>
-		<NoWarn>$(NoWarn);IL2104;IL3053</NoWarn>
-		<DebuggerSupport>false</DebuggerSupport>
-		<EventSourceSupport>false</EventSourceSupport>
-		<Http3Support>false</Http3Support>
-		<HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
-		<MetadataUpdaterSupport>false</MetadataUpdaterSupport>
-		<MetricsSupport>false</MetricsSupport>
-		<SatelliteResourceLanguages>en;zh-Hans</SatelliteResourceLanguages>
-		<StackTraceSupport>false</StackTraceSupport>
-		<XmlResolverIsNetworkingEnabledByDefault>false</XmlResolverIsNetworkingEnabledByDefault>
-	</PropertyGroup>
-
 	<ItemGroup>
 		<Compile Remove="obj\**\*.cs;bin\**\*.cs;obj-codex\**\*.cs" />
 		<EmbeddedResource Remove="obj\**;bin\**;obj-codex\**" />
