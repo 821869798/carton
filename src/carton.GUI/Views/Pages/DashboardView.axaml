@@ -27,26 +27,6 @@
       <Setter Property="Padding" Value="4"/>
     </Style>
 
-    <Style Selector="Button.iconButton">
-      <Setter Property="Width" Value="30"/>
-      <Setter Property="Height" Value="30"/>
-      <Setter Property="Padding" Value="0"/>
-      <Setter Property="CornerRadius" Value="15"/>
-      <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"/>
-      <Setter Property="BorderThickness" Value="1"/>
-      <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
-    </Style>
-
-    <Style Selector="Button.iconButton:pointerover">
-      <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundBaseLowBrush}"/>
-      <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseHighBrush}"/>
-    </Style>
-
-    <Style Selector="Button.iconButton:pressed">
-      <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundChromeMediumBrush}"/>
-    </Style>
-
     <Style Selector="Border.portScopeTrack">
       <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundBaseLowBrush}"/>
       <Setter Property="CornerRadius" Value="14"/>
@@ -167,7 +147,7 @@
                       ToolTip.Tip="{DynamicResource Dashboard.Button.ResetToConfig}">
                 <PathIcon Width="14"
                           Height="14"
-                          Data="M12 5 V1 L7 6 L12 11 V7 C15.3 7 18 9.7 18 13 C18 16.3 15.3 19 12 19 C8.7 19 6 16.3 6 13 H4 C4 17.4 7.6 21 12 21 C16.4 21 20 17.4 20 13 C20 8.6 16.4 5 12 5 Z"/>
+                          Data="{StaticResource RefreshIconGeometry}"/>
               </Button>
             </Grid>
 
@@ -188,7 +168,7 @@
                         ToolTip.Tip="{DynamicResource Dashboard.Port.Edit}">
                   <PathIcon Width="14"
                             Height="14"
-                            Data="M4 16.5 V20 H7.5 L17.8 9.7 L14.3 6.2 Z M19 8.5 L20.5 7 C21.1 6.4 21.1 5.4 20.5 4.8 L19.2 3.5 C18.6 2.9 17.6 2.9 17 3.5 L15.5 5 Z"/>
+                            Data="{StaticResource EditIconGeometry}"/>
                 </Button>
               </StackPanel>
 
@@ -524,13 +504,12 @@
                                 Classes="iconButton"
                                 Width="24"
                                 Height="24"
-                                CornerRadius="12"
                                 Command="{Binding RefreshConnectivityCommand}"
                                 IsEnabled="{Binding !IsRefreshingConnectivity}"
                                 ToolTip.Tip="{DynamicResource Dashboard.KernelStatus.Refresh}">
                           <PathIcon Width="12"
                                     Height="12"
-                                    Data="M13 2 L5 13 H11 L9 22 L19 9 H13 Z"/>
+                                    Data="{StaticResource RefreshIconGeometry}"/>
                         </Button>
                       </Grid>
 

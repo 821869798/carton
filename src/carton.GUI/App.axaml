@@ -11,7 +11,10 @@
   </Application.DataTemplates>
 
   <Application.Resources>
-    <StreamGeometry x:Key="DeleteIconGeometry">M9 3V4H4V6H5V19A2 2 0 0 0 7 21H17A2 2 0 0 0 19 19V6H20V4H15V3H9M7 6H17V19H7V6M9 8V17H11V8H9M13 8V17H15V8H13Z</StreamGeometry>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="/Resources/Icons.axaml"/>
+      </ResourceDictionary.MergedDictionaries>
     <local:ConnectionStatusConverter x:Key="ConnectionStatusConverter"/>
     <local:ResponsiveItemWidthConverter x:Key="ResponsiveItemWidthConverter"/>
     <local:LatencyForegroundConverter x:Key="LatencyForegroundConverter"/>
@@ -22,6 +25,7 @@
     <DataTemplate x:Key="PageTemplate" DataType="vm:PageViewModelBase">
       <ContentControl Content="{Binding}"/>
     </DataTemplate>
+    </ResourceDictionary>
   </Application.Resources>
 
   <Application.Styles>
@@ -37,20 +41,35 @@
       <Setter Property="helpers:SmoothScrollBehavior.IsEnabled" Value="True"/>
     </Style>
 
+    <!-- Compact row actions and page toolbars share visual states, not dimensions. -->
+    <Style Selector="Button.iconButton, Button.pageAction">
+      <Setter Property="MinWidth" Value="0"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Button.iconButton">
+      <Setter Property="Width" Value="30"/>
+      <Setter Property="Height" Value="30"/>
+      <Setter Property="Padding" Value="0"/>
+    </Style>
     <Style Selector="Button.pageAction">
       <Setter Property="Width" Value="36"/>
       <Setter Property="Height" Value="36"/>
-      <Setter Property="MinWidth" Value="0"/>
       <Setter Property="Padding" Value="8"/>
-      <Setter Property="CornerRadius" Value="10"/>
-      <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="BorderThickness" Value="0"/>
     </Style>
-    <Style Selector="Button.pageAction:pointerover">
+    <Style Selector="Button.iconButton:pointerover, Button.pageAction:pointerover">
       <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundBaseLowBrush}"/>
+      <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseHighBrush}"/>
+    </Style>
+    <Style Selector="Button.iconButton:pressed, Button.pageAction:pressed">
+      <Setter Property="Background" Value="{DynamicResource CartonControlBackgroundChromeMediumBrush}"/>
     </Style>
     <Style Selector="TextBox.pageSearch">
-      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="CornerRadius" Value="8"/>
       <Setter Property="MinHeight" Value="36"/>
       <Setter Property="VerticalContentAlignment" Value="Center"/>
       <Setter Property="Padding" Value="8,0"/>

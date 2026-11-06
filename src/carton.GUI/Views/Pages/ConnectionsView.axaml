@@ -99,7 +99,7 @@
                PlaceholderText="{DynamicResource Connections.Search.Watermark}"
                AutomationProperties.Name="{DynamicResource Connections.Search.Watermark}">
         <TextBox.InnerLeftContent>
-          <PathIcon Classes="searchGlyph" Data="M10 2A8 8 0 1 0 15 16.25L20.75 22L22 20.75L16.25 15A8 8 0 0 0 10 2Z M10 4A6 6 0 1 1 10 16A6 6 0 1 1 10 4Z"/>
+          <PathIcon Classes="searchGlyph" Data="{StaticResource SearchIconGeometry}"/>
         </TextBox.InnerLeftContent>
       </TextBox>
       <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="12"
@@ -174,7 +174,7 @@
                             Command="{Binding DataContext.ClearSelectedConnectionCommand, ElementName=ConnectionsViewRoot}"
                             ToolTip.Tip="{DynamicResource Connections.Detail.Close}">
                       <PathIcon Width="10" Height="10"
-                                Data="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z"/>
+                                Data="{StaticResource CloseIconGeometry}"/>
                     </Button>
                   </Grid>
                 </Border>

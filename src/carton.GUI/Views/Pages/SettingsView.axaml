@@ -524,7 +524,7 @@
                                     IsVisible="{Binding IsSelected}">
                               <PathIcon Width="12"
                                         Height="12"
-                                        Data="F1 M7.03212,13.9072 L3.56056,10.0017 C3.28538,9.69214 2.81132,9.66425 2.50174,9.93944 C2.19215,10.2146 2.16426,10.6887 2.43945,10.9983 L6.43945,15.4983 C6.72614,15.8208 7.2252,15.8355 7.53034,15.5303 L18.0303,5.03033 C18.3232,4.73744 18.3232,4.26256 18.0303,3.96967 C17.7374,3.67678 17.2626,3.67678 16.9697,3.96967 L7.03212,13.9072 Z"
+                                        Data="{StaticResource CheckIconGeometry}"
                                         Foreground="{DynamicResource CartonAccentBrush}"
                                         HorizontalAlignment="Center"
                                         VerticalAlignment="Center"/>

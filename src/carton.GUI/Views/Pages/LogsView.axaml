@@ -20,16 +20,16 @@
                PlaceholderText="{DynamicResource Logs.Search.Watermark}"
                AutomationProperties.Name="{DynamicResource Logs.Search.Watermark}">
         <TextBox.InnerLeftContent>
-          <PathIcon Classes="searchGlyph" Data="M10 2A8 8 0 1 0 15 16.25L20.75 22L22 20.75L16.25 15A8 8 0 0 0 10 2Z M10 4A6 6 0 1 1 10 16A6 6 0 1 1 10 4Z"/>
+          <PathIcon Classes="searchGlyph" Data="{StaticResource SearchIconGeometry}"/>
         </TextBox.InnerLeftContent>
       </TextBox>
       <Button Grid.Column="1" Classes="pageAction" Command="{Binding CopySelectedLogCommand}"
               ToolTip.Tip="{DynamicResource Logs.Button.CopySelected}" AutomationProperties.Name="{DynamicResource Logs.Button.CopySelected}">
-        <PathIcon Width="16" Height="16" Data="M7 2H20V17H18V4H7Z M3 6H16V22H3Z M5 8V20H14V8Z"/>
+        <PathIcon Width="16" Height="16" Data="{StaticResource CopyIconGeometry}"/>
       </Button>
       <Button Grid.Column="2" Classes="pageAction" Command="{Binding CopyAllLogsCommand}"
               ToolTip.Tip="{DynamicResource Logs.Button.CopyAll}" AutomationProperties.Name="{DynamicResource Logs.Button.CopyAll}">
-        <PathIcon Width="16" Height="16" Data="M7 2H21V18H19V4H7Z M3 6H17V22H3Z M5 8V20H15V8Z M7 10H13V12H7Z M7 14H13V16H7Z"/>
+        <PathIcon Width="16" Height="16" Data="{StaticResource CopyAllIconGeometry}"/>
       </Button>
       <Button Grid.Column="3" Classes="pageAction" Command="{Binding ClearLogsCommand}"
               ToolTip.Tip="{DynamicResource Logs.Button.Clear}" AutomationProperties.Name="{DynamicResource Logs.Button.Clear}">

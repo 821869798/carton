@@ -1,0 +1,18 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Shared action geometry; callers own size, foreground, tooltip and command. -->
+  <StreamGeometry x:Key="DeleteIconGeometry">M9 3V4H4V6H5V19A2 2 0 0 0 7 21H17A2 2 0 0 0 19 19V6H20V4H15V3H9M7 6H17V19H7V6M9 8V17H11V8H9M13 8V17H15V8H13Z</StreamGeometry>
+  <StreamGeometry x:Key="SearchIconGeometry">M10 2A8 8 0 1 0 15 16.25L20.75 22L22 20.75L16.25 15A8 8 0 0 0 10 2Z M10 4A6 6 0 1 1 10 16A6 6 0 1 1 10 4Z</StreamGeometry>
+  <StreamGeometry x:Key="CloseIconGeometry">M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z</StreamGeometry>
+  <StreamGeometry x:Key="RefreshIconGeometry">M12 5 V1 L7 6 L12 11 V7 C15.3 7 18 9.7 18 13 C18 16.3 15.3 19 12 19 C8.7 19 6 16.3 6 13 H4 C4 17.4 7.6 21 12 21 C16.4 21 20 17.4 20 13 C20 8.6 16.4 5 12 5 Z</StreamGeometry>
+  <StreamGeometry x:Key="BackIconGeometry">M14.71 6.71L13.29 5.29L6.59 12L13.29 18.71L14.71 17.29L9.41 12L14.71 6.71Z</StreamGeometry>
+  <StreamGeometry x:Key="CheckIconGeometry">M9 16.17L4.83 12L3.41 13.41L9 19L21 7L19.59 5.59L9 16.17Z</StreamGeometry>
+  <StreamGeometry x:Key="SaveIconGeometry">M17 3H5A2 2 0 0 0 3 5V19A2 2 0 0 0 5 21H19A2 2 0 0 0 21 19V7L17 3ZM12 19A3 3 0 1 1 15 16A3 3 0 0 1 12 19ZM6 8V5H15V8Z</StreamGeometry>
+  <StreamGeometry x:Key="FormatIconGeometry">M4 5H20V7H4V5ZM4 9H16V11H4V9ZM4 13H20V15H4V13ZM4 17H16V19H4V17Z</StreamGeometry>
+  <StreamGeometry x:Key="AddIconGeometry">M19 11H13V5H11V11H5V13H11V19H13V13H19V11Z</StreamGeometry>
+  <StreamGeometry x:Key="PreviousIconGeometry">M7 14L12 9L17 14H7Z</StreamGeometry>
+  <StreamGeometry x:Key="NextIconGeometry">M7 10L12 15L17 10H7Z</StreamGeometry>
+  <StreamGeometry x:Key="CopyIconGeometry">M7 2H20V17H18V4H7Z M3 6H16V22H3Z M5 8V20H14V8Z</StreamGeometry>
+  <StreamGeometry x:Key="CopyAllIconGeometry">M7 2H21V18H19V4H7Z M3 6H17V22H3Z M5 8V20H15V8Z M7 10H13V12H7Z M7 14H13V16H7Z</StreamGeometry>
+  <StreamGeometry x:Key="EditIconGeometry">M4 16.5 V20 H7.5 L17.8 9.7 L14.3 6.2 Z M19 8.5 L20.5 7 C21.1 6.4 21.1 5.4 20.5 4.8 L19.2 3.5 C18.6 2.9 17.6 2.9 17 3.5 L15.5 5 Z</StreamGeometry>
+</ResourceDictionary>
