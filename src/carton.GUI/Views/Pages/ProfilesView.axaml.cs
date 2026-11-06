@@ -1,10 +1,12 @@
 using System;
 using System.ComponentModel;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using carton.Core.Services;
 using carton.GUI.Controls;
 using carton.ViewModels;
@@ -45,6 +47,43 @@ public partial class ProfilesView : UserControl
     }
 
     private ProfilesViewModel? ViewModel => DataContext as ProfilesViewModel;
+
+    private void OnProfileListKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || e.Key != Key.Tab || (e.KeyModifiers & ~KeyModifiers.Shift) != 0 ||
+            e.Source is not Control focused || focused.DataContext is not ProfileItemViewModel item || ViewModel == null)
+            return;
+
+        var index = ViewModel.Profiles.IndexOf(item);
+        if (index < 0 || ProfilesList.ContainerFromIndex(index) is not { } current) return;
+        var backwards = (e.KeyModifiers & KeyModifiers.Shift) != 0;
+        var stops = ProfileTabStops(current);
+        if (stops.Length == 0 || !ReferenceEquals(focused, backwards ? stops[0] : stops[^1])) return;
+
+        // Default Tab traversal only sees realized controls. Materialize the adjacent
+        // row at the boundary, without changing navigation between buttons in a row.
+        var step = backwards ? -1 : 1;
+        for (var next = index + step; next >= 0 && next < ViewModel.Profiles.Count; next += step)
+        {
+            var container = ProfilesList.ContainerFromIndex(next);
+            if (container == null)
+            {
+                ProfilesList.ScrollIntoView(next);
+                ProfilesList.UpdateLayout();
+                container = ProfilesList.ContainerFromIndex(next);
+            }
+            if (container == null) return;
+            var targets = ProfileTabStops(container);
+            if (targets.Length == 0) continue;
+            e.Handled = (backwards ? targets[^1] : targets[0]).Focus(NavigationMethod.Tab, e.KeyModifiers);
+            return;
+        }
+    }
+
+    private static Control[] ProfileTabStops(Control container) => container.GetVisualDescendants()
+        .OfType<Control>()
+        .Where(control => control.Focusable && control.IsEffectivelyEnabled && control.IsEffectivelyVisible && KeyboardNavigation.GetIsTabStop(control))
+        .ToArray();
 
     private void OnAttachedToVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
     {

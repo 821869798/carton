@@ -475,6 +475,7 @@ public partial class SettingsViewModel : PageViewModelBase, IDisposable
 
     public void Dispose()
     {
+        ReleasePageMetadata();
         DisposeMaterialSettings();
         WindowMaterialService.Instance.AvailabilityChanged -= OnMaterialAvailabilityChanged;
         if (_kernelManager != null)

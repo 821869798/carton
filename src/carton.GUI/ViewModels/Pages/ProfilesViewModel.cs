@@ -1310,6 +1310,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
 
     public void Dispose()
     {
+        ReleasePageMetadata();
         if (_singBoxManager != null)
         {
             _singBoxManager.StatusChanged -= OnSingBoxStatusChanged;

@@ -243,7 +243,12 @@
             </Button>
           </Grid>
 
-          <ItemsControl ItemsSource="{Binding Profiles}">
+          <ItemsControl x:Name="ProfilesList" ItemsSource="{Binding Profiles}" KeyDown="OnProfileListKeyDown">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <VirtualizingStackPanel/>
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate>
                 <Border Classes="profileCard">

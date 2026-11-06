@@ -119,6 +119,7 @@ public partial class LogsViewModel : PageViewModelBase, IDisposable
 
     public void Dispose()
     {
+        ReleasePageMetadata();
         _localizationService.LanguageChanged -= OnLanguageChanged;
         _logStore.EntriesChanged -= OnEntriesChanged;
         _filterRefreshTimer.Tick -= OnFilterRefreshTimerTick;
