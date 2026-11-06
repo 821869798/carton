@@ -28,10 +28,9 @@
       <Setter Property="Width" Value="30"/>
       <Setter Property="Height" Value="30"/>
       <Setter Property="Padding" Value="0"/>
-      <Setter Property="CornerRadius" Value="15"/>
+      <Setter Property="CornerRadius" Value="6"/>
       <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"/>
-      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="BorderThickness" Value="0"/>
       <Setter Property="Foreground" Value="{DynamicResource CartonControlForegroundBaseMediumBrush}"/>
     </Style>
     <Style Selector="Button.iconButton:pointerover">
@@ -64,7 +63,7 @@
       <Setter Property="Width" Value="30"/>
       <Setter Property="Height" Value="30"/>
       <Setter Property="Padding" Value="0"/>
-      <Setter Property="CornerRadius" Value="15"/>
+      <Setter Property="CornerRadius" Value="6"/>
       <Setter Property="HorizontalContentAlignment" Value="Center"/>
       <Setter Property="VerticalContentAlignment" Value="Center"/>
       <Setter Property="FontSize" Value="11"/>
@@ -159,13 +158,13 @@
     <Border Grid.Row="1"
             x:Name="ConfigSearchBar"
             IsVisible="False"
-            Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"
-            BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
-            BorderThickness="0,0,0,1"
-            Padding="10,8">
+            Background="Transparent"
+            Margin="20,12,20,0"
+            Padding="0,0,0,8">
       <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6">
         <TextBox x:Name="ConfigSearchInput"
                  Grid.Column="0"
+                 Classes="pageSearch"
                  VerticalAlignment="Center"
                  PlaceholderText="{DynamicResource Profiles.Editor.Search}"/>
         <TextBlock x:Name="ConfigSearchStatus"
@@ -315,7 +314,7 @@
                               IsEnabled="{Binding CanDelete}"
                               ToolTip.Tip="{DynamicResource Profiles.Button.Delete}">
                         <PathIcon Width="14" Height="14"
-                                  Data="M9 3V4H4V6H5V19A2 2 0 0 0 7 21H17A2 2 0 0 0 19 19V6H20V4H15V3H9M7 6H17V19H7V6M9 8V17H11V8H9M13 8V17H15V8H13Z"/>
+                                  Data="{StaticResource DeleteIconGeometry}"/>
                       </Button>
                     </StackPanel>
                   </Grid>
@@ -514,19 +513,18 @@
 
       <!-- JSON Editor Fullscreen Overlay -->
       <Grid IsVisible="{Binding ShowConfigFullscreenView}"
-            Background="{DynamicResource CartonControlBackgroundChromeMediumBrush}"
+            Background="{DynamicResource CartonControlBackgroundChromeMediumLowBrush}"
             Panel.ZIndex="10">
-        <Grid Margin="12">
+        <Grid Margin="20,12,20,20">
           <Border x:Name="ConfigEditorHost"
-                  Background="{DynamicResource CartonControlBackgroundBaseLowBrush}"
-                  BorderBrush="{DynamicResource CartonControlForegroundBaseMediumLowBrush}"
-                  BorderThickness="1"
-                  CornerRadius="10"
+                  Background="{DynamicResource CartonSettingsItemBackgroundBrush}"
+                  CornerRadius="8"
+                  SizeChanged="OnConfigEditorHostSizeChanged"
                   ClipToBounds="True">
             <controls:JsonConfigEditor HorizontalAlignment="Stretch"
                                        x:Name="ConfigEditor"
                                        VerticalAlignment="Stretch"
-                                       Text="{Binding ConfigContent, Mode=TwoWay}"
+                                       Document="{Binding ConfigDocument}"
                                        IsReadOnly="{Binding IsConfigReadOnly}"/>
           </Border>
         </Grid>

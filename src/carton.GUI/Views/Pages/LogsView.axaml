@@ -33,7 +33,7 @@
       </Button>
       <Button Grid.Column="3" Classes="pageAction" Command="{Binding ClearLogsCommand}"
               ToolTip.Tip="{DynamicResource Logs.Button.Clear}" AutomationProperties.Name="{DynamicResource Logs.Button.Clear}">
-        <PathIcon Width="16" Height="16" Data="M8 2H16V4H22V6H2V4H8Z M5 8H19L18 22H6Z M8 10L9 20H10L9 10Z M14 10L13 20H15L16 10Z"/>
+        <PathIcon Width="16" Height="16" Data="{StaticResource DeleteIconGeometry}"/>
       </Button>
     </Grid>
     <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,0,12" ColumnSpacing="8">

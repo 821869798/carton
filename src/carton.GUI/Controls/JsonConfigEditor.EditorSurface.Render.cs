@@ -19,6 +19,20 @@ public sealed partial class JsonConfigEditor
 {
     private sealed partial class EditorSurface
     {
+        private static readonly IBrush ValidationFill = new SolidColorBrush(Color.FromArgb(32, 220, 65, 65));
+        private static readonly IBrush ValidationMarker = new SolidColorBrush(Color.FromRgb(220, 65, 65));
+
+        private void DrawValidationLine(DrawingContext context, double lineNumberWidth, bool gutter)
+        {
+            if (_owner._document.ErrorLine is not { } line) return;
+            var y = VerticalPadding + line * _lineHeight - VerticalOffset;
+            if (y >= Bounds.Height || y + _lineHeight <= 0) return;
+            var top = Math.Max(0, y);
+            var height = Math.Min(Bounds.Height, y + _lineHeight) - top;
+            context.FillRectangle(gutter ? ValidationMarker : ValidationFill,
+                new Rect(gutter ? 0 : lineNumberWidth, top, gutter ? 3 : Math.Max(0, Bounds.Width - lineNumberWidth), height));
+        }
+
         private void DrawText(DrawingContext context, double lineNumberWidth)
         {
             var text = Text;
@@ -51,7 +65,7 @@ public sealed partial class JsonConfigEditor
             DrawingContext context,
             int lineIndex,
             JsonLine line,
-            string text,
+            JsonTextSource text,
             double viewportStartX,
             double y,
             int firstVisibleCol,
@@ -181,7 +195,18 @@ public sealed partial class JsonConfigEditor
             var visibleStart = _lines[firstVisibleLine].StartOffset;
             var visibleEnd = _lines[lastVisibleLine].EndOffset;
 
-            for (var i = 0; i < _owner._searchMatches.Count; i++)
+            // Matches are ordered and non-overlapping. Skip the offscreen prefix
+            // with binary search instead of scanning it on every scroll frame.
+            var low = 0;
+            var high = _owner._searchMatches.Count;
+            while (low < high)
+            {
+                var middle = low + (high - low) / 2;
+                var candidate = _owner._searchMatches[middle];
+                if (candidate.Start + candidate.Length <= visibleStart) low = middle + 1;
+                else high = middle;
+            }
+            for (var i = low; i < _owner._searchMatches.Count; i++)
             {
                 var match = _owner._searchMatches[i];
                 if (match.Start >= visibleEnd)
@@ -364,7 +389,7 @@ public sealed partial class JsonConfigEditor
 
         private int GetLongestLineLength()
         {
-            return _longestLineLength;
+            return _owner._document.LongestLineColumns;
         }
 
         private (int FirstVisibleLine, int LastVisibleLine) GetVisibleLineRange()
@@ -382,9 +407,11 @@ public sealed partial class JsonConfigEditor
 
         private bool IsLightTheme => ActualThemeVariant == ThemeVariant.Light;
 
-        private IBrush GetBackgroundBrush() => IsLightTheme ? LightBackgroundBrush : DarkBackgroundBrush;
+        private IBrush GetBackgroundBrush() =>
+            this.TryFindResource("CartonSettingsItemBackgroundBrush", ActualThemeVariant, out var resource) && resource is IBrush brush
+                ? brush : IsLightTheme ? LightBackgroundBrush : DarkBackgroundBrush;
 
-        private IBrush GetLineNumberBackgroundBrush() => IsLightTheme ? LightLineNumberBackgroundBrush : DarkLineNumberBackgroundBrush;
+        private IBrush GetLineNumberBackgroundBrush() => GetBackgroundBrush();
 
         private IBrush GetTextBrush() => IsLightTheme ? LightTextBrush : DarkTextBrush;
 

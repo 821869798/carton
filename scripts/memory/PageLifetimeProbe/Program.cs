@@ -17,6 +17,11 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Contains("--editor-memory")) return EditorMemoryProbe.Run();
+        if (args.Contains("--profile-document")) return ProfileDocumentProbe.Run();
+        if (args.Contains("--indent-performance")) return IndentationPerformanceProbe.Run();
+        if (args.Contains("--editor-performance")) return EditorPerformanceProbe.Run();
+        if (args.Contains("--editor")) return EditorProbe.Run();
         if (args.Contains("--profiles")) return ProfileListProbe.Run(args.Contains("--verify"));
 
         AppBuilder.Configure<Application>()

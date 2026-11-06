@@ -67,7 +67,7 @@ public static class JsonSyntax
     /// 返回 text[index] 处一个码点的显示宽度及其占用的 UTF-16 char 数（代理对为 2）。
     /// 偏移坐标仍是 UTF-16 索引，仅宽度/步进按码点计。
     /// </summary>
-    public static (int Width, int CharCount) DisplayWidthAt(string text, int index)
+    public static (int Width, int CharCount) DisplayWidthAt(JsonTextSource text, int index)
     {
         var ch = text[index];
         if (char.IsHighSurrogate(ch) && index + 1 < text.Length && char.IsLowSurrogate(text[index + 1]))
@@ -84,11 +84,11 @@ public static class JsonSyntax
         return char.IsDigit(ch) || ch is '.' or 'e' or 'E' or '+' or '-';
     }
 
-    public static bool TryReadKeyword(string text, int index, out int length)
+    public static bool TryReadKeyword(JsonTextSource text, int index, out int length)
     {
         foreach (var keyword in Keywords)
         {
-            if (text.AsSpan(index).StartsWith(keyword, StringComparison.Ordinal) &&
+            if (text.Matches(index, keyword) &&
                 (index + keyword.Length == text.Length || !char.IsLetterOrDigit(text[index + keyword.Length])))
             {
                 length = keyword.Length;
@@ -101,7 +101,7 @@ public static class JsonSyntax
     }
 
     // 从开引号后的位置开始扫描，返回闭引号之后的下标；字符串未闭合时返回 text.Length。
-    public static int ReadJsonString(string text, int index)
+    public static int ReadJsonString(JsonTextSource text, int index)
     {
         var escaped = false;
         while (index < text.Length)
@@ -128,12 +128,12 @@ public static class JsonSyntax
         return index;
     }
 
-    public static bool IsLikelyPropertyName(string text, int index)
+    public static bool IsLikelyPropertyName(JsonTextSource text, int index)
         => IsLikelyPropertyName(text, index, text.Length);
 
     // 在 [index, end) 内判断后随的首个非空白字符是否为 ':'，不越过 end。
     // 按行着色时传 end=行尾，避免未闭合字符串把后续行的 ':' 误判成属性名。
-    public static bool IsLikelyPropertyName(string text, int index, int end)
+    public static bool IsLikelyPropertyName(JsonTextSource text, int index, int end)
     {
         while (index < end && char.IsWhiteSpace(text[index]))
         {
@@ -144,7 +144,7 @@ public static class JsonSyntax
     }
 
     /// <summary>按行切分文本（兼容 \n 与 \r\n），并返回最长行的显示列宽（至少 1）。</summary>
-    public static void BuildLines(string text, List<JsonLine> lines, out int longestColumns)
+    public static void BuildLines(JsonTextSource text, List<JsonLine> lines, out int longestColumns)
     {
         lines.Clear();
         var start = 0;
@@ -185,7 +185,7 @@ public static class JsonSyntax
     /// 对 JSON 文本做轻量词法着色。<paramref name="cancellation"/> 用于后台任务的协作取消，
     /// 同步调用传 default 即可（每 64K 字符才检查一次，开销可忽略）。
     /// </summary>
-    public static void Tokenize(string text, List<JsonToken> tokens, CancellationToken cancellation = default)
+    public static void Tokenize(JsonTextSource text, List<JsonToken> tokens, CancellationToken cancellation = default)
     {
         tokens.Clear();
         var index = 0;
@@ -240,7 +240,7 @@ public static class JsonSyntax
     /// 标准 JSON 的 token 不跨行（字符串不含裸换行、无块注释），故按行着色与全文着色等价，
     /// 且未闭合字符串只染到本行末，符合编辑直觉。供渲染时按可见行惰性调用。
     /// </summary>
-    public static void TokenizeLine(string text, JsonLine line, List<JsonToken> tokens)
+    public static void TokenizeLine(JsonTextSource text, JsonLine line, List<JsonToken> tokens)
     {
         tokens.Clear();
         var index = line.StartOffset;
@@ -285,7 +285,7 @@ public static class JsonSyntax
     }
 
     // 在 [index, end) 内扫描字符串闭引号，越界（未闭合）时返回 end。
-    private static int ReadJsonStringWithin(string text, int index, int end)
+    private static int ReadJsonStringWithin(JsonTextSource text, int index, int end)
     {
         var escaped = false;
         while (index < end)
@@ -336,7 +336,7 @@ public static class JsonSyntax
     }
 
     // 将字符偏移换算成显示列（CJK/全角记 2 列、emoji 记 2 列），与渲染、extent 的列宽口径一致。
-    public static int OffsetToDisplayColumn(string text, JsonLine line, int offset)
+    public static int OffsetToDisplayColumn(JsonTextSource text, JsonLine line, int offset)
     {
         var end = Math.Clamp(offset, line.StartOffset, line.EndOffset);
         var columns = 0;
@@ -352,7 +352,7 @@ public static class JsonSyntax
     }
 
     // 将显示列换算回字符偏移，落在宽字符/emoji 中间时就近吸附到码点边界。
-    public static int DisplayColumnToOffset(string text, JsonLine line, int targetColumn)
+    public static int DisplayColumnToOffset(JsonTextSource text, JsonLine line, int targetColumn)
     {
         var columns = 0;
         var i = line.StartOffset;

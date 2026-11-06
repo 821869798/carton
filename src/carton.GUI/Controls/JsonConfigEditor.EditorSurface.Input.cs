@@ -111,8 +111,13 @@ public sealed partial class JsonConfigEditor
 
             if (HandleClipboardShortcutAsync(e) is { } task)
             {
-                await task;
                 e.Handled = true;
+                try { await task; }
+                catch (Exception ex)
+                {
+                    // A busy/unavailable system clipboard must not terminate the UI event loop.
+                    System.Diagnostics.Debug.WriteLine($"Clipboard operation failed: {ex}");
+                }
                 return;
             }
 
@@ -122,7 +127,7 @@ public sealed partial class JsonConfigEditor
             }
         }
 
-        private string Text => _owner.Text ?? string.Empty;
+        private JsonTextSource Text => _owner._document.Text;
 
         private bool HandleEditorShortcut(KeyEventArgs e)
         {
@@ -173,7 +178,7 @@ public sealed partial class JsonConfigEditor
 
             return e.Key switch
             {
-                Key.A => Task.Run(SelectAllOnUiThread),
+                Key.A => SelectAllAsync(),
                 Key.C => CopySelectionAsync(),
                 Key.X when !_owner.IsReadOnly => CutSelectionAsync(),
                 Key.V when !_owner.IsReadOnly => PasteSelectionAsync(),
@@ -181,58 +186,54 @@ public sealed partial class JsonConfigEditor
             };
         }
 
-        private void SelectAllOnUiThread()
+        private Task SelectAllAsync()
         {
-            Dispatcher.UIThread.Post(() =>
-            {
-                _selectionAnchor = 0;
-                _caretIndex = Text.Length;
-                EnsureCaretVisible();
-                InvalidateVisual();
-            });
+            _selectionAnchor = 0;
+            _caretIndex = Text.Length;
+            EnsureCaretVisible();
+            InvalidateVisual();
+            return Task.CompletedTask;
         }
+
+        private IClipboard? GetClipboard() => TopLevel.GetTopLevel(this)?.Clipboard;
 
         private async Task CopySelectionAsync()
         {
             var selected = GetSelectedText();
-            if (string.IsNullOrEmpty(selected))
-            {
-                return;
-            }
-
-            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop &&
-                desktop.MainWindow?.Clipboard != null)
-            {
-                await desktop.MainWindow.Clipboard.SetTextAsync(selected);
-            }
+            if (!string.IsNullOrEmpty(selected) && GetClipboard() is { } clipboard)
+                await clipboard.SetTextAsync(selected);
         }
 
         private async Task CutSelectionAsync()
         {
             var selected = GetSelectedText();
-            if (string.IsNullOrEmpty(selected))
-            {
+            if (_owner.IsReadOnly || string.IsNullOrEmpty(selected) || GetClipboard() is not { } clipboard)
                 return;
-            }
 
-            await CopySelectionAsync();
-            DeleteSelectionOrCharacter(backspace: true);
+            var document = _owner._document;
+            var version = document.Version;
+            var caret = _caretIndex;
+            var anchor = _selectionAnchor;
+            await clipboard.SetTextAsync(selected);
+            if (CanCompleteClipboardEdit(document, version, caret, anchor, clipboard))
+                ReplaceSelection(string.Empty);
         }
 
         private async Task PasteSelectionAsync()
         {
-            if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop ||
-                desktop.MainWindow?.Clipboard == null)
-            {
-                return;
-            }
-
-            var text = await desktop.MainWindow.Clipboard.TryGetTextAsync();
-            if (!string.IsNullOrEmpty(text))
-            {
+            if (_owner.IsReadOnly || GetClipboard() is not { } clipboard) return;
+            var document = _owner._document;
+            var version = document.Version;
+            var caret = _caretIndex;
+            var anchor = _selectionAnchor;
+            var text = await clipboard.TryGetTextAsync();
+            if (!string.IsNullOrEmpty(text) && CanCompleteClipboardEdit(document, version, caret, anchor, clipboard))
                 InsertText(text);
-            }
         }
+
+        private bool CanCompleteClipboardEdit(JsonTextDocument document, long version, int caret, int anchor, IClipboard clipboard) =>
+            !_owner.IsReadOnly && ReferenceEquals(document, _owner._document) && document.Version == version &&
+            caret == _caretIndex && anchor == _selectionAnchor && ReferenceEquals(clipboard, GetClipboard());
 
         private bool HandleNavigation(KeyEventArgs e)
         {
@@ -278,7 +279,9 @@ public sealed partial class JsonConfigEditor
                     DeleteSelectionOrCharacter(backspace: false);
                     return true;
                 case Key.Enter:
-                    InsertText(Environment.NewLine);
+                    var (start, length) = GetSelectionRange();
+                    var edit = JsonIndentation.Create(Text, start, length, _lines, GetLineIndexForOffset(start));
+                    ApplyEdit(start, edit.RemoveLength, edit.Text, start + edit.CaretOffset);
                     return true;
                 case Key.Tab:
                     InsertText("  ");

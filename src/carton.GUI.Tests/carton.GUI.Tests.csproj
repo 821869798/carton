@@ -37,6 +37,10 @@
     <Compile Include="..\carton.GUI\Services\PackageManagedInstall.cs" Link="Services\PackageManagedInstall.cs" />
     <Compile Include="..\carton.GUI\Services\AppLaunchOptions.cs" Link="Services\AppLaunchOptions.cs" />
     <Compile Include="..\carton.GUI\Services\KernelCacheCleanupService.cs" Link="Services\KernelCacheCleanupService.cs" />
+    <Compile Include="..\carton.GUI\Controls\JsonTextSource.cs" Link="Controls\JsonTextSource.cs" />
+    <Compile Include="..\carton.GUI\Controls\JsonTextDocument.cs" Link="Controls\JsonTextDocument.cs" />
+    <Compile Include="..\carton.GUI\Controls\JsonTextBuffer.cs" Link="Controls\JsonTextBuffer.cs" />
+    <Compile Include="..\carton.GUI\Controls\JsonIndentation.cs" Link="Controls\JsonIndentation.cs" />
     <Compile Include="..\carton.GUI\Controls\JsonSyntax.cs" Link="Controls\JsonSyntax.cs" />
     <Compile Include="..\carton.GUI\Controls\JsonEditHistory.cs" Link="Controls\JsonEditHistory.cs" />
     <Compile Include="..\carton.GUI\ViewModels\Pages\DelayText.cs" Link="ViewModels\Pages\DelayText.cs" />

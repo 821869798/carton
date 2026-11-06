@@ -48,6 +48,11 @@ public partial class ProfilesView : UserControl
 
     private ProfilesViewModel? ViewModel => DataContext as ProfilesViewModel;
 
+    private void OnConfigEditorHostSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        ConfigEditorHost.Clip = new RectangleGeometry(new Rect(e.NewSize), 8, 8);
+    }
+
     private void OnProfileListKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Handled || e.Key != Key.Tab || (e.KeyModifiers & ~KeyModifiers.Shift) != 0 ||

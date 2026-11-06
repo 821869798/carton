@@ -47,8 +47,16 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     [ObservableProperty]
     private string _importStatus = string.Empty;
 
-    [ObservableProperty]
-    private string _configContent = string.Empty;
+    public carton.GUI.Controls.JsonTextDocument ConfigDocument { get; } = new();
+    public string ConfigContent
+    {
+        get => ConfigDocument.GetText();
+        set
+        {
+            ConfigDocument.Load(value ?? string.Empty, _initialConfigContent);
+            OnPropertyChanged();
+        }
+    }
 
     [ObservableProperty]
     private bool _isContentEditorVisible;
@@ -217,10 +225,11 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     partial void OnNewProfileUrlChanged(string value) => RecalculateFormChanged();
     partial void OnNewAutoUpdateChanged(bool value) => RecalculateFormChanged();
     partial void OnNewUpdateIntervalMinutesChanged(string value) => RecalculateFormChanged();
-    partial void OnConfigContentChanged(string value) => RecalculateFormChanged();
+    private void OnConfigDocumentChanged(object? sender, EventArgs e) => RecalculateFormChanged();
 
     public ProfilesViewModel()
     {
+        ConfigDocument.Changed += OnConfigDocumentChanged;
         _localizationService = LocalizationService.Instance;
         _localizationService.LanguageChanged += OnLanguageChanged;
         InitializePageMetadata("Profiles", "Navigation.Profiles", "Profiles");
@@ -700,22 +709,30 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
     [RelayCommand]
     private async Task ValidateConfigJson()
     {
-        if (_singBoxManager == null)
+        ConfigDocument.SetErrorLine(null);
+        var content = ConfigContent;
+        try
         {
-            try
+            using var _ = JsonDocument.Parse(content, new JsonDocumentOptions
             {
-                using var _ = JsonDocument.Parse(ConfigContent);
-                _toastWriter?.Invoke(GetString("Profiles.Toast.JsonValid", "JSON syntax is valid"), 1800);
-            }
-            catch (JsonException ex)
-            {
-                _toastWriter?.Invoke(FormatJsonError(ex), 3600);
-            }
-
+                AllowTrailingCommas = false,
+                CommentHandling = JsonCommentHandling.Disallow
+            });
+        }
+        catch (JsonException ex)
+        {
+            ConfigDocument.SetErrorLine(ex.LineNumber);
+            _toastWriter?.Invoke(FormatJsonError(ex), 3600);
             return;
         }
 
-        var (success, message) = await _singBoxManager.CheckConfigAsync(ConfigContent);
+        if (_singBoxManager == null)
+        {
+            _toastWriter?.Invoke(GetString("Profiles.Toast.JsonValid", "JSON syntax is valid"), 1800);
+            return;
+        }
+
+        var (success, message) = await _singBoxManager.CheckConfigAsync(content);
         if (success)
         {
             _toastWriter?.Invoke(GetString("Profiles.Toast.JsonValid", "JSON syntax is valid"), 1800);
@@ -858,6 +875,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
             _initialAutoUpdate = NewAutoUpdate;
             _initialUpdateIntervalMinutes = NewUpdateIntervalMinutes;
             _initialConfigContent = ConfigContent;
+            ConfigDocument.MarkSaved();
             IsFormChanged = false;
             NewProfileStatus = string.Empty;
             _toastWriter?.Invoke(GetString("Profiles.Toast.SaveSuccess", "Profile saved"), 1800);
@@ -1039,7 +1057,7 @@ public partial class ProfilesViewModel : PageViewModelBase, IDisposable
         return IsEditingMode &&
                IsLocalProfile &&
                HasLoadedConfigContent &&
-               !string.Equals(ConfigContent, _initialConfigContent, StringComparison.Ordinal);
+               ConfigDocument.IsModified;
     }
 
     private bool HasUnsavedChanges()

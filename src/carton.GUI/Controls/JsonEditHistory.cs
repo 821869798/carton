@@ -87,6 +87,30 @@ public sealed class JsonEditHistory
         return true;
     }
 
+    public bool TryUndo(JsonTextDocument document, CaretState currentState, out CaretState newState)
+    {
+        newState = currentState;
+        if (_undo.Count == 0) return false;
+        var edit = _undo.Peek();
+        document.Replace(edit.Offset, edit.Inserted.Length, edit.Removed);
+        _undo.Pop();
+        newState = edit.Restore;
+        _redo.Push(edit with { Restore = currentState });
+        return true;
+    }
+
+    public bool TryRedo(JsonTextDocument document, CaretState currentState, out CaretState newState)
+    {
+        newState = currentState;
+        if (_redo.Count == 0) return false;
+        var edit = _redo.Peek();
+        document.Replace(edit.Offset, edit.Removed.Length, edit.Inserted);
+        _redo.Pop();
+        newState = edit.Restore;
+        _undo.Push(edit with { Restore = currentState });
+        return true;
+    }
+
     // 按条数与「增量字符总量」双上限裁剪，保留最新的若干条。
     private void Trim(Stack<TextEdit> stack)
     {

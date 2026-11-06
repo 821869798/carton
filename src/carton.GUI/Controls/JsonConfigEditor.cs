@@ -28,6 +28,16 @@ public sealed partial class JsonConfigEditor : Grid
             string.Empty,
             defaultBindingMode: Avalonia.Data.BindingMode.TwoWay);
 
+    public static readonly StyledProperty<JsonTextDocument?> DocumentProperty =
+        AvaloniaProperty.Register<JsonConfigEditor, JsonTextDocument?>(nameof(Document));
+    private long _observedDocumentVersion;
+    private JsonTextDocument _document = new();
+    public JsonTextDocument? Document
+    {
+        get => GetValue(DocumentProperty);
+        set => SetValue(DocumentProperty, value);
+    }
+
     public static readonly StyledProperty<bool> IsReadOnlyProperty =
         AvaloniaProperty.Register<JsonConfigEditor, bool>(nameof(IsReadOnly));
 
@@ -45,7 +55,6 @@ public sealed partial class JsonConfigEditor : Grid
 
     private string _searchQuery = string.Empty;
     private int _currentSearchMatchIndex = -1;
-    private bool _isInternalTextMutation;
     private bool _searchCaseSensitive;
     private bool _searchWholeWord;
     private bool _searchUseRegex;
@@ -58,6 +67,9 @@ public sealed partial class JsonConfigEditor : Grid
         RowDefinitions = new RowDefinitions("*,Auto");
         ColumnDefinitions = new ColumnDefinitions("*,Auto");
 
+        _document.Changed += OnDocumentChanged;
+        _document.Reset += OnDocumentReset;
+        _document.ValidationChanged += OnValidationChanged;
         _surface = new EditorSurface(this);
         ActualThemeVariantChanged += (_, _) => _surface.InvalidateVisual();
         SetRow(_surface, 0);
@@ -87,8 +99,12 @@ public sealed partial class JsonConfigEditor : Grid
 
     public string Text
     {
-        get => GetValue(TextProperty);
-        set => SetValue(TextProperty, value);
+        get => _document.GetText();
+        set
+        {
+            if (string.Equals(GetValue(TextProperty), value, StringComparison.Ordinal)) _document.Load(value ?? string.Empty);
+            else SetValue(TextProperty, value);
+        }
     }
 
     public bool IsReadOnly
@@ -131,9 +147,10 @@ public sealed partial class JsonConfigEditor : Grid
 
     public void Undo()
     {
-        if (_history.TryUndo(_surface.TextValue, _surface.CaretState, out var newText, out var newState))
+        if (IsReadOnly) return;
+        if (_history.TryUndo(_document, _surface.CaretState, out var newState))
         {
-            _surface.ApplyHistoryResult(newText, newState);
+            _surface.RestoreCaret(newState);
             UpdateSearchResults(selectCurrentMatch: false);
             UpdateScrollBars();
             RaiseEditorStateChanged();
@@ -142,9 +159,10 @@ public sealed partial class JsonConfigEditor : Grid
 
     public void Redo()
     {
-        if (_history.TryRedo(_surface.TextValue, _surface.CaretState, out var newText, out var newState))
+        if (IsReadOnly) return;
+        if (_history.TryRedo(_document, _surface.CaretState, out var newState))
         {
-            _surface.ApplyHistoryResult(newText, newState);
+            _surface.RestoreCaret(newState);
             UpdateSearchResults(selectCurrentMatch: false);
             UpdateScrollBars();
             RaiseEditorStateChanged();
@@ -169,17 +187,19 @@ public sealed partial class JsonConfigEditor : Grid
         RaiseEditorStateChanged();
     }
 
-    public void SetSearchQuery(string query)
+    public void SetSearchQuery(string query) => QueueSearch(query, selectCurrentMatch: true);
+
+    private void QueueSearch(string query, bool selectCurrentMatch)
     {
         _searchQuery = query ?? string.Empty;
         _searchDebounceTokenSource?.Cancel();
         _searchDebounceTokenSource?.Dispose();
         _searchDebounceTokenSource = new CancellationTokenSource();
         var token = _searchDebounceTokenSource.Token;
-        _ = DebounceSearchAsync(token);
+        _ = DebounceSearchAsync(token, selectCurrentMatch);
     }
 
-    private async Task DebounceSearchAsync(CancellationToken token)
+    private async Task DebounceSearchAsync(CancellationToken token, bool selectCurrentMatch)
     {
         try
         {
@@ -195,7 +215,7 @@ public sealed partial class JsonConfigEditor : Grid
             Dispatcher.UIThread.Post(() =>
             {
                 if (token.IsCancellationRequested) return;
-                UpdateSearchResults(selectCurrentMatch: true);
+                UpdateSearchResults(selectCurrentMatch);
                 RaiseEditorStateChanged();
             });
         }
@@ -226,26 +246,70 @@ public sealed partial class JsonConfigEditor : Grid
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == TextProperty)
+        if (change.Property == DocumentProperty)
         {
-            var isExternalChange = !_isInternalTextMutation;
-            if (isExternalChange)
-            {
-                ClearHistory();
-                ResetSearchForNewText();
-            }
-
-            _surface.OnTextChanged();
-
-            // 内部编辑/撤销/重做由各自的调用方（ApplyEdit、Undo、Redo）刷新搜索与滚动条，
-            // 这里只处理外部赋值（如加载配置），避免每次按键重复全文扫描。
-            if (isExternalChange)
-            {
-                UpdateSearchResults(selectCurrentMatch: false);
-                UpdateScrollBars();
-                RaiseEditorStateChanged();
-            }
+            _document.Changed -= OnDocumentChanged;
+            _document.Reset -= OnDocumentReset;
+            _document.ValidationChanged -= OnValidationChanged;
+            _document = change.GetNewValue<JsonTextDocument?>() ?? new JsonTextDocument();
+            _document.Changed += OnDocumentChanged;
+            _document.Reset += OnDocumentReset;
+            _document.ValidationChanged += OnValidationChanged;
+            OnDocumentReset(this, EventArgs.Empty);
+            OnDocumentChanged(this, EventArgs.Empty);
         }
+        else if (change.Property == TextProperty)
+        {
+            _document.Load(change.GetNewValue<string>() ?? string.Empty);
+        }
+    }
+
+    private void OnDocumentReset(object? sender, EventArgs e)
+    {
+        ClearHistory();
+        ResetSearchForNewText();
+    }
+
+    private void OnDocumentChanged(object? sender, EventArgs e)
+    {
+        _observedDocumentVersion = _document.Version;
+        _surface.OnTextChanged();
+        UpdateScrollBars();
+        // Search snapshots are explicit work, debounced while typing. Never export
+        // the whole document just to keep the view model's dirty flag current.
+        _searchMatches.Clear();
+        _currentSearchMatchIndex = -1;
+        if (!string.IsNullOrEmpty(_searchQuery)) QueueSearch(_searchQuery, selectCurrentMatch: false);
+        RaiseEditorStateChanged();
+    }
+
+    private void OnValidationChanged(object? sender, EventArgs e)
+    {
+        if (_document.ErrorLine is { } line)
+            _surface.CenterRangeInView(_document.Lines[line].StartOffset, 0);
+        _surface.InvalidateVisual();
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _document.Changed -= OnDocumentChanged;
+        _document.Reset -= OnDocumentReset;
+        _document.Changed += OnDocumentChanged;
+        _document.Reset += OnDocumentReset;
+        _document.ValidationChanged -= OnValidationChanged;
+        _document.ValidationChanged += OnValidationChanged;
+        if (_observedDocumentVersion != _document.Version) OnDocumentReset(this, EventArgs.Empty);
+        OnDocumentChanged(this, EventArgs.Empty);
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _document.Changed -= OnDocumentChanged;
+        _document.Reset -= OnDocumentReset;
+        _document.ValidationChanged -= OnValidationChanged;
+        _searchDebounceTokenSource?.Cancel();
+        base.OnDetachedFromVisualTree(e);
     }
 
     protected override Size ArrangeOverride(Size finalSize)
@@ -293,7 +357,7 @@ public sealed partial class JsonConfigEditor : Grid
                         regexOptions |= RegexOptions.IgnoreCase;
                     }
 
-                    foreach (Match match in Regex.Matches(Text, regexPattern, regexOptions))
+                    foreach (Match match in Regex.Matches(Text, regexPattern, regexOptions, TimeSpan.FromMilliseconds(100)))
                     {
                         if (!match.Success || match.Length <= 0)
                         {
@@ -327,8 +391,14 @@ public sealed partial class JsonConfigEditor : Grid
                     }
                 }
             }
+            catch (RegexMatchTimeoutException)
+            {
+                _searchMatches.Clear();
+                _searchPatternValid = false;
+            }
             catch (ArgumentException)
             {
+                _searchMatches.Clear();
                 _searchPatternValid = false;
             }
 
@@ -502,7 +572,7 @@ public sealed partial class JsonConfigEditor : Grid
         private const double FontSizeStep = 1;
 
         private readonly JsonConfigEditor _owner;
-        private readonly List<JsonLine> _lines = new();
+        private IReadOnlyList<JsonLine> _lines => _owner._document.Lines;
         private FormattedText? _sampleFormattedText;
         private double _charWidth = 8;
         private double _lineHeight = 18;
@@ -510,11 +580,9 @@ public sealed partial class JsonConfigEditor : Grid
         private int _caretIndex;
         private int _selectionAnchor = -1;
         private bool _pointerSelecting;
-        private bool _internalTextUpdate;
         private double _horizontalOffset;
         private double _verticalOffset;
         private double _fontSize = DefaultFontSize;
-        private int _longestLineLength = 1;
 
         public EditorSurface(JsonConfigEditor owner)
         {
@@ -556,32 +624,22 @@ public sealed partial class JsonConfigEditor : Grid
 
         public void OnTextChanged()
         {
-            if (!_internalTextUpdate)
-            {
-                _caretIndex = Math.Clamp(_caretIndex, 0, Text.Length);
-                if (_selectionAnchor >= 0)
-                {
-                    _selectionAnchor = Math.Clamp(_selectionAnchor, 0, Text.Length);
-                }
-            }
+            _caretIndex = Math.Clamp(_caretIndex, 0, Text.Length);
+            if (_selectionAnchor >= 0)
+                _selectionAnchor = Math.Clamp(_selectionAnchor, 0, Text.Length);
 
             RebuildDocumentState();
             InvalidateVisual();
         }
 
-        public string TextValue => Text;
+        public string TextValue => _owner._document.GetText();
 
         public CaretState CaretState
             => new(_caretIndex, _selectionAnchor, HorizontalOffset, VerticalOffset);
 
         // 应用撤销/重做得到的新文本与恢复的光标状态。文本变更不再走历史记录。
-        public void ApplyHistoryResult(string newText, CaretState state)
+        public void RestoreCaret(CaretState state)
         {
-            _internalTextUpdate = true;
-            _owner._isInternalTextMutation = true;
-            _owner.Text = newText;
-            _owner._isInternalTextMutation = false;
-            _internalTextUpdate = false;
             _caretIndex = Math.Clamp(state.Caret, 0, Text.Length);
             _selectionAnchor = Math.Clamp(state.Anchor, -1, Text.Length);
             _owner._horizontalScrollBar.Value = Math.Clamp(state.HOffset, 0, _owner._horizontalScrollBar.Maximum);
@@ -641,6 +699,7 @@ public sealed partial class JsonConfigEditor : Grid
                 bounds.Height);
             using (context.PushClip(contentRect))
             {
+                DrawValidationLine(context, lineNumberWidth, gutter: false);
                 DrawSearchMatches(context, lineNumberWidth);
                 DrawSelection(context, lineNumberWidth);
                 DrawText(context, lineNumberWidth);
@@ -652,6 +711,7 @@ public sealed partial class JsonConfigEditor : Grid
 
             context.FillRectangle(GetLineNumberBackgroundBrush(), new Rect(0, 0, lineNumberWidth, bounds.Height));
             DrawLineNumbers(context, lineNumberWidth);
+            DrawValidationLine(context, lineNumberWidth, gutter: true);
         }
 
         public void SetFontSize(double fontSize)
@@ -729,7 +789,7 @@ public sealed partial class JsonConfigEditor : Grid
 
         // 统一编辑入口：在 offset 处删除 removeLength 个字符并插入 insertText。
         // 捕获 delta 记入历史栈（不再存全文快照），再以增量方式重建文本。
-        private void ApplyEdit(int offset, int removeLength, string insertText)
+        private void ApplyEdit(int offset, int removeLength, string insertText, int? newCaretIndex = null)
         {
             var current = Text;
             var removed = removeLength > 0 ? current.Substring(offset, removeLength) : string.Empty;
@@ -744,26 +804,14 @@ public sealed partial class JsonConfigEditor : Grid
                 return;
             }
 
-            var newText = current.Remove(offset, removeLength).Insert(offset, insertText);
-            // Restore 记录「编辑前」的光标/视口，供撤销恢复到本次编辑发生前的状态。
+            // Restore records only the edit delta and caret, never a full text copy.
             var restore = new CaretState(_caretIndex, _selectionAnchor, HorizontalOffset, VerticalOffset);
             _owner.RecordEdit(new TextEdit(offset, removed, insertText, restore));
-            CommitText(newText, offset + insertText.Length);
-        }
-
-        // 写入新文本并把光标置于指定位置（折叠选区）。不记历史——历史由调用方决定。
-        private void CommitText(string newText, int newCaretIndex)
-        {
-            _internalTextUpdate = true;
-            _owner._isInternalTextMutation = true;
-            _owner.Text = newText;
-            _owner._isInternalTextMutation = false;
-            _internalTextUpdate = false;
-            _caretIndex = Math.Clamp(newCaretIndex, 0, Text.Length);
+            _owner._document.Replace(offset, removeLength, insertText);
+            _caretIndex = Math.Clamp(newCaretIndex ?? offset + insertText.Length, 0, Text.Length);
             _selectionAnchor = _caretIndex;
             EnsureCaretVisible();
             _owner.UpdateScrollBars();
-            _owner.UpdateSearchResults(selectCurrentMatch: false);
             _owner.RaiseEditorStateChanged();
             InvalidateVisual();
         }
@@ -810,16 +858,12 @@ public sealed partial class JsonConfigEditor : Grid
         private void RebuildDocumentState()
         {
             EnsureMetrics();
-            BuildLines();
+            // Document maintains line metadata incrementally during edits.
             // 着色按可见行惰性进行（见 GetLineTokens），不再在此预扫全文 token，
             // 故大文件编辑/加载时这里只是 O(n) 切行，无全文着色开销。
             _selectionAnchor = Math.Clamp(_selectionAnchor < 0 ? _caretIndex : _selectionAnchor, 0, Text.Length);
             _caretIndex = Math.Clamp(_caretIndex, 0, Text.Length);
         }
 
-        private void BuildLines()
-        {
-            JsonSyntax.BuildLines(Text, _lines, out _longestLineLength);
-        }
     }
 }
