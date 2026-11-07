@@ -187,7 +187,12 @@ public sealed class TrayMenuService : IDisposable
     {
         var menu = BuildInitialMenu();
         var assemblyName = _application?.GetType().Assembly.GetName().Name ?? "carton";
-        var iconUri = new Uri($"avares://{assemblyName}/Assets/carton_icon.png");
+        var iconPath = OperatingSystem.IsWindows()
+            ? "Assets/carton_icon.ico"
+            : (AssetLoader.Exists(new Uri($"avares://{assemblyName}/Assets/carton_tray_icon.png"))
+                ? "Assets/carton_tray_icon.png"
+                : "Assets/carton_icon.png");
+        var iconUri = new Uri($"avares://{assemblyName}/{iconPath}");
         var icon = new TrayIcon
         {
             Icon = new WindowIcon(AssetLoader.Open(iconUri)),

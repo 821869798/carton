@@ -9,18 +9,19 @@ import (
 	"image"
 	"image/draw"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 )
 
-var defaultSizes = []int{16, 32, 48, 64, 128, 256}
+var defaultSizes = []int{16, 20, 24, 32, 48, 64, 128, 256}
 
 func main() {
 	inputPath := flag.String("in", "", "input PNG path")
 	outputPath := flag.String("out", "", "output ICO path")
-	sizesArg := flag.String("sizes", "", "comma separated icon sizes, default: 16,32,48,64,128,256")
+	sizesArg := flag.String("sizes", "", "comma separated icon sizes, default: 16,20,24,32,48,64,128,256")
 	flag.Parse()
 
 	repoRoot, err := findRepoRoot()
@@ -151,7 +152,7 @@ type icoFrame struct {
 func buildFrames(src *image.NRGBA, sizes []int) ([]icoFrame, error) {
 	frames := make([]icoFrame, 0, len(sizes))
 	for _, size := range sizes {
-		scaled := resizeBilinearNRGBA(src, size, size)
+		scaled := resizeNRGBA(src, size, size)
 
 		var buf bytes.Buffer
 		encoder := png.Encoder{CompressionLevel: png.BestCompression}
@@ -239,7 +240,7 @@ func writeICO(path string, frames []icoFrame) error {
 	return nil
 }
 
-func resizeBilinearNRGBA(src *image.NRGBA, width, height int) *image.NRGBA {
+func resizeNRGBA(src *image.NRGBA, width, height int) *image.NRGBA {
 	dst := image.NewNRGBA(image.Rect(0, 0, width, height))
 	srcBounds := src.Bounds()
 	srcWidth := srcBounds.Dx()
@@ -254,23 +255,58 @@ func resizeBilinearNRGBA(src *image.NRGBA, width, height int) *image.NRGBA {
 	scaleY := float64(srcHeight) / float64(height)
 
 	for y := 0; y < height; y++ {
-		srcY := (float64(y)+0.5)*scaleY - 0.5
-		y0, y1, wy := interpolateCoords(srcY, srcHeight)
+		startY := float64(y) * scaleY
+		endY := float64(y+1) * scaleY
+		y0 := int(math.Floor(startY))
+		y1 := int(math.Ceil(endY))
+		if y1 > srcHeight {
+			y1 = srcHeight
+		}
 
 		for x := 0; x < width; x++ {
-			srcX := (float64(x)+0.5)*scaleX - 0.5
-			x0, x1, wx := interpolateCoords(srcX, srcWidth)
+			startX := float64(x) * scaleX
+			endX := float64(x+1) * scaleX
+			x0 := int(math.Floor(startX))
+			x1 := int(math.Ceil(endX))
+			if x1 > srcWidth {
+				x1 = srcWidth
+			}
 
-			c00 := readPixelPremultiplied(src, x0, y0)
-			c10 := readPixelPremultiplied(src, x1, y0)
-			c01 := readPixelPremultiplied(src, x0, y1)
-			c11 := readPixelPremultiplied(src, x1, y1)
+			var rSum, gSum, bSum, aSum, totalWeight float64
+			for sy := y0; sy < y1; sy++ {
+				top := math.Max(startY, float64(sy))
+				bottom := math.Min(endY, float64(sy+1))
+				hWeight := bottom - top
+				if hWeight <= 0 {
+					continue
+				}
 
-			top := mixPixel(c00, c10, wx)
-			bottom := mixPixel(c01, c11, wx)
-			pixel := mixPixel(top, bottom, wy)
+				for sx := x0; sx < x1; sx++ {
+					left := math.Max(startX, float64(sx))
+					right := math.Min(endX, float64(sx+1))
+					wWeight := right - left
+					if wWeight <= 0 {
+						continue
+					}
 
-			writePixel(dst, x, y, pixel)
+					weight := hWeight * wWeight
+					pixel := readPixelPremultiplied(src, sx, sy)
+					rSum += pixel.r * weight
+					gSum += pixel.g * weight
+					bSum += pixel.b * weight
+					aSum += pixel.a * weight
+					totalWeight += weight
+				}
+			}
+
+			if totalWeight > 0 {
+				writePixel(dst, x, y, premultipliedPixel{
+					r: rSum / totalWeight,
+					g: gSum / totalWeight,
+					b: bSum / totalWeight,
+					a: aSum / totalWeight,
+				})
+			}
 		}
 	}
 
