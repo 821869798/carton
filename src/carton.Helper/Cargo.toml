@@ -16,7 +16,7 @@ serde_json = { version = "1.0", default-features = false, features = ["std"] }
 minreq = { version = "3.0", default-features = false }
 tiny_http = "0.12"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
-zip = { version = "8.0", default-features = false, features = ["deflate"] }
+zip = { version = "9.8", default-features = false, features = ["deflate"] }
 
 [target.'cfg(unix)'.dependencies]
 flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }

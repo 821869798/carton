@@ -18,10 +18,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Grpc.Net.Client" Version="2.71.0" />
-		<PackageReference Include="Google.Protobuf" Version="3.30.0" />
-		<PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.5" />
-		<PackageReference Include="Grpc.Tools" Version="2.71.0">
+		<PackageReference Include="Grpc.Net.Client" Version="2.85.0" />
+		<PackageReference Include="Google.Protobuf" Version="3.36.2" />
+		<PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.15" />
+		<PackageReference Include="Grpc.Tools" Version="2.85.0">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>

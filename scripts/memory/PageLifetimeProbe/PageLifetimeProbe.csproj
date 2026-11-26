@@ -7,6 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../../src/carton.GUI/carton.GUI.csproj" />
-    <PackageReference Include="Avalonia.Headless" Version="12.2.999-cibuild0101023-alpha" />
+    <PackageReference Include="Avalonia.Headless" Version="[12.2.0]" />
   </ItemGroup>
 </Project>
